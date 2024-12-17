@@ -1,0 +1,2041 @@
+package parser
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"dash-lang.io/src/ast"
+	"dash-lang.io/src/internal"
+	"dash-lang.io/src/lexer"
+	"dash-lang.io/src/token"
+	"dash-lang.io/src/types"
+)
+
+const (
+	_ int = iota
+	LOWEST
+	PIPE          // |>
+	COLON         // :
+	ASSIGN        // =
+	OR            // ||
+	AND           // &&
+	EQUALS        // ==
+	LESSGREATER   // > or <
+	LESSGREATEREQ // >= or <=
+	SUM           // +
+	SUBTRACT      // -
+	PRODUCT       // *
+	DIVIDE        // /
+	NULL_COALESCE // ??
+	PREFIX        // -5, !false, ?x
+	POSTFIX       // x++
+	CALL          // myFunction(X)
+	SLICE         // a[0]
+	DOT           // a.b
+)
+
+var precedences = map[token.Type]int{
+	token.PIPE:          PIPE,
+	token.COLON:         COLON,
+	token.EQ:            EQUALS,
+	token.NEQ:           EQUALS,
+	token.LT:            LESSGREATER,
+	token.GT:            LESSGREATER,
+	token.GTE:           LESSGREATEREQ,
+	token.LTE:           LESSGREATEREQ,
+	token.OR:            OR,
+	token.AND:           AND,
+	token.PLUS:          SUM,
+	token.MINUS:         SUM,
+	token.SLASH:         PRODUCT,
+	token.ASTERISK:      PRODUCT,
+	token.MOD:           PRODUCT,
+	token.ASSIGN:        ASSIGN,
+	token.LPAREN:        CALL,
+	token.LBRACK:        SLICE,
+	token.DOT:           DOT,
+	token.OPTIONAL:      POSTFIX,
+	token.NOT:           POSTFIX,
+	token.NULL_COALESCE: NULL_COALESCE,
+}
+
+type (
+	prefixParseFn    func() ast.Expression
+	infixParseFn     func(ast.Expression) ast.Expression
+	postfixParseFn   func(ast.Expression) ast.Expression
+	attributeParseFn func() ast.Attribute
+	context          uint8
+)
+
+const (
+	NONE context = iota
+	IF_ELSE
+	MATCH
+)
+
+type Parser struct {
+	l                 *lexer.Lexer
+	prevToken         token.Token
+	curToken          token.Token
+	peekToken         token.Token
+	warnings          []string
+	errors            []string
+	prefixParseFns    map[token.Type]prefixParseFn
+	infixParseFns     map[token.Type]infixParseFn
+	postfixParseFns   map[token.Type]postfixParseFn
+	attributeParseFns map[string]attributeParseFn
+
+	attributes internal.Stack[ast.Attribute]
+
+	context context
+}
+
+func New(l *lexer.Lexer) *Parser {
+	p := &Parser{
+		l: l,
+	}
+
+	// Read two tokens, so curToken and peekToken are both set
+	p.nextToken()
+	p.nextToken()
+
+	p.prefixParseFns = make(map[token.Type]prefixParseFn)
+	p.registerPrefix(token.COMMENT, p.parseComment)
+	p.registerPrefix(token.NOT, p.parsePrefixExpression)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.AMPERSAND, p.parsePrefixExpression)
+	p.registerPrefix(token.ASTERISK, p.parsePrefixExpression)
+	p.registerPrefix(token.OPTIONAL, p.parsePrefixExpression)
+	// Literal parse functions
+	p.registerPrefix(token.IDENT, p.parseIdentifierStructLiteralOrFunctionCall)
+	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.FLOAT, p.parseFloatLiteral)
+	p.registerPrefix(token.BOOL, p.parseBooleanLiteral)
+	p.registerPrefix(token.NULL, p.parseNullLiteral)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionExpression)
+	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.WILDCARD, p.parseWildcardLiteral)
+	p.registerPrefix(token.CHAR, p.parseCharacterLiteral)
+	// p.registerPrefix(token.BYTE, p.parseByteLiteral)
+	// p.registerPrefic(token.BIT, p.parseBitLiteral)
+	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
+	p.registerPrefix(token.IF, p.parseIfElseExpression)
+	p.registerPrefix(token.MATCH, p.parseMatchExpression)
+	p.registerPrefix(token.LBRACE, p.parseAnonymousStructLiteral)
+	// p.registerPrefix(token.TRY, p.parseTryExpression)
+	p.registerPrefix(token.USE, p.parseUseExpression)
+	p.registerPrefix(token.LBRACK, p.parseArrayLiteralTypeOrCast)
+	// Types
+	p.registerPrefix(token.STRINGTYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.BOOLTYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.BYTETYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.CHARTYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.U8TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.U16TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.U32TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.U64TYPE, p.parseTypeLiteral)
+	// p.registerPrefix(token.U128TYPE, p.parseTypeExpression)
+	// p.registerPrefix(token.U256TYPE, p.parseTypeExpression)
+	p.registerPrefix(token.I8TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.I16TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.I32TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.I64TYPE, p.parseTypeLiteral)
+	// p.registerPrefix(token.I128TYPE, p.parseTypeExpression)
+	// p.registerPrefix(token.I256TYPE, p.parseTypeExpression)
+	// p.registerPrefix(token.FLOATTYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
+
+	p.infixParseFns = make(map[token.Type]infixParseFn)
+	p.registerInfix(token.PLUS, p.parseInfixExpression)
+	p.registerInfix(token.MINUS, p.parseInfixExpression)
+	p.registerInfix(token.SLASH, p.parseInfixExpression)
+	p.registerInfix(token.ASTERISK, p.parseInfixExpression)
+	p.registerInfix(token.MOD, p.parseInfixExpression)
+	p.registerInfix(token.EQ, p.parseInfixExpression)
+	p.registerInfix(token.NEQ, p.parseInfixExpression)
+	p.registerInfix(token.LT, p.parseInfixExpression)
+	p.registerInfix(token.GT, p.parseGreaterThanOrRightShift)
+	p.registerInfix(token.GTE, p.parseInfixExpression)
+	p.registerInfix(token.LTE, p.parseInfixExpression)
+	p.registerInfix(token.AND, p.parseInfixExpression)
+	p.registerInfix(token.OR, p.parseInfixExpression)
+	p.registerInfix(token.PIPE, p.parseInfixExpression)
+	p.registerInfix(token.COLON, p.parseInfixExpression)
+	p.registerInfix(token.DOT, p.parseDotExpression) // could be replace with parse infix
+	p.registerInfix(token.LBRACK, p.parseIndexOrSliceExpression)
+	p.registerInfix(token.ASSIGN, p.parseInfixExpression)
+	p.registerInfix(token.NULL_COALESCE, p.parseInfixExpression)
+
+	// p.registerInfix(token.LSHIFT, p.parseInfixExpression)
+	// p.registerInfix(token.RSHIFT, p.parseInfixExpression)
+	// p.registerInfix(token.BAR, p.parseInfixExpression)
+	// p.registerInfix(token.CARET, p.parseInfixExpression)
+	// p.registerInfix(token.BNOT, p.parseInfixExpression) // TODO: maybe we change token
+	// p.registerInfix(token.BANDNOT, p.parseInfixExpression)
+	// p.registerInfix(token.CATCH, p.parseCatchExpression)
+
+	p.postfixParseFns = make(map[token.Type]postfixParseFn)
+	p.registerPostfix(token.LBRACK, p.parseIndexOrSliceExpression)
+	p.registerPostfix(token.INCR, p.parsePostfixExpression)
+	p.registerPostfix(token.DECR, p.parsePostfixExpression)
+	p.registerPostfix(token.CARET, p.parseCopyExpression)
+
+	p.attributeParseFns = make(map[string]attributeParseFn)
+	p.registerAttribute("extern", p.parseExternAttribute)
+	p.registerAttribute("inline", p.parseInlineAttribute)
+
+	return p
+}
+
+func (p *Parser) Errors() []string {
+	return p.errors
+}
+
+func (p *Parser) nextToken() {
+	p.prevToken = p.curToken
+	p.curToken = p.peekToken
+	p.peekToken = p.l.NextToken()
+}
+
+func (p *Parser) ParseLibrary() *ast.Library {
+
+	if !p.curTokenIs(token.LIBRARY) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib := &ast.Library{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.MAIN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+
+	for !p.curTokenIs(token.EOF) {
+		switch p.curToken.Type {
+		case token.TYPE:
+			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+		case token.ALIAS:
+			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
+		case token.GENERIC:
+			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+		case token.STRUCT:
+			lib.Structs = append(lib.Structs, p.parseStructStatement())
+		case token.ENUM:
+			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+		case token.UNION:
+			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+		case token.LET:
+			assgn := p.parseAssignmentStatement().(*ast.AssignmentStatement)
+			lib.GlobalVariables = append(lib.GlobalVariables, assgn)
+		case token.VAR:
+			// TODO: throw proper error
+			panic("var not allowed in global lib scope")
+		case token.COMMENT:
+			// ignore comments for now
+			p.nextToken()
+		case token.AT:
+			attr := p.parseAttribute()
+			p.attributes.Push(attr)
+		case token.FUNCTION:
+			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
+			lib.Functions = append(lib.Functions, exp)
+		case token.PUBLIC:
+			p.nextToken()
+		default:
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+	}
+	return lib
+}
+
+func (p *Parser) ParseREPL() *ast.Library {
+	lib := &ast.Library{
+		Token: token.Token{Type: token.LIBRARY, Literal: "lib"},
+		Name:  &ast.Identifier{Token: token.Token{Type: token.IDENT, Literal: "main"}, Value: "main"},
+	}
+
+	// create main function
+	mainFn := &ast.FunctionExpression{
+		Token: token.Token{Type: token.FUNCTION, Literal: "fn"},
+		Name:  &ast.Identifier{Token: token.Token{Type: token.MAIN, Literal: "main"}, Value: "main", T: &types.Function{}},
+		Body:  &ast.BlockStatement{},
+	}
+
+	for !p.curTokenIs(token.EOF) {
+		switch p.curToken.Type {
+		case token.TYPE:
+			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+		case token.ALIAS:
+			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
+		case token.GENERIC:
+			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+		case token.STRUCT:
+			lib.Structs = append(lib.Structs, p.parseStructStatement())
+		case token.ENUM:
+			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+		case token.UNION:
+			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+		case token.AT:
+			attr := p.parseAttribute()
+			p.attributes.Push(attr)
+		case token.FUNCTION:
+			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
+			lib.Functions = append(lib.Functions, exp)
+		default:
+			mainFn.Body.Statements = append(mainFn.Body.Statements, p.parseStatementInBlock())
+		}
+	}
+	lib.Functions = append(lib.Functions, mainFn)
+	return lib
+}
+
+func (p *Parser) ParseExpression() ast.Node {
+	return p.parseStatementInBlock()
+}
+
+func (p *Parser) registerPrefix(tp token.Type, fn prefixParseFn) {
+	p.prefixParseFns[tp] = fn
+}
+func (p *Parser) registerInfix(tp token.Type, fn infixParseFn) {
+	p.infixParseFns[tp] = fn
+}
+
+func (p *Parser) registerPostfix(tp token.Type, fn postfixParseFn) {
+	p.postfixParseFns[tp] = fn
+}
+
+func (p *Parser) registerAttribute(attr string, fn attributeParseFn) {
+	p.attributeParseFns[attr] = fn
+}
+
+// ---------- //
+// Statements //
+// ---------- //
+
+// use (
+//
+//	"internal/code"
+//
+// )
+func (p *Parser) parseUseStatement() []*ast.ImportStatement {
+	stmt := ast.ImportStatement{Token: p.curToken}
+
+	if !p.curTokenIs(token.USE) {
+		return nil
+	}
+
+	p.nextToken()
+
+	// single import statement
+	if !p.curTokenIs(token.LPAREN) {
+		if p.curTokenIs(token.STRING) {
+			stmt.Package = p.curToken
+			return []*ast.ImportStatement{&stmt}
+		}
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	// multiple imports under one statement
+	imports := []*ast.ImportStatement{}
+	for p.curToken.Type != token.RPAREN {
+		if p.curToken.Type == token.STRING {
+			stmt.Package = p.curToken
+			imports = append(imports, &stmt)
+		}
+		p.nextToken()
+	}
+
+	p.nextToken()
+
+	return imports
+}
+
+func (p *Parser) parseTypeDefinitionStatement() *ast.TypeDefinitionStatement {
+	stmt := &ast.TypeDefinitionStatement{Token: p.curToken}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	stmt.Name = p.parseIdentifier()
+
+	if p.curTokenIsType() {
+		stmt.UnderlyingType = p.parseType()
+	} else {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	if p.curTokenIs(token.BAR) {
+		p.nextToken()
+		stmt.Guard = p.parseExpression(LOWEST)
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseTypeAliasStatement() *ast.TypeAliasStatement {
+	stmt := &ast.TypeAliasStatement{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	stmt.Name = p.parseIdentifier()
+
+	if p.curTokenIsType() {
+		stmt.UnderlyingType = p.parseType()
+	} else {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseGenericStructStatement() *ast.GenericStructStatement {
+	public := false
+	if p.prevTokenIs(token.PUBLIC) {
+		public = true
+	}
+	// eat "gen" token
+	p.nextToken()
+	if !p.curTokenIs(token.STRUCT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	stmt := p.parseStructStatement()
+	stmt.Public = public
+	gen := &ast.GenericStructStatement{
+		Public: stmt.Public,
+		Token:  stmt.Token,
+		Name:   stmt.Name,
+		Fields: stmt.Fields,
+	}
+	return gen
+}
+
+func (p *Parser) parseStructStatement() *ast.StructStatement {
+	stmt := &ast.StructStatement{Token: p.curToken}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
+	p.nextToken()
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	stmt.Name = p.parseIdentifier()
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		field := &ast.StructFieldStatement{}
+
+		if p.curTokenIs(token.IDENT) {
+			field.Name = p.parseIdentifier()
+		}
+		if p.curTokenIsType() {
+			field.Type = p.parseType()
+			stmt.Fields = append(stmt.Fields, field)
+		} else {
+			if !p.curTokenIs(token.IDENT) {
+				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+				return nil
+			}
+			field.Type = p.parseUnknownNamedType()
+			stmt.Fields = append(stmt.Fields, field)
+		}
+
+		if p.curTokenIs(token.BAR) {
+			p.nextToken()
+			field.Guard = p.parseExpression(LOWEST)
+		}
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+	p.nextToken()
+
+	return stmt
+}
+
+func (p *Parser) parseEnumStatement() *ast.EnumStatement {
+	stmt := &ast.EnumStatement{Token: p.curToken}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	stmt.Name = p.parseIdentifier()
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) {
+		stmt.Fields = append(stmt.Fields, p.parseIdentifier())
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	stmt.T = &types.Enum{Name: stmt.Name.String(), Size: len(stmt.Fields)}
+
+	p.nextToken()
+
+	return stmt
+}
+
+func (p *Parser) parseUnionStatement() *ast.UnionStatement {
+	stmt := &ast.UnionStatement{Token: p.curToken}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	stmt.Name = p.parseIdentifier()
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) {
+		stmt.Types = append(stmt.Types, p.parseTypeLiteral().(*ast.TypeLiteral))
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	stmt.T = &types.Union{Name: stmt.Name.String()}
+
+	p.nextToken()
+
+	return stmt
+}
+
+// TODO: add parsing function statement
+
+// Examples
+//
+// * x,
+// * x int
+// * x []int,
+// * x fn() int
+// * x ...i64
+func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterStatement {
+	stmt := &ast.ParameterStatement{}
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	// x,
+	if p.curTokenIs(token.COMMA) {
+		p.nextToken()
+		return stmt
+	}
+
+	// x ...int
+	if p.curTokenIs(token.ELLIPSIS) {
+		p.nextToken()
+		stmt.Type = &types.Array{T: p.parseType()}
+		return stmt
+	}
+
+	stmt.Type = p.parseType()
+
+	if !allowedOptional && p.peekTokenIs(token.COLON) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	// x int)
+	if p.curTokenIs(token.RPAREN) {
+		return stmt
+	}
+	// x int,
+	if p.curTokenIs(token.COMMA) {
+		p.nextToken()
+		return stmt
+	}
+	p.nextToken()
+
+	return stmt
+}
+
+// let x = 3 + 3
+// var x, let y = 1, 2
+// x, let y = 1, 2
+func (p *Parser) parseAssignmentStatement() ast.Statement {
+	stmt := &ast.AssignmentStatement{}
+
+	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
+		var tkn token.Token // let or var
+		if p.curTokenIs(token.LET) || p.curTokenIs(token.VAR) {
+			tkn = p.curToken
+			p.nextToken()
+		}
+		assignee := p.parseExpression(ASSIGN)
+
+		stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
+			Token:    tkn,
+			Assignee: assignee,
+		})
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.COMMA) && !p.curTokenIs(token.EOF) {
+		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+		if !p.curTokenIs(token.COMMA) {
+			break
+		}
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+// parses partially pre-parsed assigned statement
+func (p *Parser) parseAssignmentStatementPre(firstAssignee ast.Expression) ast.Statement {
+	stmt := &ast.AssignmentStatement{}
+
+	stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
+		Assignee: firstAssignee,
+	})
+
+	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
+		var tkn token.Token // let or var
+		if p.curTokenIs(token.LET) || p.curTokenIs(token.VAR) {
+			tkn = p.curToken
+			p.nextToken()
+		}
+		assignee := p.parseExpression(ASSIGN)
+
+		stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
+			Token:    tkn,
+			Assignee: assignee,
+		})
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.COMMA) && !p.curTokenIs(token.EOF) {
+		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+		if !p.curTokenIs(token.COMMA) {
+			break
+		}
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseKeywordStatement() *ast.KeywordStatement {
+	stmt := &ast.KeywordStatement{Token: p.curToken}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseIfElseExpression() ast.Expression {
+	if !p.curTokenIs(token.IF) {
+		return nil
+	}
+
+	exp := &ast.IfElseExpression{Token: p.curToken}
+
+	if p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	// parse if
+	p.context = IF_ELSE
+	cond := &ast.ConditionalExpression{Token: p.curToken}
+	p.nextToken()
+	cond.Condition = p.parseExpression(LOWEST)
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.context = NONE
+
+	cond.Block = p.parseBlockStatement()
+	exp.Conditionals = append(exp.Conditionals, cond)
+
+	for p.curTokenIsConditionalStatement() {
+		p.context = IF_ELSE
+		cond := &ast.ConditionalExpression{Token: p.curToken}
+
+		if !p.curTokenIs(token.ELSE) {
+			p.nextToken()
+			cond.Condition = p.parseExpression(LOWEST)
+		} else {
+			p.nextToken()
+		}
+		p.context = NONE
+
+		if !p.curTokenIs(token.LBRACE) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		cond.Block = p.parseBlockStatement()
+		exp.Conditionals = append(exp.Conditionals, cond)
+	}
+
+	return exp
+}
+
+// exactly the same as parseIfElseExpression except sets if its
+// a statement
+func (p *Parser) parseIfElseStatement() ast.Expression {
+	if !p.curTokenIs(token.IF) {
+		return nil
+	}
+
+	exp := &ast.IfElseExpression{Token: p.curToken, IsStatement: true}
+
+	if p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	// parse if
+	p.context = IF_ELSE
+	cond := &ast.ConditionalExpression{Token: p.curToken}
+	p.nextToken()
+	cond.Condition = p.parseExpression(LOWEST)
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.context = NONE
+
+	cond.Block = p.parseBlockStatement()
+	exp.Conditionals = append(exp.Conditionals, cond)
+
+	for p.curTokenIsConditionalStatement() {
+		p.context = IF_ELSE
+		cond := &ast.ConditionalExpression{Token: p.curToken}
+
+		if !p.curTokenIs(token.ELSE) {
+			p.nextToken()
+			cond.Condition = p.parseExpression(LOWEST)
+		} else {
+			p.nextToken()
+		}
+
+		if !p.curTokenIs(token.LBRACE) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.context = NONE
+
+		cond.Block = p.parseBlockStatement()
+		exp.Conditionals = append(exp.Conditionals, cond)
+	}
+
+	return exp
+}
+
+// return a, b
+// }
+// Note: does not "eat" } token
+func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
+	if !p.curTokenIs(token.RETURN) {
+		return nil
+	}
+	stmt := &ast.ReturnStatement{Token: p.curToken}
+	p.nextToken()
+
+	// NOTE: checking for case is required to ensure that return in match case does not trigger
+	// parser error
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) &&
+		!p.curTokenIs(token.CASE) && !p.curTokenIs(token.ELSE) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		stmt.Values = append(stmt.Values, p.parseExpression(LOWEST))
+	}
+	return stmt
+}
+
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+
+	if !p.curTokenIs(token.LBRACE) {
+		return nil
+	}
+
+	block := &ast.BlockStatement{Token: p.curToken}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		block.Statements = append(block.Statements, p.parseStatementInBlock())
+	}
+	p.nextToken()
+	return block
+}
+
+// Should only be called in block statement
+func (p *Parser) parseStatementInBlock() ast.Node {
+	switch p.curToken.Type {
+	case token.LET, token.VAR:
+		return p.parseAssignmentStatement()
+	case token.IDENT:
+		if p.peekTokenIs(token.LPAREN) {
+			return p.parseExpression(LOWEST)
+		}
+		// If the next token is assign we can simply parse without any special
+		// checking. We do the same if its a comma as there can be no valid
+		// statement other than assignment
+		if p.peekTokenIs(token.ASSIGN) || p.peekTokenIs(token.COMMA) {
+			return p.parseAssignmentStatement()
+		}
+		// for dot, slice and index expression we need to partially parse
+		// tokens before we can derermine whther it is an assignment or not
+		if p.peekTokenIs(token.DOT) {
+			ident := p.parseIdentifier()
+			exp := p.parseDotExpression(ident)
+			if p.curTokenIs(token.ASSIGN) || p.curTokenIs(token.COMMA) {
+				return p.parseAssignmentStatementPre(exp)
+			}
+			if p.curTokenIsOperator() {
+				return p.parseInfixExpression(exp)
+			}
+			return exp
+		} else if p.peekTokenIs(token.LBRACK) {
+			exp := p.parseExpression(ASSIGN)
+			if p.curTokenIs(token.ASSIGN) || p.curTokenIs(token.COMMA) {
+				return p.parseAssignmentStatementPre(exp)
+			}
+			if p.curTokenIsOperator() {
+				return p.parseInfixExpression(exp)
+			}
+			return exp
+		}
+		return p.parseExpression(LOWEST)
+	case token.IF:
+		return p.parseIfElseStatement()
+	case token.FOR:
+		return p.parseForStatement()
+	case token.DEFER:
+		return p.parseDeferExpression()
+	case token.MATCH:
+		return p.parseMatchStatement()
+	case token.RETURN:
+		return p.parseReturnStatement()
+	case token.BREAK, token.NEXT:
+		return p.parseKeywordStatement()
+	default:
+		return p.parseExpression(LOWEST)
+	}
+}
+
+// func (p *Parser) parseChannelTypeStatement() *ast.ChannelTypeStatement {
+// 	stmt := &ast.ChannelTypeStatement{Token: p.curToken}
+// 	p.nextToken()
+// 	stmt.Type = p.parseType()
+
+// 	return stmt
+// }
+
+// parses primitive types excluding list, map, set
+
+func (p *Parser) parseForStatement() *ast.ForStatement {
+	stmt := &ast.ForStatement{Token: p.curToken}
+	p.nextToken()
+
+	// infinite loop
+	if p.curTokenIs(token.LBRACE) {
+		stmt.Block = p.parseBlockStatement()
+		return stmt
+	}
+
+	// tkn := p.curToken
+	exp := p.parseExpression(LOWEST)
+	// var assign *ast.InfixExpression
+	switch a := exp.(type) {
+	// We need to check if infix operation
+	// is assignment as that indicates
+	// we are parsing a classic for loop
+	case *ast.InfixExpression:
+		if a.Operator == "=" {
+			// assign = a
+			decl := []*ast.DeclarationStatement{
+				{Token: token.NewFromLiteral(token.VAR, "var"), Assignee: a.Left},
+			}
+			val := []ast.Expression{a.Right}
+			stmt.Assignment = &ast.AssignmentStatement{Declerations: decl, Values: val}
+		} else {
+			stmt.Condition = a
+			stmt.Block = p.parseBlockStatement()
+			return stmt
+		}
+	case *ast.FunctionCallExpression:
+		stmt.Condition = a
+		stmt.Block = p.parseBlockStatement()
+		return stmt
+	case *ast.PrefixExpression:
+		stmt.Condition = a
+		stmt.Block = p.parseBlockStatement()
+		return stmt
+	}
+	// name := &ast.Identifier{Token: tkn, Value: assign.Left.String()}
+	if !p.curTokenIs(token.SEMI) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	// BUG: check if returned type of expression is infix and only then assign
+	// as user could make mistake in syntax e.g. for i = 0; len(s); i++ {}
+	stmt.Condition = p.parseExpression(LOWEST).(*ast.InfixExpression)
+	if !p.curTokenIs(token.SEMI) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+	stmt.Change = p.parseExpression(LOWEST)
+
+	stmt.Block = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseForRangeStatement() *ast.ForRangeStatement {
+	stmt := &ast.ForRangeStatement{Token: p.curToken}
+	p.nextToken()
+
+	// infinite loop
+	if p.curTokenIs(token.LBRACE) {
+		return stmt
+	}
+
+	for !p.curTokenIs(token.IN) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		if !p.curTokenIs(token.IDENT) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		stmt.Variables = append(stmt.Variables, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+		p.nextToken()
+	}
+	p.nextToken()
+
+	if p.curTokenIs(token.IDENT) {
+		stmt.Iterable = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+	}
+
+	if p.curTokenIs(token.SEMI) {
+		p.nextToken()
+		stmt.Change = p.parseExpression(LOWEST)
+	}
+
+	stmt.Block = p.parseBlockStatement()
+
+	return stmt
+
+}
+
+func (p *Parser) parseWhileStatement() *ast.WhileStatement {
+	stmt := &ast.WhileStatement{Token: p.curToken}
+	p.nextToken()
+
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	stmt.Block = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseMatchExpression() ast.Expression {
+	es := &ast.MatchExpressionStatement{Token: p.curToken}
+	p.nextToken()
+
+	p.context = MATCH
+	es.Scrutinee = p.parseExpression(LOWEST)
+	p.context = NONE
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		mc := &ast.MatchCase{Token: p.curToken}
+		if p.curTokenIs(token.CASE) {
+			p.nextToken()
+			// only parse until ':'
+			mc.Predicate = p.parseExpression(COLON)
+
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		if !p.curTokenIs(token.COLON) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+
+		// parse match case block
+		for !p.curTokenIs(token.CASE) && !p.curTokenIs(token.ELSE) &&
+			!p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+			mc.Body = append(mc.Body, p.parseStatementInBlock())
+		}
+
+		// ensure default case is saved to proper field
+		if mc.Predicate.TokenLiteral() == "_" {
+			es.Default = mc
+		} else {
+			es.Cases = append(es.Cases, mc)
+		}
+
+	}
+	if !p.curTokenIs(token.RBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	return es
+}
+
+func (p *Parser) parseMatchStatement() ast.Expression {
+	es := &ast.MatchExpressionStatement{Token: p.curToken, IsStatement: true}
+	p.nextToken()
+
+	p.context = MATCH
+	es.Scrutinee = p.parseExpression(LOWEST)
+	p.context = NONE
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		mc := &ast.MatchCase{Token: p.curToken}
+		if p.curTokenIs(token.CASE) {
+			p.nextToken()
+			// only parse until ':'
+			mc.Predicate = p.parseExpression(COLON)
+
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		if !p.curTokenIs(token.COLON) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+
+		// parse match case block
+		for !p.curTokenIs(token.CASE) && !p.curTokenIs(token.ELSE) &&
+			!p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+			mc.Body = append(mc.Body, p.parseStatementInBlock())
+		}
+
+		// ensure default case is saved to proper field
+		if mc.Predicate.TokenLiteral() == "_" {
+			es.Default = mc
+		} else {
+			es.Cases = append(es.Cases, mc)
+		}
+
+	}
+	if !p.curTokenIs(token.RBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	return es
+}
+
+// ----------- //
+// Expressions //
+// ----------- //
+
+func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
+
+	if p.peekTokenIs(token.LPAREN) {
+		return p.parseFunctionCallExpression()
+	}
+
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	// in this edge case we need to check context
+	// to understand whether we are parsing struct
+	// literal
+	if p.peekTokenIs(token.LBRACE) {
+		if p.context == IF_ELSE || p.context == MATCH {
+			p.nextToken()
+			return ident
+		}
+		p.nextToken()
+		return p.parseStructLiteral(ident)
+
+	}
+
+	p.nextToken()
+	return ident
+}
+
+func (p *Parser) parseIdentifier() *ast.Identifier {
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+	return ident
+}
+
+func (p *Parser) parseExpression(precedence int) ast.Expression {
+	prefix := p.prefixParseFns[p.curToken.Type]
+	if prefix == nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		p.nextToken()
+		return nil
+	}
+	leftExp := prefix()
+
+	postfix := p.postfixParseFns[p.curToken.Type]
+	if postfix != nil {
+		leftExp = postfix(leftExp)
+	}
+
+	for precedence < p.curPrecedence() {
+		infix := p.infixParseFns[p.curToken.Type]
+		if infix == nil {
+			return leftExp
+		}
+		leftExp = infix(leftExp)
+	}
+
+	return leftExp
+}
+
+func (p *Parser) parseComment() ast.Expression {
+	comment := &ast.Comment{Token: p.curToken}
+	p.nextToken()
+	return comment
+}
+
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	expression := &ast.PrefixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+	}
+	p.nextToken()
+	expression.Right = p.parseExpression(PREFIX)
+	return expression
+}
+
+func (p *Parser) parseGreaterThanOrRightShift(left ast.Expression) ast.Expression {
+	tkn := p.curToken
+	if p.peekTokenIs(token.GT) {
+		tkn.Type = token.RSHIFT
+		tkn.Literal = ">>"
+		p.nextToken()
+	}
+	expression := &ast.InfixExpression{
+		Token:    tkn,
+		Operator: tkn.Literal,
+		Left:     left,
+	}
+	precedence := p.curPrecedence()
+	p.nextToken()
+	expression.Right = p.parseExpression(precedence)
+	return expression
+}
+
+func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
+	expression := &ast.InfixExpression{
+		Token:    p.curToken,
+		Operator: p.curToken.Literal,
+		Left:     left,
+	}
+	precedence := p.curPrecedence()
+	p.nextToken()
+	expression.Right = p.parseExpression(precedence)
+	return expression
+}
+
+func (p *Parser) parsePostfixExpression(left ast.Expression) ast.Expression {
+	exp := &ast.PostfixExpression{Token: p.curToken, Left: left}
+	p.nextToken()
+	return exp
+}
+
+func (p *Parser) parseDeferExpression() ast.Expression {
+	exp := &ast.DeferStatement{Token: p.curToken}
+	p.nextToken()
+
+	if p.curTokenIs(token.LBRACE) {
+		exp.Node = p.parseBlockStatement()
+	} else if p.peekTokenIs(token.DOT) {
+		exp.Node = p.parseExpression(LOWEST)
+	} else if p.peekTokenIs(token.LPAREN) {
+		exp.Node = p.parseFunctionCallExpression()
+	} else {
+		return nil
+	}
+
+	return exp
+}
+
+func (p *Parser) parseCatchExpression() ast.Expression {
+	exp := &ast.CatchExpression{Token: p.curToken}
+	if !p.curTokenIs(token.CATCH) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp.Block = p.parseBlockStatement()
+
+	return exp
+}
+
+func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
+	if !p.curTokenIs(token.DOT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp := &ast.DotExpression{Token: p.curToken, Left: left}
+	p.nextToken()
+
+	if p.peekTokenIs(token.LPAREN) {
+		exp.Right = p.parseFunctionCallExpression()
+	} else if p.curTokenIs(token.IDENT) {
+		exp.Right = p.parseIdentifier()
+	} else if p.curTokenIs(token.INT) {
+		exp.Right = p.parseIntegerLiteral()
+	} else {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	return exp
+}
+
+// e.g. do_something("123")
+func (p *Parser) parseFunctionCallExpression() ast.Expression {
+	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.FUNCTION) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp := &ast.FunctionCallExpression{Token: p.curToken}
+	// |> do_smth |> ...
+	if p.prevTokenIs(token.PIPE) && !p.peekTokenIs(token.LPAREN) {
+		p.nextToken()
+		return exp
+	}
+	p.nextToken()
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		exp.Arguments = append(exp.Arguments, p.parseExpression(LOWEST))
+	}
+	p.nextToken()
+
+	if p.curTokenIs(token.CATCH) {
+		exp.Catch = p.parseCatchExpression()
+	}
+
+	return exp
+}
+
+func (p *Parser) parseGroupedExpression() ast.Expression {
+	if !p.curTokenIs(token.LPAREN) {
+		return nil
+	}
+	p.nextToken()
+	exp := p.parseExpression(LOWEST)
+	// if !p.curTokenIs(token.RPAREN) {
+	// 	return nil
+	// }
+	p.nextToken()
+	return exp
+}
+
+func (p *Parser) parseIndexOrSliceExpression(left ast.Expression) ast.Expression {
+	tkn := p.curToken
+	exps := []ast.Expression{}
+
+	for p.curTokenIs(token.LBRACK) {
+		p.nextToken()
+		exp := p.parseExpression(LOWEST)
+		exps = append(exps, exp)
+
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
+	if infixExp, ok := exps[0].(*ast.InfixExpression); ok && infixExp.Token.Type == token.COLON {
+		// has to be slice expression
+		return &ast.SliceExpression{Token: tkn, Left: left, Indices: exps}
+	}
+
+	return &ast.IndexExpression{Token: tkn, Left: left, Indices: exps}
+
+}
+
+func (p *Parser) parseCopyExpression(left ast.Expression) ast.Expression {
+	carat := p.curToken
+	p.nextToken()
+
+	if p.curTokenIs(token.LBRACE) {
+		block := p.parseBlockStatement()
+		return &ast.CopyUpdateExpression{Token: carat, Ident: left, Block: block}
+	}
+	return &ast.CopyExpression{Token: carat, Ident: left}
+}
+
+// Handles parsing:
+// types as expressions (e.g. for 'make([]byte, 100)'),
+// or type conversions
+func (p *Parser) parseTypeLiteral() ast.Expression {
+	tkn := p.curToken
+	t := p.parseType()
+	// handle type conversion
+	if p.curTokenIs(token.LPAREN) {
+		exp := &ast.TypeCastExpression{Token: tkn, Typ: t}
+		p.nextToken()
+
+		exp.Argument = p.parseExpression(LOWEST)
+
+		if !p.curTokenIs(token.RPAREN) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+		return exp
+	} else {
+		return &ast.TypeLiteral{Token: tkn, T: t}
+	}
+}
+
+func (p *Parser) parseUseExpression() ast.Expression {
+	exp := &ast.UseExpression{Token: p.curToken}
+	p.nextToken()
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp.Ident = p.parseIdentifier()
+
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	exp.Block = p.parseBlockStatement()
+
+	return exp
+}
+
+// 0..10
+// func (p *Parser) parseRangeExpression() ast.Expression {
+// 	stmt := &ast.RangeExpression{Token: p.curToken}
+
+// 	if !p.curTokenIs(token.INT) {
+// 		return nil
+// 	}
+
+// 	stmt.StartValue = p.parseIntegerLiteral().(*ast.IntegerLiteral)
+
+// 	if !p.curTokenIs(token.RANGE) {
+// 		return nil
+// 	}
+// 	p.nextToken()
+
+// 	if !p.curTokenIs(token.INT) {
+// 		return nil
+// 	}
+// 	stmt.EndValue = p.parseIntegerLiteral().(*ast.IntegerLiteral)
+
+// 	return stmt
+// }
+
+// ------- //
+// Literal //
+// ------- //
+
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	lit := &ast.IntegerLiteral{Token: p.curToken, T: &types.ConstI64}
+	i := strings.ReplaceAll(p.curToken.Literal, "_", "")
+	intValue, err := strconv.ParseInt(i, 10, 64)
+	if err != nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lit.Value = intValue
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseFloatLiteral() ast.Expression {
+	lit := &ast.FloatLiteral{Token: p.curToken}
+	floatValue, err := strconv.ParseFloat(p.curToken.Literal, 64)
+	if err != nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lit.Value = floatValue
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseStringLiteral() ast.Expression {
+	lit := &ast.StringLiteral{Token: p.curToken}
+	lit.Value = p.curToken.Literal
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseCharacterLiteral() ast.Expression {
+	lit := &ast.CharacterLiteral{Token: p.curToken}
+	if p.curToken.Literal[0] == '\\' {
+		if len(p.curToken.Literal) == 1 {
+			lit.Value = '\\'
+		} else if len(p.curToken.Literal) == 2 {
+			switch p.curToken.Literal[1] {
+			case 'a':
+				lit.Value = '\a'
+			case 'b':
+				lit.Value = '\b'
+			case 'n':
+				lit.Value = '\n'
+			case 'r':
+				lit.Value = '\r'
+			case 't':
+				lit.Value = '\t'
+			case '\'':
+				lit.Value = '\''
+			}
+		} else {
+			panic("\\u literals not supported yet")
+		}
+	} else {
+		lit.Value = rune(p.curToken.Literal[0])
+	}
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseBooleanLiteral() ast.Expression {
+	lit := &ast.BooleanLiteral{Token: p.curToken, Value: false}
+	if p.curToken.Literal == "true" {
+		lit.Value = true
+	}
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseNullLiteral() ast.Expression {
+	lit := &ast.NullLiteral{Token: p.curToken}
+	lit.Value = p.curToken.Literal
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseAnonymousStructLiteral() ast.Expression {
+	return p.parseStructLiteral(nil)
+}
+
+func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
+	exp := &ast.StructLiteral{Token: p.curToken, Name: ident}
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.IDENT) {
+			// case 1: struct with named field
+			field := p.parseStructFieldLiteral()
+			exp.Fields = append(exp.Fields, field)
+		} else {
+			// case 2: struct with unnamed field
+			field := p.parseUnnamedStructFieldLiteral()
+			exp.Fields = append(exp.Fields, field)
+		}
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	p.nextToken()
+
+	return exp
+}
+
+func (p *Parser) parseStructFieldLiteral() *ast.StructFieldLiteral {
+	name := p.parseIdentifier()
+	if !p.curTokenIs(token.COLON) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+	value := p.parseExpression(LOWEST)
+	return &ast.StructFieldLiteral{Token: p.curToken, Name: name, Value: value}
+}
+
+func (p *Parser) parseUnnamedStructFieldLiteral() *ast.StructFieldLiteral {
+	value := p.parseExpression(LOWEST)
+	return &ast.StructFieldLiteral{Token: p.curToken, Value: value}
+}
+
+// - []byte
+// - [3]byte
+// - [][]i64()
+// - [3]string()
+// - []
+// - [1,3,4]
+func (p *Parser) parseArrayLiteralTypeOrCast() ast.Expression {
+	tkn := p.curToken
+	if p.peekTokenIs(token.RBRACK) {
+		p.nextToken()
+		p.nextToken()
+		if p.curTokenIsType() {
+			// case: array type cast
+			arrayType := &types.Array{T: p.parseType()}
+			if p.curTokenIs(token.LPAREN) {
+				p.nextToken()
+				exp := p.parseExpression(LOWEST)
+				if !p.curTokenIs(token.RPAREN) {
+					p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+					return nil
+				}
+				p.nextToken()
+				return &ast.TypeCastExpression{Token: tkn, Argument: exp, Typ: arrayType}
+			}
+			// case: array type
+			return &ast.TypeLiteral{Token: tkn, T: arrayType}
+		}
+		// case: empty array literal
+		return &ast.ArrayLiteral{Token: p.curToken}
+	}
+	p.nextToken()
+	if p.curTokenIs(token.INT) && p.peekTokenIs(token.RBRACK) {
+		size := p.parseIntegerLiteral().(*ast.IntegerLiteral)
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+		// case: one element int array
+		if !p.curTokenIsType() {
+			typ := &types.Array{T: size.T, Size: 1}
+			return &ast.ArrayLiteral{Token: tkn, Values: []ast.Expression{size}, T: typ}
+		}
+		// case: sized array type cast
+		sizedArrayType := &types.Array{T: p.parseType(), Size: int(size.Value)}
+		if p.curTokenIs(token.LPAREN) {
+			p.nextToken()
+			exp := p.parseExpression(LOWEST)
+			return &ast.TypeCastExpression{Token: tkn, Argument: exp, Typ: sizedArrayType}
+		}
+		// case: sized array type
+		return &ast.TypeLiteral{Token: tkn, T: sizedArrayType}
+	}
+
+	// case: array literal with values
+	lit := &ast.ArrayLiteral{Token: tkn}
+
+	for !p.curTokenIs(token.RBRACK) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		lit.Values = append(lit.Values, p.parseExpression(LOWEST))
+	}
+
+	lit.T = &types.Array{T: lit.Values[0].Type()}
+
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseWildcardLiteral() ast.Expression {
+	lit := &ast.WildcardLiteral{Token: p.curToken}
+	p.nextToken()
+	return lit
+}
+
+// assumes current token is '@' when function called
+func (p *Parser) parseAttribute() ast.Attribute {
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	fn, ok := p.attributeParseFns[p.curToken.Literal]
+	if !ok {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	return fn()
+}
+
+// assumes current token literal is 'extern' when function called
+func (p *Parser) parseExternAttribute() ast.Attribute {
+	p.nextToken()
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	var attr *ast.BasicAttribute
+	if p.curToken.Literal == "c" {
+		attr = &ast.BasicAttribute{Type: ast.ExternC}
+	} else {
+		p.addError(p.curToken, errInvalidAttributeArgument("extern", p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+	if !p.curTokenIs(token.RPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	return attr
+}
+
+// assumes current token literal is 'inline' when function called
+func (p *Parser) parseInlineAttribute() ast.Attribute {
+	p.nextToken()
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	var attr *ast.BasicAttribute
+	switch p.curToken.Literal {
+	case "never":
+		attr = &ast.BasicAttribute{Type: ast.InlineNever}
+	case "hint":
+		attr = &ast.BasicAttribute{Type: ast.InlineHint}
+	case "always":
+		attr = &ast.BasicAttribute{Type: ast.InlineAlways}
+	default:
+		p.addError(p.curToken, errInvalidAttributeArgument("inline", p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+	if !p.curTokenIs(token.RPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	return attr
+}
+
+func (p *Parser) parseFunctionExpression() ast.Expression {
+	attrs := p.attributes.PopAll()
+
+	lit := &ast.FunctionExpression{Attributes: attrs}
+
+	if p.curTokenIs(token.PUBLIC) {
+		lit.Public = true
+		p.nextToken()
+	} else if p.prevTokenIs(token.PUBLIC) {
+		lit.Public = true
+	}
+	lit.Token = p.curToken
+
+	if !p.curTokenIs(token.FUNCTION) {
+		return nil
+	}
+	p.nextToken()
+
+	if p.curTokenIs(token.IDENT) || p.curTokenIs(token.MAIN) {
+		lit.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+	} else {
+		lit.IsAnonymous = true
+	}
+
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	p.nextToken()
+
+	// Parse function arguments
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		lit.Arguments = append(lit.Arguments, p.parseParameterStatement(true))
+	}
+	p.nextToken()
+
+	// TODO: parse if function is errorable
+
+	// parse return arguments
+	for p.curTokenIsType() && !p.curTokenIs(token.EOF) {
+		lit.ReturnValues = append(lit.ReturnValues, p.parseTypeLiteral().(*ast.TypeLiteral))
+		// skip commas
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	// only parse body if defined
+	if p.curTokenIs(token.LBRACE) {
+		lit.Body = p.parseBlockStatement()
+	}
+
+	return lit
+}
+
+// ----- //
+// Types //
+// ----- //
+
+func (p *Parser) parseType() types.TypeSpec {
+	var typ types.TypeSpec
+	switch p.curToken.Type {
+	case token.OPTIONAL:
+		p.nextToken()
+		return &types.Optional{T: p.parseType()}
+	case token.LBRACK:
+		typ = p.parseArrayType()
+	case token.FUNCTION:
+		typ = p.parseFunctionType()
+	case token.IDENT:
+		typ = p.parseUnknownNamedType()
+	case token.ASTERISK:
+		typ = p.parsePointerType()
+	case token.MEMORYTYPE:
+		typ = p.parseMemoryType()
+	case token.DIRTYTYPE:
+		typ = p.parseDirtyType()
+	default:
+		typ = p.parsePrimitiveType()
+	}
+
+	return typ
+}
+
+// []int, [10]int
+func (p *Parser) parseArrayType() types.TypeSpec {
+	p.nextToken()
+
+	typ := &types.Array{}
+
+	if p.curTokenIs(token.INT) {
+		typ.Size = int(p.parseIntegerLiteral().(*ast.IntegerLiteral).Value)
+	}
+
+	if !p.curTokenIs(token.RBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	typ.T = p.parseType()
+
+	return typ
+}
+
+// ngl this feels like a really dirty fix to stay LL(1) and all because
+// we want array literals like this '[1,1,2]'
+func (p *Parser) parseArrayTypeSkipFirst() types.TypeSpec {
+	typ := &types.Array{}
+
+	if p.curTokenIs(token.INT) {
+		typ.Size = int(p.parseIntegerLiteral().(*ast.IntegerLiteral).Value)
+	}
+
+	if !p.curTokenIs(token.RBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	typ.T = p.parseType()
+
+	return typ
+}
+
+// fn(i64) i64 or fn()
+func (p *Parser) parseFunctionType() *types.Function {
+	typ := &types.Function{}
+
+	if !p.curTokenIs(token.FUNCTION) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	p.nextToken()
+
+	if !p.curTokenIs(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.RPAREN) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		typ.Arg = append(typ.Arg, p.parseType())
+	}
+	p.nextToken()
+
+	// case: f fn(), or f fn()) or eof
+	if p.curTokenIs(token.COMMA) || p.curTokenIs(token.RPAREN) || p.curTokenIs(token.EOF) {
+		return typ
+	}
+
+	for !p.curTokenIs(token.EOF) {
+		typ.Ret = append(typ.Ret, p.parseType())
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		if !p.curTokenIsType() {
+			return typ
+		}
+	}
+	// TODO: handle this gracefully
+	panic("unreachable")
+}
+
+func (p *Parser) parsePrimitiveType() types.TypeSpec {
+	if !p.curTokenIsType() {
+		return nil
+	}
+
+	defer p.nextToken()
+
+	return types.TokenToType(p.curToken)
+}
+
+func (p *Parser) parseUnknownNamedType() types.TypeSpec {
+	typ := &types.UnknownNamed{Name: p.curToken.Literal}
+
+	p.nextToken()
+	if p.curTokenIs(token.OPTIONAL) {
+		p.nextToken()
+		return &types.Optional{T: typ}
+	}
+	return typ
+}
+
+func (p *Parser) parsePointerType() types.TypeSpec {
+	typ, _ := types.TokenToType(p.curToken).(*types.Pointer)
+	p.nextToken()
+
+	typ.T = p.parseType()
+	return typ
+}
+
+func (p *Parser) parseMemoryType() types.TypeSpec {
+	typ, _ := types.TokenToType(p.curToken).(*types.Memory)
+	p.nextToken()
+
+	if !p.curTokenIs(token.LT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	typ.T = p.parseType()
+
+	if !p.curTokenIs(token.GT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	return typ
+}
+
+func (p *Parser) parseDirtyType() types.TypeSpec {
+	typ, _ := types.TokenToType(p.curToken).(*types.Dirty)
+	p.nextToken()
+
+	if !p.curTokenIs(token.LT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	typ.T = p.parseType()
+
+	if !p.curTokenIs(token.GT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	return typ
+}
+
+func (p *Parser) addError(tkn token.Token, err error) {
+	pos := tkn.Position
+	fmt.Printf("[ERROR] Parser failed at %d:%d - %s\n", pos.Line(), pos.Column(), err)
+}
+
+// ------- //
+// Helpers //
+// ------- //
+
+func (p *Parser) curPrecedence() int {
+	if p, ok := precedences[p.curToken.Type]; ok {
+		return p
+	}
+	return LOWEST
+}
+
+func (p *Parser) prevTokenIs(t token.Type) bool {
+	return p.prevToken.Type == t
+}
+
+func (p *Parser) curTokenIs(t token.Type) bool {
+	return p.curToken.Type == t
+}
+
+func (p *Parser) peekTokenIs(t token.Type) bool {
+	return p.peekToken.Type == t
+}
+
+func (p *Parser) curTokenIsOperator() bool {
+	return p.curToken.Type == token.EQ ||
+		p.curToken.Type == token.ASSIGN ||
+		p.curToken.Type == token.BACKSLASH ||
+		p.curToken.Type == token.COLON ||
+		p.curToken.Type == token.PLUS ||
+		p.curToken.Type == token.MINUS ||
+		p.curToken.Type == token.MOD ||
+		p.curToken.Type == token.SLASH ||
+		p.curToken.Type == token.ASTERISK ||
+		p.curToken.Type == token.AMPERSAND ||
+		p.curToken.Type == token.AND ||
+		p.curToken.Type == token.OR ||
+		p.curToken.Type == token.NOT ||
+		p.curToken.Type == token.GTE ||
+		p.curToken.Type == token.LTE ||
+		p.curToken.Type == token.NEQ ||
+		p.curToken.Type == token.GT ||
+		p.curToken.Type == token.LT ||
+		p.curToken.Type == token.BAR ||
+		p.curToken.Type == token.LSHIFT ||
+		p.curToken.Type == token.RSHIFT ||
+		p.curToken.Type == token.CARET ||
+		p.curToken.Type == token.BNOT ||
+		p.curToken.Type == token.BANDNOT ||
+		p.curToken.Type == token.PIPE ||
+		p.curToken.Type == token.NULL_COALESCE ||
+		p.curToken.Type == token.OPTIONAL ||
+		p.curToken.Type == token.INCR ||
+		p.curToken.Type == token.DECR ||
+		p.curToken.Type == token.ARROW
+}
+
+func (p *Parser) curTokenIsType() bool {
+	return p.curToken.Type == token.BOOLTYPE ||
+		p.curToken.Type == token.I8TYPE ||
+		p.curToken.Type == token.U8TYPE ||
+		p.curToken.Type == token.I16TYPE ||
+		p.curToken.Type == token.U16TYPE ||
+		p.curToken.Type == token.I32TYPE ||
+		p.curToken.Type == token.U32TYPE ||
+		p.curToken.Type == token.I64TYPE ||
+		p.curToken.Type == token.U64TYPE ||
+		// p.curToken.Type == token.I128TYPE ||
+		// p.curToken.Type == token.U128TYPE ||
+		// p.curToken.Type == token.I256TYPE ||
+		// p.curToken.Type == token.U256TYPE ||
+		p.curToken.Type == token.F32TYPE ||
+		p.curToken.Type == token.F64TYPE ||
+		p.curToken.Type == token.STRINGTYPE ||
+		p.curToken.Type == token.BYTETYPE ||
+		p.curToken.Type == token.CHARTYPE ||
+		p.curToken.Type == token.LBRACK ||
+		(p.curToken.Type == token.FUNCTION && p.peekToken.Type == token.LPAREN) ||
+		p.curToken.Type == token.ERRORTYPE ||
+		p.curToken.Type == token.ASTERISK ||
+		p.curToken.Type == token.MEMORYTYPE ||
+		p.curToken.Type == token.IDENT ||
+		p.curToken.Type == token.OPTIONAL ||
+		p.curToken.Type == token.DIRTYTYPE
+}
+
+func (p *Parser) curTokenIsConditionalStatement() bool {
+	return p.curTokenIs(token.ELSEIF) || p.curTokenIs(token.ELSE)
+}

@@ -1,0 +1,312 @@
+lib main
+
+fn main() {
+    var has_error = false
+
+    if test_scalar() {
+        has_error = true
+    }
+    if test_scalar_with_fn() {
+        has_error = true
+    }
+    if test_scalar_with_pointer() {
+        has_error = true
+    }
+    if test_struct() {
+        has_error = true
+    } 
+    if test_struct_with_fn() {
+        has_error = true
+    } 
+    if test_array() {
+        has_error = true
+    } 
+    // if test_string() {
+    //     has_error = true
+    // } 
+    if test_union() {
+        has_error = true
+    } 
+    if test_union_with_fn() {
+        has_error = true
+    }
+    
+    if has_error {
+        exit(1)
+    }
+    exit(0)
+}
+
+// ------- //
+// Scalars //
+// ------- //
+
+fn test_scalar() bool {
+    var has_error = false
+
+    var i = -1
+	for {
+		if i > 10 {
+			break
+		}
+		i = i + 1
+	}
+
+    if i != 11 {
+        has_error = true
+        print_error("expected i == 11")
+    }
+    
+    return has_error
+}
+
+fn test_scalar_with_fn() bool {
+    var has_error = false
+
+    let add = fn(i i64) i64 { return i + 1}
+    
+    var i = -1
+	for {
+		if i > 10 {
+			break
+		}
+		i = add(i)
+	}
+
+    if i != 11 {
+        has_error = true
+        print_error("expected i == 11")
+    }
+    
+    return has_error
+}
+
+fn test_scalar_with_pointer() bool {
+    var has_error = false
+     
+    var x = 1
+    var y = &x
+    var z = *y
+    
+    if x != 1 {
+        has_error = true
+        print_error("expected x == 1")
+    }
+    if x != z {
+        has_error = true
+        print_error("expected x == z")
+    }
+    if y == &z {
+        has_error = true
+        print_error("expected y != &z")
+    }
+    
+    return has_error
+}
+
+// ------- //
+// Structs //
+// ------- //
+
+struct abc{
+    x i64
+}
+
+fn test_struct() bool {
+    var has_error = false
+
+    var a = abc{x: 1}
+    for { 
+        if a.x > 5 { 
+            break 
+        } 
+        a = abc{x: a.x + 1}
+    }
+
+    if a.x != 6 {
+        has_error = true
+        print_error("expected a.x == 6")
+    }
+
+    return has_error    
+}
+
+fn test_struct_with_fn() bool {
+    var has_error = false
+
+    var a = abc{x: 0}
+    for {   
+        if a.x == 5 { 
+            break 
+        } 
+        a = _get_abc(a) 
+    }  
+
+    if a.x != 5 {
+        has_error = true
+        print_error("expected a.x == 5")
+    } 
+    return has_error
+}
+
+fn _get_abc(s abc) abc { return abc{x: s.x + 1} }
+
+// ------ //
+// Arrays // 
+// ------ //
+
+fn test_array() bool {
+    var has_error = false
+
+    var i = 0
+    var a = [3,5,2,8]
+    for {
+        if i == 1 {
+            break
+        }
+        a = [4,5]
+        i++
+    }
+
+    if len(a) != 2 {
+        has_error = true
+        print_error("expected length to be 2")
+    } else if a[0] != 4 && a[1] != 5 {
+        has_error = true
+        print_error("expected contents of 'a' to match")
+    }
+    
+    return has_error
+}
+
+// NOTE: dynamically sized arrays cant be returned yet
+
+// ------- //
+// Strings //
+// ------- //
+
+// fn test_string() bool {
+//     var has_error = true
+
+//     var i = 0
+//     var s = "hello, world!"
+//     for {
+//         if len(s) == 6 {
+//             break
+//         }
+//         print_info(s)
+//         s = s[i:len(s)-1]
+//         i++
+//     }
+
+//     if len(s) != 6 {
+//         has_error == true
+//         print_error("expected len(a) == 6")
+//     } else if s != "world!" {
+//         has_error = true
+//         print_error("expected s == 'world!'")
+//     }
+
+//     return has_error
+// }
+
+// NOTE: dynamically sized strings cant be returned yet
+
+// ------ //
+// Unions //
+// ------ //
+
+union xyz {
+    abc
+    string
+}
+
+fn test_union() bool {
+    var has_error = false
+
+    var x = xyz(abc{x: 1})
+	for {
+		match x' = x {
+		case abc:
+			if x'.x > 10 {
+				break
+			}
+		    x = xyz(abc{x: x'.x + 1})
+		}
+	}
+
+    match x' = x {
+    case abc:
+        if x'.x != 11 {
+            has_error = true
+            print_error("expected x'.x == 11")
+        }
+    case _:
+        has_error = true
+        print_error("expected different block to match")
+    }
+
+    return has_error
+}
+
+fn test_union_with_fn() bool {
+    var has_error = false
+
+    var x = xyz(abc{x: 1})
+	for {
+		match x' = x {
+		case abc:
+			if x'.x > 10 {
+				break
+			}
+		}
+		x = _get_xyz(x)
+	}
+
+    match x' = x {
+    case abc:
+        if x'.x != 11 {
+            has_error = true
+            print_error("expected x.x == 11")
+        }
+    case _:
+        has_error = true
+        print_error("expected different block to match")
+    }
+
+    return has_error
+}
+
+fn _get_xyz(x xyz) xyz { 
+	return match x { 
+		case abc: xyz(abc{x: x.x + 1}) 
+        case _: xyz(abc{x: 0}) 	
+    } 
+}
+
+// ------- //
+// Helpers //
+// ------- //
+
+let std_out = 1
+let std_err = 2
+
+fn print_info(rsn string) {
+    let buf = []byte(rsn)
+    write(std_out, &buf, len(buf))
+}
+
+fn print_error(rsn string) {
+    let buf = []byte(rsn+"\n")
+    write(std_err, &buf, len(buf))
+}
+
+// -------- //
+// OS calls //
+// -------- //
+
+@extern(c)
+pub fn write(fd i64, buf *[]byte, size i64) i64 
+
+@extern(c)
+pub fn exit(c i64)

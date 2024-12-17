@@ -1,0 +1,15 @@
+#!/bin/bash
+profile=~/.zshrc
+
+sed -i '' '/^export DASH_HOME/d' "$profile"
+sed -i '' '/^export PATH=.*\/usr\/local\/dash\/bin/d' "$profile"
+
+echo '' >> "$profile"
+echo '# Dash' >> "$profile"
+echo 'export DASH_HOME="/usr/local/dash"' >> "$profile"
+echo 'export PATH="$DASH_HOME/bin:$PATH"' >> "$profile"
+
+sudo chown -R $(whoami) /usr/local/dash
+chmod -R 755 /usr/local/dash
+
+source "$profile"

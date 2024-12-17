@@ -1,0 +1,58 @@
+name: Linux Build & Test
+
+on:
+#   push:
+#     branches: [ "main" ]
+#   pull_request:
+#     branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      DASH_HOME: "/usr/local/dash"
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: Install LLVM
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y llvm
+
+    - name: Verify LLVM 18
+      run: | 
+        if llvm-config --version | grep -qE "^18\."; then
+          echo "llvm installation verified"
+        else
+          echo "llvm not properly installed"
+          exit i
+        fi
+    - name: Install Lua 
+      run: | 
+          sudo apt install lua5.4
+         
+    - name: Verify Lua
+      run : lua -v
+
+    - name: Install Dash
+      run: |
+        if [ -z "${{ github.event.release.tag_name }}" ]; then
+          export DASH_VERSION=$(git rev-parse --short "$GITHUB_SHA")
+        else
+          export DASH_VERSION="${{ github.event.release.tag_name }}"
+        fi
+    
+        chmod +x scripts/linux/install_linux.sh
+        ./scripts/linux/install_linux.sh
+        
+    - name: Verify Dash
+      run: dash version
+      
+    - name: Test
+      run: make test

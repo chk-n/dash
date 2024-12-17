@@ -1,0 +1,103 @@
+lib test
+
+fn main() {
+    var has_error = false
+
+    if test_equality() {
+        has_error = true
+    }
+    if test_comparison() {
+        has_error = true
+    }
+    if test_match_expression() {
+        has_error = true
+    }
+
+    if has_error {
+        exit(1)
+    }
+    exit(0)
+}
+
+enum status {
+    online,
+    offline,
+    unknown,
+}
+
+fn test_equality() bool {
+    var has_error = false
+
+    if status.online == status.offline {
+        has_error = true
+        print_error("expected status.online != status.offline")
+    }
+    if status.unknown != status.unknown {
+        has_error = true
+        print_error("expected status.unknown == status.unknown")
+    }
+
+    return has_error
+}
+
+fn test_comparison() bool {
+    var has_error = false
+    
+    if status.online > status.offline {
+        has_error = true
+        print_error("expected status.online < status.offline")
+    }
+    if status.offline >= status.unknown {
+        has_error = true
+        print_error("expected status.offline < status.unknown")
+    }
+    if status.unknown < status.offline {
+        has_error = true
+        print_error("expected status.unknown > status.offline")
+    }
+    if status.unknown <= status.online {
+        has_error = true
+        print_error("expected status.unknown > status.online")
+    }
+
+    return has_error
+}
+
+fn test_match_expression() bool {
+    var has_error = false
+
+    let v = status.offline
+    let res = match v {
+        case status.online: 1
+        case status.offline: 2
+        case _: 3
+    }
+
+    if res != 2 {
+        has_error = true
+        print_error("expected enum to match in expression")
+    }
+
+    return has_error
+}
+
+// ------- //
+// Helpers //
+// ------- //
+
+let std_err = 2
+
+fn print_error(rsn string) {
+    let buf = []byte(rsn+"\n")
+    write(std_err, &buf, len(buf))
+}
+
+// -------- //
+// OS calls //
+// -------- //
+
+@extern(c)
+pub fn write(fd i64, buf *[]byte, size i64) i64 
+
+@extern(c)
+pub fn exit(c i64)

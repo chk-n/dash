@@ -1,0 +1,117 @@
+lib test
+
+fn main() {
+    var has_error = false
+
+    if test_simple() {
+        has_error = true
+    } 
+    if test_string() {
+        has_error = true
+    }
+    if test_array() {
+        has_error = true
+    }
+
+    if has_error {
+        exit(1)
+    }
+
+    exit(0)
+}
+
+type age i64 | 18 <= age && age <= 65
+
+fn test_simple() bool {
+    var has_error = false
+
+    let a = age(10)
+    let b = age(45)
+
+    if validate(a) {
+        has_error = true
+        print_error("expected validate(a) == false")
+    }
+    if !validate(b) {
+        has_error = true
+        print_error("expected validate(b) == true")
+    }
+
+    return has_error
+}
+
+type custom_str string | len(custom_str) == 10
+
+fn test_string() bool {
+    var has_error = false
+
+    let a = custom_str("0123")
+    let b = custom_str("0123456789")
+
+    if validate(a) {
+        has_error = true
+        print_error("expected validate('0123') == false")
+    }
+    if !validate(b) {
+        has_error = true
+        print_error("expected validate('0123456789') == true")
+    }
+
+    return has_error
+}
+
+type abc []u8 | is_abc(abc)
+
+fn is_abc(a dirty<abc>) bool {
+    for i = 0; i < len(a); i++ {
+        if a[i] == 2 {
+            return true
+        }
+    }
+    return false
+}
+
+fn test_array() bool {
+    var has_error = false
+
+    let a = abc([0,1,2])
+    let b = abc([0,1,1,0])
+
+    if !validate(a) {
+        has_error = true
+        print_error("expected validate(a) == true")    
+    }
+    if validate(b) {
+        has_error = true
+        print_error("expected validate(b) == false")
+    }
+
+    return has_error
+}
+
+// ------- //
+// Helpers //
+// ------- //
+
+let std_out = 1
+let std_err = 2
+
+fn print_info(rsn string) {
+    let buf = []byte(rsn)
+    write(std_out, &buf, len(buf))
+}
+
+fn print_error(rsn string) {
+    let buf = []byte(rsn)
+    write(std_err, &buf, len(buf))
+}
+
+// -------- //
+// OS calls //
+// -------- //
+
+@extern(c)
+pub fn write(fd i64, buf *[]byte, size i64) i64 
+
+@extern(c)
+pub fn exit(c i64)

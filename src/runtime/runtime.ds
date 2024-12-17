@@ -1,0 +1,34 @@
+lib runtime
+
+// ------------ //
+// Basic string //
+// ------------ //
+
+pub fn str_concat2(mem memory<string>, a, b string) string {	
+	return use mem {
+		mem[0:len(a)] = a
+		mem[len(a):len(a)+len(b)] = b
+	}
+} 
+
+// Basic ASCII comparison
+pub fn str_cmp(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	if &a == &b {
+		return true
+	}
+	
+	for i = 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+@extern(c)
+pub fn exit(c i64)

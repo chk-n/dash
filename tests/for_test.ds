@@ -1,0 +1,82 @@
+lib main
+
+fn main() {
+    var has_error = false
+
+    if test_for_classic() {
+        has_error = true
+    }
+    if test_for_boolean() {
+        has_error = true
+    }
+
+    if has_error {
+        exit(1)
+    }
+    exit(0)
+}
+
+fn test_for_classic() bool {
+    var has_error = false
+
+    var x = 10
+    for i = 10; i > 0; i-- {
+        x = i
+    }
+
+    if x != 1 {
+        has_error = true
+        print_error("expected x == 1")
+    }
+
+    return has_error
+}
+
+fn test_for_boolean() bool {
+    var has_error = false
+
+    var x = 1
+    for x < 10 {
+        x = x + 1
+    }
+
+    if x != 10 {
+        has_error = true
+        print_error("expected x == 10")
+    }
+
+    return has_error
+}
+
+// fn test_nested_for() bool { }
+
+// fn test_for_with_break() bool { }
+
+// fn test_for_with_next() bool { }
+
+// ------- //
+// Helpers //
+// ------- //
+
+let std_out = 1
+let std_err = 2
+
+fn print_info(rsn string) {
+    let buf = []byte(rsn)
+    write(std_out, &buf, len(buf))
+}
+
+fn print_error(rsn string) {
+    let buf = []byte(rsn)
+    write(std_err, &buf, len(buf))
+}
+
+// -------- //
+// OS calls //
+// -------- //
+
+@extern(c)
+pub fn write(fd i64, buf *[]byte, size i64) i64 
+
+@extern(c)
+pub fn exit(c i64)

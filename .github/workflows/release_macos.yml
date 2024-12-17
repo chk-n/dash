@@ -1,0 +1,51 @@
+name: MacOS Build & Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write 
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      DASH_VERSION: ${{ github.event.release.tag_name }}  
+      DASH_HOME: "/usr/local/dash"
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+        
+    - name: Install LLVM 18
+      run: |
+        brew install llvm@18
+        echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH  
+          
+    - name: Verify LLVM 18
+      run: | 
+        if llvm-config --version | grep -qE "^18\."; then
+          echo "llvm installation verified"
+        else
+          echo "llvm not properly installed"
+          exit 1
+        fi
+        
+    - name: Install Lua 
+      run: brew install lua
+
+    - name: Verify Lua
+      run: lua -v
+    
+    - name: Build Package aarch64
+      run:  make release-macos-aarch64
+        
+    - name: Release Package aarch64
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./release/dash-${{ env.DASH_VERSION }}-macos-aarch64.pkg
+      
