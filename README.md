@@ -70,5 +70,5 @@ fn main() {
 ```
 
 ## Current status
-- Only MacOS and Linux supported
+- Only MacOS aarch64 supported and tested
 - NOT SAFE (yet), no bound checking (requires global error handling)
