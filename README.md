@@ -65,7 +65,7 @@ lib main
 import "std/fmt"
 
 fn main() {
-    fmt.Println("Hello, World!")
+    fmt.println("Hello, World!")
 }
 ```
 
