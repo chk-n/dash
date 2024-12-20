@@ -71,4 +71,4 @@ fn main() {
 
 ## Current status
 - Only MacOS aarch64 supported and tested
-- NOT SAFE (yet), no bound checking (requires global error handling)
+- NOT SAFE (yet), no bound checking (requires error handling)
