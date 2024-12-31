@@ -8,6 +8,7 @@ import (
 	"dash-lang.io/src/ast"
 	"dash-lang.io/src/internal"
 	"dash-lang.io/src/token"
+	"dash-lang.io/src/types"
 )
 
 type keyword uint8
