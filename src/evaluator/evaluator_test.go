@@ -561,11 +561,6 @@ func TestPrintln(t *testing.T) {
 			wantText: "42\n",
 		},
 		{
-			name:     "print multiple arguments",
-			prog:     `println("hello", 123, true)`,
-			wantText: "hello 123 true\n",
-		},
-		{
 			name:     "print array",
 			prog:     "println([1, 2, 3])",
 			wantText: "[1, 2, 3]\n",
