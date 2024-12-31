@@ -628,6 +628,52 @@ func TestPrintln(t *testing.T) {
 	}
 }
 
+func TestMake(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "make integer array",
+			prog: "make([]i64, 3)",
+			want: []any{int64(0), int64(0), int64(0)},
+		},
+		{
+			name: "make float array",
+			prog: "make([]f64, 2)",
+			want: []any{float64(0), float64(0)},
+		},
+		{
+			name: "make string array",
+			prog: `make([]string, 2)`,
+			want: []any{"", ""},
+		},
+		{
+			name: "make bool array",
+			prog: "make([]bool, 2)",
+			want: []any{false, false},
+		},
+		{
+			name: "make empty array",
+			prog: "make([]i64, 0)",
+			want: []any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got := e.Run(n)
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIArith(t *testing.T) {
 	input := "(5 - 9 + 5) * -10 / -5"
 	want := 2

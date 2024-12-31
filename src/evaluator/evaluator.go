@@ -119,6 +119,8 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression) any {
 		return e.evalLen(n.Arguments)
 	} else if n.TokenLiteral() == "println" {
 		return e.evalPrintln(n.Arguments)
+	} else if n.TokenLiteral() == "make" {
+		return e.evalMake(n.Arguments)
 	}
 	// create new scope during function execution
 	e.vars.Scope()
@@ -694,6 +696,41 @@ func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 	// Print all values with spaces between them and newline at end
 	fmt.Println(strings.Join(values, " "))
 	return nil
+}
+
+func (e *Evaluator) evalMake(args []ast.Expression) any {
+
+	typ, _ := args[0].(*ast.TypeLiteral)
+	arrayType, _ := typ.T.(*types.Array)
+
+	size := e.Run(args[1])
+	sizeVal, _ := size.(int64)
+	if sizeVal < 0 {
+		panic("make() size cannot be negative")
+	}
+
+	// create array with default values
+	arr := make([]any, sizeVal)
+	var defaultVal any
+
+	switch arrayType.T.(type) {
+	case *types.Int:
+		defaultVal = int64(0)
+	case *types.Float:
+		defaultVal = float64(0)
+	case *types.String:
+		defaultVal = ""
+	case *types.Bool:
+		defaultVal = false
+	default:
+		defaultVal = nil
+	}
+
+	for i := range arr {
+		arr[i] = defaultVal
+	}
+
+	return arr
 }
 
 // Performs
