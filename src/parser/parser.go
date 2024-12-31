@@ -295,6 +295,21 @@ func (p *Parser) ParseREPL() *ast.Library {
 	return lib
 }
 
+func (p *Parser) ParseExpressions() *ast.Evaluator {
+	blk := &ast.Evaluator{}
+	for !p.curTokenIs(token.EOF) {
+		switch p.curToken.Type {
+		case token.STRUCT:
+			blk.Structs = append(blk.Structs, p.parseStructStatement())
+		case token.ENUM:
+			blk.Enums = append(blk.Enums, p.parseEnumStatement())
+		default:
+			blk.Nodes = append(blk.Nodes, p.parseStatementInBlock())
+		}
+	}
+	return blk
+}
+
 func (p *Parser) ParseExpression() ast.Node {
 	return p.parseStatementInBlock()
 }

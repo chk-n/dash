@@ -28,6 +28,7 @@ const (
 )
 
 type FnInfo struct {
+	Func          *ast.FunctionExpression
 	Type          *types.Function
 	IsAnonymousFn bool
 }
@@ -128,6 +129,20 @@ func (s *Semantics) Analyse(lib *ast.Library) {
 		}
 	}
 	s.analyse(lib, "")
+}
+
+func (s *Semantics) AnalyseNode(n *ast.Evaluator) {
+	s.scope.Push(GLOBAL)
+	defer s.scope.Pop()
+
+	s.analyseStructDefinitions(n.Structs)
+	for _, enum := range n.Enums {
+		s.varSt.Set(enum.Name.String(), &VarInfo{Type: enum.T})
+	}
+
+	for _, n := range n.Nodes {
+		s.analyse(n, "")
+	}
 }
 
 func (s *Semantics) Errors() []string {

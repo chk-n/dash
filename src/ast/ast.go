@@ -148,6 +148,17 @@ func (l *Library) String() string {
 	return out.String()
 }
 
+type Evaluator struct {
+	Structs []*StructStatement
+	Enums   []*EnumStatement
+	Nodes   []Node
+}
+
+func (e *Evaluator) Pos() token.Pos                { return token.Pos(0) }
+func (e *Evaluator) TokenLiteral() string          { return "" }
+func (e *Evaluator) String() string                { return "" }
+func (e *Evaluator) visitChildren(fn func(n Node)) {}
+
 type FileFormat struct {
 	Token token.Token
 	Name  *Identifier
