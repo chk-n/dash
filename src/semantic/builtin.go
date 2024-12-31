@@ -8,7 +8,7 @@ import (
 
 func isBuiltinFunction(lit string) bool {
 	switch lit {
-	case "len", "cap", "size", "make", "validate":
+	case "len", "cap", "size", "make", "validate", "println":
 		return true
 	}
 	return false
@@ -33,7 +33,7 @@ var (
 			&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
 		}},
 	}
-	printfArgT = []types.TypeSpec{
+	printlnArgT = []types.TypeSpec{
 		&types.Generic{Name: "T", Constraints: []types.TypeSpec{
 			&types.ConstString,
 			&types.Generic{Name: "T"},
@@ -64,6 +64,8 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) (args []types.T
 		return argT, retT
 	case "validate":
 		return validateArgT, validateRetT
+	case "println":
+		return printlnArgT, nil
 	}
 	return nil, nil
 }
