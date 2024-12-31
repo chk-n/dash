@@ -858,6 +858,9 @@ type FunctionCallExpression struct {
 	ReturnTypes []types.TypeSpec
 	Catch       Expression
 
+	// Points to underlying function definition within library
+	Func *FunctionExpression
+
 	// Set by semantic analysis
 	T             types.TypeSpec
 	IsAnonymousFn bool

@@ -182,6 +182,12 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			s.analyse(arg, "")
 		}
 
+		// set pointer of function expression that the function call points to if
+		// it is within current library
+		if fnInfo, ok := s.fnSt.Get(fnName); ok {
+			n.Func = fnInfo.Func
+		}
+
 		if isBuiltinFunction(n.Token.Literal) {
 			argTs, retTs := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
 
@@ -1208,6 +1214,7 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 		case *ast.FunctionExpression:
 			n.Declerations[i].Assignee.SetType(val.Type())
 			f := &FnInfo{
+				Func:          val,
 				Type:          val.T.(*types.Function),
 				IsAnonymousFn: true,
 			}
@@ -2126,7 +2133,7 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 	}
 	fnType := &types.Function{Arg: argTypes, Ret: retTypes}
 	n.T = fnType
-	s.fnSt.Set(n.Name.String(), &FnInfo{Type: fnType})
+	s.fnSt.Set(n.Name.String(), &FnInfo{Func: n, Type: fnType})
 
 }
 
