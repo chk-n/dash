@@ -674,7 +674,13 @@ func (e *Evaluator) evalLen(args []ast.Expression) any {
 		panic("len() requires exactly one argument")
 	}
 
-	val := e.Run(args[0])
+	var val any
+	switch args[0].(type) {
+	case *ast.FunctionCallExpression:
+		val = e.Run(args[0]).([]any)[0]
+	default:
+		val = e.Run(args[0])
+	}
 
 	switch v := val.(type) {
 	case []any:
@@ -689,8 +695,16 @@ func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 
 	// Evaluate each argument to a string
 	for _, arg := range args {
-		val := e.Run(arg)
-		values = append(values, valueToString(val))
+		switch args[0].(type) {
+		case *ast.FunctionCallExpression:
+			rets := e.Run(arg).([]any)
+			for _, ret := range rets {
+				values = append(values, valueToString(ret))
+			}
+		default:
+			val := e.Run(arg)
+			values = append(values, valueToString(val))
+		}
 	}
 
 	// Print all values with spaces between them and newline at end
