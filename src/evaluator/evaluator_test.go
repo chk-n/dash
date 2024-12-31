@@ -123,6 +123,14 @@ func TestAssignmentStatement(t *testing.T) {
 			prog: `let v = "hello" v`,
 			want: "hello",
 		},
+		{
+			name: "assign fn result",
+			prog: `
+				fn test() i64, i64 { return 11, 12}
+				let a, let b = test()
+				b`,
+			want: int64(12),
+		},
 	}
 
 	for _, tt := range tests {

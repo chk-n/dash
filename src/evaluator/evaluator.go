@@ -141,11 +141,18 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
 	// TODO: iterate over if function reached we need to handle that
 	// TODO: data can be assigned to identifiers, struct fields, array indices, slices
 	// e.g. if in use expression
-	for i, decl := range n.Declerations {
-		switch exp := decl.Assignee.(type) {
-		case *ast.Identifier:
-			val := e.Run(n.Values[i])
-			e.vars.Set(exp.Value, val)
+	for i, val := range n.Values {
+		switch val := val.(type) {
+		case *ast.FunctionCallExpression:
+			res := e.Run(val).([]any)
+			for j := range val.ReturnTypes {
+				decl := n.Declerations[i+j].Assignee
+				e.vars.Set(decl.String(), res[i+j])
+			}
+		default:
+			res := e.Run(val)
+			decl := n.Declerations[i].Assignee
+			e.vars.Set(decl.String(), res)
 		}
 	}
 }
