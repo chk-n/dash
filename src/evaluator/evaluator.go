@@ -313,7 +313,6 @@ func (e *Evaluator) evalUseExpression(n *ast.UseExpression) any {
 
 	e.Run(n.Block)
 	arr, _ = e.vars.Get(n.Ident.Value)
-	fmt.Println(arr)
 	return arr
 }
 
@@ -479,6 +478,9 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression) any {
 		val, err = e.evalInfixEqual(l, r)
 	case token.NEQ:
 		val, err = e.evalInfixNotEqual(l, r)
+	// Special
+	case token.COLON:
+		val = []any{l, r}
 	}
 
 	if err != nil {
@@ -786,7 +788,6 @@ func (e *Evaluator) evalMake(args []ast.Expression) any {
 	// create array with default values
 	arr := make([]any, sizeVal)
 	var defaultVal any
-
 	switch arrayType.T.(type) {
 	case *types.Int:
 		defaultVal = int64(0)
@@ -891,6 +892,8 @@ func valueToString(v any) string {
 		}
 		b.WriteString("]")
 		return b.String()
+
+	// BUG: we can not rely on order here so tests may occasionally fail
 	case map[string]any:
 		var b strings.Builder
 		b.WriteString("{")

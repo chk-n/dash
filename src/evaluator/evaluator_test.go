@@ -678,22 +678,22 @@ func TestUseExpression(t *testing.T) {
 		{
 			name: "modify array using index expression",
 			prog: `
-		              let buf = make([]i64, 3)
-		              let buf' = use buf {
-		                  buf[0] = 1
-		                  buf[1] = 2
-		              }
-		              buf'`,
+              let buf = make([]i64, 3)
+              let buf' = use buf {
+                  buf[0] = 1
+                  buf[1] = 2
+              }
+              buf'`,
 			want: []any{int64(1), int64(2), int64(0)},
 		},
 		{
 			name: "modify array using slice expression",
 			prog: `
-                let buf = make([]i64, 3)
-                let buf' = use buf {
-                    buf[0:3] = [3,2,1]
-                }
-                buf'`,
+	            let buf = make([]i64, 3)
+	            let buf' = use buf {
+	                buf[0:3] = [3,2,1]
+	            }
+	            buf'`,
 			want: []any{int64(3), int64(2), int64(1)},
 		},
 	}
