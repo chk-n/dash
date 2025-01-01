@@ -159,8 +159,8 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
 			switch exp := decl.(type) {
 			case *ast.IndexExpression:
 				e.evalAssignmentToArrayIndex(exp, val)
-			// case *ast.SliceExpression:
-			// e.evalAssignmentToArraySlice()
+			case *ast.SliceExpression:
+				e.evalAssignmentToArraySlice(exp, val)
 			// case *ast.DotExpression:
 			// e.evalAssignmentToStructField()
 			default:
@@ -185,6 +185,24 @@ func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast
 	}
 	idx := e.Run(exp.Indices[0]).(int64)
 	arr.([]any)[idx] = res
+}
+
+func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast.Expression) {
+	res := e.Run(val)
+	// we know that LHS has to be an identifier as
+	// assigning to index of array is only possible
+	// within an use expression
+	ident := exp.Left.(*ast.Identifier)
+
+	arr, ok := e.vars.Get(ident.Value)
+	if !ok {
+		e.addError(exp, fmt.Errorf("this is a compiler error. please report"))
+		return
+	}
+	rng := e.Run(exp.Indices[0]).([]any)
+	start := rng[0].(int64)
+	end := rng[1].(int64)
+	copy(arr.([]any)[start:end], res.([]any))
 }
 
 // ----------------- //
