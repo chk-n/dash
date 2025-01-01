@@ -23,9 +23,13 @@ type Optional struct {
 	value   any
 }
 
+type Function struct {
+	arguments []*ast.ParameterStatement
+	body      *ast.BlockStatement
+}
+
 type Evaluator struct {
 	vars *internal.StackedSymTab[any]
-	fns  *internal.StackedSymTab[*ast.FunctionExpression]
 }
 
 func New() *Evaluator {
@@ -49,6 +53,13 @@ func (e *Evaluator) Run(n ast.Node) any {
 	case *ast.FunctionExpression:
 		if n.Name.Value == "main" {
 			e.evalMainFunction(n)
+		} else {
+			fn := &Function{
+				arguments: n.Arguments,
+				body:      n.Body,
+			}
+			e.vars.Set(n.Name.Value, fn)
+			return fn
 		}
 	case *ast.FunctionCallExpression:
 		return e.evalFunctionCall(n)
@@ -134,16 +145,21 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression) any {
 	} else if n.TokenLiteral() == "make" {
 		return e.evalMake(n.Arguments)
 	}
-	// create new scope during function execution
-	e.vars.Scope()
-	defer e.vars.Unscope()
-	// evaluate arguments and set values in fresh symbol table
-	for i, arg := range n.Arguments {
-		fnArgName := n.Func.Arguments[i].Name.Value
-		e.vars.Set(fnArgName, e.Run(arg))
+
+	var fn *Function
+	if n.Func == nil {
+		fn_, _ := e.vars.Get(n.TokenLiteral())
+		fn = fn_.(*Function)
+	} else {
+		fn = e.Run(n.Func).(*Function)
 	}
 
-	return e.Run(n.Func.Body)
+	// evaluate arguments and set values in fresh symbol table
+	for i, arg := range n.Arguments {
+		fnArgName := fn.arguments[i].Name.Value
+		e.vars.Set(fnArgName, e.Run(arg))
+	}
+	return e.Run(fn.body)
 }
 
 // -------------------- //
@@ -359,7 +375,19 @@ func (e *Evaluator) evalKeywordStatement(n *ast.KeywordStatement) any {
 func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement) any {
 	vals := make([]any, len(n.Values))
 	for i := range n.Values {
-		vals[i] = e.Run(n.Values[i])
+		res := e.Run(n.Values[i])
+		switch val := n.Values[i].(type) {
+		case *ast.FunctionCallExpression:
+			if len(val.ReturnTypes) == 1 {
+				vals[i] = unwrapFunctionResult(res, 0)
+			} else {
+				for j := range val.ReturnTypes {
+					vals[i+j] = unwrapFunctionResult(res, j)
+				}
+			}
+		default:
+			vals[i] = res
+		}
 	}
 	return vals
 }

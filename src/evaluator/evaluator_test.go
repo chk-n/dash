@@ -943,55 +943,38 @@ func TestFirstClassFunctions(t *testing.T) {
 	tests := []struct {
 		name string
 		prog string
-		want []any
+		want any
 	}{
-		// {
-		// 	name: "accept function as argument",
-		// 	prog: `
-		//               fn apply(x i64, f fn(i64) i64) i64 {
-		//                   return f(x)
-		//               }
-		//               fn double(x i64) i64 { return x * 2 }
-		//               apply(5, double)
-		//           `,
-		// 	want: []any{int64(10)},
-		// },
-		// {
-		// 	name: "return function",
-		// 	prog: `
-		//               fn makeAdder(x i64) fn(i64) i64 {
-		//                   return fn(y i64) i64 { return x + y }
-		//               }
-		//               let add5 = makeAdder(5)
-		//               add5(3)
-		//           `,
-		// 	want: []any{int64(8)},
-		// },
-		// {
-		// 	name: "pass multiple functions",
-		// 	prog: `
-		//               fn compose(f fn(i64) i64, g fn(i64) i64) fn(i64) i64 {
-		//                   return fn(x i64) i64 { return f(g(x)) }
-		//               }
-		//               fn double(x i64) i64 { return x * 2 }
-		//               fn inc(x i64) i64 { return x + 1 }
-		//               let h = compose(double, inc)
-		//               h(3)
-		//           `,
-		// 	want: []any{int64(8)},
-		// },
-
-		// // Type definition tests
+		{
+			name: "accept function as argument",
+			prog: `
+			fn apply(x i64, f fn(i64) i64) i64 {
+			  return f(x)
+			}
+			fn double(x i64) i64 { return x * 2 }
+			apply(5, double)`,
+			want: []any{int64(10)},
+		},
+		{
+			name: "return function",
+			prog: `
+			fn makeAdder(x i64) fn(i64) i64 {
+			  return fn(y i64) i64 { return x + y }
+			}
+			let add5 = makeAdder(5)
+			add5(3)`,
+			want: []any{int64(8)},
+		},
+		// TODO: requires type definitions and type alias
 		// {
 		// 	name: "function type definition",
 		// 	prog: `
-		//               type unaryFn fn(i64) i64
-		//               fn apply(x i64, f unaryFn) i64 {
-		//                   return f(x)
-		//               }
-		//               fn double(x i64) i64 { return x * 2 }
-		//               apply(5, double)
-		//           `,
+		// 	type unary_fn fn(i64) i64
+		// 	fn apply(x i64, f unary_fn) i64 {
+		// 	  return f(x)
+		// 	}
+		// 	fn double(x i64) i64 { return x * 2 }
+		// 	apply(5, double)`,
 		// 	want: []any{int64(10)},
 		// },
 		// {
@@ -1009,45 +992,13 @@ func TestFirstClassFunctions(t *testing.T) {
 		//           `,
 		// 	want: []any{int64(5)},
 		// },
-
-		// // Type alias tests
-		//
-		//	{
-		//		name: "function type alias",
-		//		prog: `
-		//	              alias processor fn(i64) i64
-		//	              fn apply(x i64, f processor) i64 {
-		//	                  return f(x)
-		//	              }
-		//	              fn double(x i64) i64 { return x * 2 }
-		//	              apply(5, double)
-		//	          `,
-		//		want: []any{int64(10)},
-		//	},
-		//
-		//	{
-		//		name: "return aliased function type",
-		//		prog: `
-		//	              alias transformer fn(i64) i64
-		//	              fn makeTransformer(factor i64) transformer {
-		//	                  return fn(x i64) i64 { return x * factor }
-		//	              }
-		//	              let triple = makeTransformer(3)
-		//	              triple(4)
-		//	          `,
-		//		want: []any{int64(12)},
-		//	},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
 			e := New()
-			got_ := e.Run(n)
-			got, ok := got_.([]any)
-			if !ok {
-				t.Error("got is not an array")
-			}
+			got := e.Run(n)
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
