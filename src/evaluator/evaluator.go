@@ -137,7 +137,7 @@ func (e *Evaluator) evalMainFunction(n *ast.FunctionExpression) {
 
 // returns list of function call results
 func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression) any {
-	// First check if it's a built-in function
+	// check if it's a built-in function
 	if n.TokenLiteral() == "len" {
 		return e.evalLen(n.Arguments)
 	} else if n.TokenLiteral() == "println" {
@@ -237,7 +237,7 @@ func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, val ast.
 
 	strct := e.Run(exp.Left).(map[string]any)
 
-	// We know exp.Right must be an identifier or integer literal for struct fields
+	// we know exp.Right must be an identifier or integer literal for struct fields
 	var field string
 	switch right := exp.Right.(type) {
 	case *ast.Identifier:
@@ -276,10 +276,8 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
 			if !cond.(bool) {
 				break
 			}
-			// execute block
 			e.Run(n.Block)
 
-			// execute change
 			e.Run(n.Change)
 		}
 		return nil
@@ -308,15 +306,6 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
 		}
 		return nil
 	}
-
-	// range loop
-	// if n.Condition == nil && n.Assignment == nil && n.Change == nil {
-	// 	// Range loop is handled by ForRangeStatement
-	// 	// This is an infinite loop
-	// 	for {
-	// 		e.Run(n.Block)
-	// 	}
-	// }
 
 	return nil
 }
@@ -406,25 +395,17 @@ func (e *Evaluator) evalUseExpression(n *ast.UseExpression) any {
 }
 
 func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression) any {
-	// Get original value to copy
-	fmt.Println(n.Ident)
 	orig := e.Run(n.Ident)
 
-	// Create new scope for the block execution
-	e.vars.Scope()
-	defer e.vars.Unscope()
-
-	// Make a deep copy based on type
+	// make a deep copy
 	var cpy any
 	switch v := orig.(type) {
 	case []any:
-		// Copy array
 		newArr := make([]any, len(v))
 		copy(newArr, v)
 		cpy = newArr
 
 	case map[string]any:
-		// Copy struct (which is represented as a map)
 		newMap := make(map[string]any, len(v))
 		for k, val := range v {
 			newMap[k] = val
@@ -438,10 +419,8 @@ func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExp
 
 	e.vars.Set(newVar, cpy)
 
-	// Execute the update block
 	e.Run(n.Block)
 
-	// Return the modified copy
 	return cpy
 }
 
@@ -472,7 +451,7 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression) any {
 func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression) any {
 	arr := e.Run(n.Left)
 
-	// Evaluate all indices
+	// evaluate all indices
 	indices := make([]int, len(n.Indices))
 	for i, idx := range n.Indices {
 		val := e.Run(idx)
@@ -484,7 +463,7 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression) any {
 		indices[i] = int(idx)
 	}
 
-	// Handle multi-dimensional indexing
+	// perform indexing and handle multiple dimensions
 	curr := arr
 	for _, idx := range indices {
 		slice, ok := curr.([]any)
@@ -910,7 +889,7 @@ func (e *Evaluator) evalLen(args []ast.Expression) any {
 func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 	values := make([]string, 0, len(args))
 
-	// Evaluate each argument to a string
+	// evaluate each argument and convert to string
 	for _, arg := range args {
 		switch args[0].(type) {
 		case *ast.FunctionCallExpression:
@@ -924,7 +903,6 @@ func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 		}
 	}
 
-	// Print all values with spaces between them and newline at end
 	n, err := fmt.Println(strings.Join(values, " "))
 	if err != nil {
 		panic("error when printing to console: " + strings.Join(values, " "))
@@ -972,7 +950,7 @@ func (e *Evaluator) evalMake(args []ast.Expression) any {
 	return []any{arr}
 }
 
-// Performs
+// Performs integer arithmetic
 func (e *Evaluator) IArith(n ast.Node) (int, bool) {
 	switch n := n.(type) {
 	case *ast.PrefixExpression:
