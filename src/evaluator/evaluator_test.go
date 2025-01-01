@@ -757,6 +757,84 @@ func TestCopyUpdateExpression(t *testing.T) {
 	}
 }
 
+func TestMatchStatement(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "single value match",
+			prog: `
+               let x = 1
+               let res = match x {
+               case 1: 10
+               case _: 0
+               }
+               res`,
+			want: int64(10),
+		},
+		{
+			name: "default case",
+			prog: `
+               let x = 5.2
+               let res = match x {
+               case 5.0: 10
+               case _: 0
+               }
+               res`,
+			want: int64(0),
+		},
+		{
+			name: "expression as scrutinee",
+			prog: `
+               let res = match 1 + 1 {
+               case 2: 10
+               case _: 0
+               }
+               res`,
+			want: int64(10),
+		},
+		{
+			name: "match enum field",
+			prog: `
+               enum status {
+                   online
+                   offline
+               }
+               let s = status.offline
+               match s {
+               case status.online: 1
+               case status.offline: 2
+               }`,
+			want: int64(2),
+		},
+		{
+			name: "match enum from function",
+			prog: `
+               enum status { ok err }
+               fn get_status() status { return status.err }
+               let res = match get_status() {
+               case status.ok: 0
+               case status.err: 1
+               }
+               res`,
+			want: int64(1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got := e.Run(n)
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIArith(t *testing.T) {
 	input := "(5 - 9 + 5) * -10 / -5"
 	want := 2

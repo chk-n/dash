@@ -55,6 +55,8 @@ func (e *Evaluator) Run(n ast.Node) any {
 		return e.evalIfElseExpression(n)
 	case *ast.ForStatement:
 		return e.evalForStatement(n)
+	case *ast.MatchExpressionStatement:
+		return e.evalMatchExpressionStatement(n)
 	case *ast.KeywordStatement:
 		return e.evalKeywordStatement(n)
 	case *ast.ReturnStatement:
@@ -294,6 +296,37 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
 	// }
 
 	return nil
+}
+
+func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement) any {
+	scrutinee := e.Run(n.Scrutinee)
+
+	// unwrap function
+	if _, ok := n.Scrutinee.(*ast.FunctionCallExpression); ok {
+		scrutinee = scrutinee.([]any)[0]
+	}
+
+	// TODO: handle multiple predicates in one case
+	for _, c := range n.Cases {
+		predValue := e.Run(c.Predicate)
+		if predValue == scrutinee {
+			return e.evalMatchCase(c)
+		}
+	}
+
+	if n.Default != nil {
+		return e.evalMatchCase(n.Default)
+	}
+
+	panic("this is a compiler error. please report")
+
+}
+func (e *Evaluator) evalMatchCase(c *ast.MatchCase) any {
+	var last any
+	for _, stmt := range c.Body {
+		last = e.Run(stmt)
+	}
+	return last
 }
 
 // returns last expression in block if any otherwise nil
