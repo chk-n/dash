@@ -711,6 +711,52 @@ func TestUseExpression(t *testing.T) {
 	}
 }
 
+func TestCopyUpdateExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "array update",
+			prog: `
+               let arr = [1, 2, 3]
+               let arr' = arr^{
+                   arr'[0] = 10
+                   arr'[2] = 30
+               }
+               arr'`,
+			want: []any{int64(10), int64(2), int64(30)},
+		},
+		{
+			name: "struct update",
+			prog: `
+               struct point { x i64, y i64 }
+               let p = point{x: 0, y: 1}
+               let p' = p^{
+                   p'.x = 5 
+               }
+               p'`,
+			want: map[string]any{
+				"x": int64(5),
+				"y": int64(1),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got := e.Run(n)
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIArith(t *testing.T) {
 	input := "(5 - 9 + 5) * -10 / -5"
 	want := 2

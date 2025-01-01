@@ -154,6 +154,10 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
 				decl := n.Declerations[i+j].Assignee
 				e.vars.Set(decl.String(), res[i+j])
 			}
+		case *ast.CopyUpdateExpression:
+			decl := n.Declerations[i].Assignee
+			res := e.evalCopyUpdateExpression(decl.String(), val)
+			e.vars.Set(decl.String(), res)
 		default:
 			decl := n.Declerations[i].Assignee
 			switch exp := decl.(type) {
@@ -161,8 +165,8 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
 				e.evalAssignmentToArrayIndex(exp, val)
 			case *ast.SliceExpression:
 				e.evalAssignmentToArraySlice(exp, val)
-			// case *ast.DotExpression:
-			// e.evalAssignmentToStructField()
+			case *ast.DotExpression:
+				e.evalAssignmentToStructField(exp, val)
 			default:
 				res := e.Run(val)
 				e.vars.Set(decl.String(), res)
@@ -203,6 +207,26 @@ func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast
 	start := rng[0].(int64)
 	end := rng[1].(int64)
 	copy(arr.([]any)[start:end], res.([]any))
+}
+
+func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, val ast.Expression) {
+	res := e.Run(val)
+
+	strct := e.Run(exp.Left).(map[string]any)
+
+	// We know exp.Right must be an identifier or integer literal for struct fields
+	var field string
+	switch right := exp.Right.(type) {
+	case *ast.Identifier:
+		field = right.Value
+	case *ast.IntegerLiteral:
+		field = fmt.Sprintf("%d", right.Value)
+	default:
+		panic("compiler error: invalid struct field access")
+	}
+
+	strct[field] = res
+
 }
 
 // ----------------- //
@@ -314,6 +338,46 @@ func (e *Evaluator) evalUseExpression(n *ast.UseExpression) any {
 	e.Run(n.Block)
 	arr, _ = e.vars.Get(n.Ident.Value)
 	return arr
+}
+
+func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression) any {
+	// Get original value to copy
+	fmt.Println(n.Ident)
+	orig := e.Run(n.Ident)
+
+	// Create new scope for the block execution
+	e.vars.Scope()
+	defer e.vars.Unscope()
+
+	// Make a deep copy based on type
+	var cpy any
+	switch v := orig.(type) {
+	case []any:
+		// Copy array
+		newArr := make([]any, len(v))
+		copy(newArr, v)
+		cpy = newArr
+
+	case map[string]any:
+		// Copy struct (which is represented as a map)
+		newMap := make(map[string]any, len(v))
+		for k, val := range v {
+			newMap[k] = val
+		}
+		cpy = newMap
+
+	default:
+		e.addError(n, fmt.Errorf("copy-update only works on arrays and structs"))
+		return nil
+	}
+
+	e.vars.Set(newVar, cpy)
+
+	// Execute the update block
+	e.Run(n.Block)
+
+	// Return the modified copy
+	return cpy
 }
 
 func (e *Evaluator) evalDotExpression(n *ast.DotExpression) any {
