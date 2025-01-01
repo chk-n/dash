@@ -778,6 +778,12 @@ func (e *Evaluator) evalMake(args []ast.Expression) any {
 		defaultVal = ""
 	case *types.Bool:
 		defaultVal = false
+	case *types.Byte:
+		defaultVal = uint8(0)
+	case *types.Char:
+		defaultVal = uint32(0)
+	case *types.Struct, *types.Enum, *types.Union:
+		defaultVal = map[string]any{}
 	default:
 		defaultVal = nil
 	}
