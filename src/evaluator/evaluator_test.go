@@ -170,51 +170,51 @@ func TestIfElseExpression(t *testing.T) {
 	}
 }
 
-// func TestFunctionCallExpression(t *testing.T) {
-// 	tests := []struct {
-// 		name string
-// 		prog string
-// 		want []any
-// 	}{
-// 		{
-// 			name: "call closure",
-// 			prog: "let add = fn(a, b i64) i64 { return a + b } add(1,2)",
-// 			want: []any{int64(3)},
-// 		},
-// 		{
-// 			name: "call closure with variable captured",
-// 			prog: "let x = 1 let add = fn(a i64) i64 { return a + x } add(1)",
-// 			want: []any{int64(2)},
-// 		},
-// 		{
-// 			name: "pass function to closure",
-// 			prog: `let sub = fn(a, b i64) i64 { return a - b }
-// 				   let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
-// 				   do(1,2, sub)`,
-// 			want: []any{int64(2)},
-// 		},
-// 	}
+func TestFunctionClosures(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want []any
+	}{
+		{
+			name: "call closure",
+			prog: "let add = fn(a, b i64) i64 { return a + b } add(1,2)",
+			want: []any{int64(3)},
+		},
+		{
+			name: "call closure with variable captured",
+			prog: "let x = 1 let add = fn(a i64) i64 { return a + x } add(1)",
+			want: []any{int64(2)},
+		},
+		// {
+		// 	name: "pass function to closure",
+		// 	prog: `let sub = fn(a, b i64) i64 { return a - b }
+		// 		   let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
+		// 		   do(1,2, sub)`,
+		// 	want: []any{int64(2)},
+		// },
+	}
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			n := parseExpressions(tt.prog)
-// 			e := New()
-// 			got_ := e.Run(n)
-// 			got, ok := got_.([]any)
-// 			if !ok {
-// 				t.Error("got is not an array")
-// 			}
-// 			if len(got) != len(tt.want) {
-// 				t.Errorf("got: %s but want: %s", got, tt.want)
-// 			}
-// 			for i := range got {
-// 				if got[i] != tt.want[i] {
-// 					t.Errorf("got: %s but want: %s", got[i], tt.want[i])
-// 				}
-// 			}
-// 		})
-// 	}
-// }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got_ := e.Run(n)
+			got, ok := got_.([]any)
+			if !ok {
+				t.Error("got is not an array")
+			}
+			if len(got) != len(tt.want) {
+				t.Errorf("got: %s but want: %s", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got: %s but want: %s", got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
 
 func TestArrayOperations(t *testing.T) {
 	tests := []struct {
