@@ -308,9 +308,8 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
 func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement) any {
 	scrutinee := e.Run(n.Scrutinee)
 
-	// unwrap function
 	if _, ok := n.Scrutinee.(*ast.FunctionCallExpression); ok {
-		scrutinee = scrutinee.([]any)[0]
+		scrutinee = unwrapFunctionResult(scrutinee, 0)
 	}
 
 	// TODO: handle multiple predicates in one case
