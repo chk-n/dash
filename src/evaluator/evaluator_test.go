@@ -835,6 +835,228 @@ func TestMatchStatement(t *testing.T) {
 	}
 }
 
+func TestOptionalTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		prog      string
+		want      any
+		wantPanic bool
+	}{
+		{
+			name: "coalesce null",
+			prog: `
+			fn get_value() ?i64 { return null }
+			let x = get_value() ?? 42
+			x`,
+			want: int64(42),
+		},
+		{
+			name: "coalesce non-null",
+			prog: `
+			fn get_value() ?i64 { return 7 }
+			let x = get_value() ?? 42
+			x`,
+			want: int64(7),
+		},
+		{
+			name: "force unwrap non-null function call",
+			prog: `
+			fn get_value() ?i64 { return 42 }
+			let x = ?get_value()
+			x`,
+			want: int64(42),
+		},
+		{
+			name: "force unwrap in expression",
+			prog: `
+			fn get_value() ?i64 { return 7 }
+			let x = ?get_value() + 3
+			x`,
+			want: int64(10),
+		},
+		// NOTE: this panics for now but in future it will be error handled in Dash
+		{
+			name: "force unwrap null panics",
+			prog: `
+			fn get_value() ?i64 { return null }
+			?get_value()`,
+			wantPanic: true,
+		},
+		{
+			name: "null equality",
+			prog: `
+	       fn get_value() ?i64 { return null }
+	       let x = get_value() == 10
+	       x`,
+			want: false,
+		},
+
+		{
+			name: "null inequality",
+			prog: `
+	       fn get_value() ?i64 { return 42 }
+	       let x = get_value() != null
+	       x`,
+			want: true,
+		},
+
+		{
+			name: "null equality between optionals",
+			prog: `
+	       fn a() ?i64 { return null }
+	       fn b() ?i64 { return null }
+	       let x = a() == b()
+	       x`,
+			want: true,
+		},
+
+		{
+			name: "value equality between optionals",
+			prog: `
+	       fn a() ?i64 { return 42 }
+	       fn b() ?i64 { return 42 }
+	       let x = a() == b()
+	       x`,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantPanic {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Error("expected panic but got none")
+					}
+				}()
+			}
+
+			n := parseExpressions(tt.prog)
+			e := New()
+			got := e.Run(n)
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFirstClassFunctions(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want []any
+	}{
+		// {
+		// 	name: "accept function as argument",
+		// 	prog: `
+		//               fn apply(x i64, f fn(i64) i64) i64 {
+		//                   return f(x)
+		//               }
+		//               fn double(x i64) i64 { return x * 2 }
+		//               apply(5, double)
+		//           `,
+		// 	want: []any{int64(10)},
+		// },
+		// {
+		// 	name: "return function",
+		// 	prog: `
+		//               fn makeAdder(x i64) fn(i64) i64 {
+		//                   return fn(y i64) i64 { return x + y }
+		//               }
+		//               let add5 = makeAdder(5)
+		//               add5(3)
+		//           `,
+		// 	want: []any{int64(8)},
+		// },
+		// {
+		// 	name: "pass multiple functions",
+		// 	prog: `
+		//               fn compose(f fn(i64) i64, g fn(i64) i64) fn(i64) i64 {
+		//                   return fn(x i64) i64 { return f(g(x)) }
+		//               }
+		//               fn double(x i64) i64 { return x * 2 }
+		//               fn inc(x i64) i64 { return x + 1 }
+		//               let h = compose(double, inc)
+		//               h(3)
+		//           `,
+		// 	want: []any{int64(8)},
+		// },
+
+		// // Type definition tests
+		// {
+		// 	name: "function type definition",
+		// 	prog: `
+		//               type unaryFn fn(i64) i64
+		//               fn apply(x i64, f unaryFn) i64 {
+		//                   return f(x)
+		//               }
+		//               fn double(x i64) i64 { return x * 2 }
+		//               apply(5, double)
+		//           `,
+		// 	want: []any{int64(10)},
+		// },
+		// {
+		// 	name: "return defined function type",
+		// 	prog: `
+		//               type binaryFn fn(i64, i64) i64
+		//               fn getOp(op string) binaryFn {
+		//                   if op == "add" {
+		//                       return fn(x, y i64) i64 { return x + y }
+		//                   }
+		//                   return fn(x, y i64) i64 { return x * y }
+		//               }
+		//               let add = getOp("add")
+		//               add(2, 3)
+		//           `,
+		// 	want: []any{int64(5)},
+		// },
+
+		// // Type alias tests
+		//
+		//	{
+		//		name: "function type alias",
+		//		prog: `
+		//	              alias processor fn(i64) i64
+		//	              fn apply(x i64, f processor) i64 {
+		//	                  return f(x)
+		//	              }
+		//	              fn double(x i64) i64 { return x * 2 }
+		//	              apply(5, double)
+		//	          `,
+		//		want: []any{int64(10)},
+		//	},
+		//
+		//	{
+		//		name: "return aliased function type",
+		//		prog: `
+		//	              alias transformer fn(i64) i64
+		//	              fn makeTransformer(factor i64) transformer {
+		//	                  return fn(x i64) i64 { return x * factor }
+		//	              }
+		//	              let triple = makeTransformer(3)
+		//	              triple(4)
+		//	          `,
+		//		want: []any{int64(12)},
+		//	},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got_ := e.Run(n)
+			got, ok := got_.([]any)
+			if !ok {
+				t.Error("got is not an array")
+			}
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIArith(t *testing.T) {
 	input := "(5 - 9 + 5) * -10 / -5"
 	want := 2

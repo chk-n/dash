@@ -18,6 +18,11 @@ const (
 	NEXT
 )
 
+type Optional struct {
+	isValid bool
+	value   any
+}
+
 type Evaluator struct {
 	vars *internal.StackedSymTab[any]
 	fns  *internal.StackedSymTab[*ast.FunctionExpression]
@@ -97,6 +102,8 @@ func (e *Evaluator) Run(n ast.Node) any {
 		return n.Value
 	case *ast.FloatLiteral:
 		return n.Value
+	case *ast.NullLiteral:
+		return Optional{isValid: false}
 	case nil:
 		panic("eval failed as node was nil")
 	default:
@@ -481,9 +488,13 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression) any {
 		val, err = e.evalPrefixMinus(val)
 	case token.NOT:
 		val, err = e.evalPrefixNot(val)
-		// case token.AMPERSAND:
-		// case token.ASTERISK:
-		// case token.OPTIONAL:
+	// case token.AMPERSAND:
+	// case token.ASTERISK:
+	case token.OPTIONAL:
+		if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
+			val = unwrapFunctionResult(val, 0)
+		}
+		val = e.evalPrefixOptional(val)
 	}
 
 	if err != nil {
@@ -532,13 +543,33 @@ func (e *Evaluator) evalPrefixNot(v any) (any, error) {
 	}
 }
 
+func (e *Evaluator) evalPrefixOptional(v any) any {
+	if opt, ok := v.(Optional); ok {
+		if !opt.isValid {
+			// NOTE: here Dash error handling would kick in
+			panic("attempted to force unwrap null value")
+		}
+		return opt.value
+	}
+	if v == nil {
+		panic("this is a compiler error. please report")
+	}
+	return v
+}
+
 // ---------------- //
 // Infix expression //
 // ---------------- //
 
 func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression) any {
 	l := e.Run(n.Left)
+	if _, ok := n.Left.(*ast.FunctionCallExpression); ok {
+		l = unwrapFunctionResult(l, 0)
+	}
 	r := e.Run(n.Right)
+	if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
+		r = unwrapFunctionResult(r, 0)
+	}
 
 	var val any
 	var err error
@@ -570,9 +601,12 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression) any {
 		val, err = e.evalInfixLessEqual(l, r)
 	// Equality
 	case token.EQ:
-		val, err = e.evalInfixEqual(l, r)
+		val = e.evalInfixEqual(l, r)
 	case token.NEQ:
-		val, err = e.evalInfixNotEqual(l, r)
+		val = e.evalInfixNotEqual(l, r)
+	// Optional
+	case token.NULL_COALESCE:
+		val = e.evalInfixNullCoalesce(l, r)
 	// Special
 	case token.COLON:
 		val = []any{l, r}
@@ -743,40 +777,39 @@ func (e *Evaluator) evalInfixGreaterEqual(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixEqual(l, r any) (res any, err error) {
-	switch l := l.(type) {
-	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l == r_
-	case float64:
-		var r_ float64
-		r_, err = castTo[float64](r)
-		res = l == r_
-	case string:
-		var r_ string
-		r_, err = castTo[string](r)
-		res = l == r_
+func (e *Evaluator) evalInfixEqual(l, r any) any {
+	if l_, ok := l.(Optional); ok {
+		l = l_.value
 	}
-	return
+	if r_, ok := r.(Optional); ok {
+		r = r_.value
+	}
+	return l == r
 }
 
-func (e *Evaluator) evalInfixNotEqual(l, r any) (res any, err error) {
-	switch l := l.(type) {
-	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l != r_
-	case float64:
-		var r_ float64
-		r_, err = castTo[float64](r)
-		res = l != r_
-	case string:
-		var r_ string
-		r_, err = castTo[string](r)
-		res = l != r_
+func (e *Evaluator) evalInfixNotEqual(l, r any) any {
+	if l_, ok := l.(Optional); ok {
+		l = l_.value
 	}
-	return
+	if r_, ok := r.(Optional); ok {
+		r = r_.value
+	}
+	return l != r
+}
+
+func (e *Evaluator) evalInfixNullCoalesce(l, r any) any {
+	if opt, ok := l.(Optional); ok {
+		// NOTE: we can optimise by only computing r if not valid
+		if !opt.isValid {
+			return r
+		}
+		return opt.value
+	}
+	if l == nil {
+
+		panic("this is a compiler error. please report")
+	}
+	return l
 }
 
 // ------------------ //
@@ -957,6 +990,21 @@ func (e *Evaluator) addError(n ast.Node, err error) {
 // ------- //
 // Helpers //
 // ------- //
+
+func unwrapFunctionResult(res any, idx int) any {
+	returnValues, ok := res.([]any)
+	if !ok {
+		return res
+	}
+	if len(returnValues) == 0 {
+		return nil
+	}
+	if 0 < idx || idx > len(returnValues)-1 {
+		panic("this is a compiler error. please report")
+	}
+
+	return returnValues[idx]
+}
 
 func castTo[T any](v any) (T, error) {
 	val, ok := v.(T)
