@@ -897,8 +897,11 @@ func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 	}
 
 	// Print all values with spaces between them and newline at end
-	fmt.Println(strings.Join(values, " "))
-	return nil
+	n, err := fmt.Println(strings.Join(values, " "))
+	if err != nil {
+		panic("error when printing to console: " + strings.Join(values, " "))
+	}
+	return n
 }
 
 func (e *Evaluator) evalMake(args []ast.Expression) any {
