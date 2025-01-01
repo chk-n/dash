@@ -184,8 +184,7 @@ func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast
 
 	arr, ok := e.vars.Get(ident.Value)
 	if !ok {
-		e.addError(exp, fmt.Errorf("this is a compiler error. please report"))
-		return
+		panic("this is a compiler error. please report")
 	}
 	idx := e.Run(exp.Indices[0]).(int64)
 	arr.([]any)[idx] = res
@@ -200,8 +199,7 @@ func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast
 
 	arr, ok := e.vars.Get(ident.Value)
 	if !ok {
-		e.addError(exp, fmt.Errorf("this is a compiler error. please report"))
-		return
+		panic("this is a compiler error. please report")
 	}
 	rng := e.Run(exp.Indices[0]).([]any)
 	start := rng[0].(int64)
