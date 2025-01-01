@@ -21,6 +21,7 @@ type Node interface {
 	TokenLiteral() string
 	String() string
 }
+
 type Statement interface {
 	Node
 	statementNode()
@@ -951,7 +952,7 @@ func (e *InfixExpression) String() string {
 }
 
 type PostfixExpression struct {
-	Token token.Token // The postfix token, e.g. ! Operator string
+	Token token.Token // The postfix token, e.g. ++
 	Left  Expression
 	// Set by semsis
 	T types.TypeSpec
