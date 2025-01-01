@@ -89,7 +89,7 @@ func TestEvaluateInfix(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "string equality",
+			name: "string inequality",
 			prog: `"hel" != "lo"`,
 			want: true,
 		},
@@ -186,13 +186,13 @@ func TestFunctionClosures(t *testing.T) {
 			prog: "let x = 1 let add = fn(a i64) i64 { return a + x } add(1)",
 			want: []any{int64(2)},
 		},
-		// {
-		// 	name: "pass function to closure",
-		// 	prog: `let sub = fn(a, b i64) i64 { return a - b }
-		// 		   let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
-		// 		   do(1,2, sub)`,
-		// 	want: []any{int64(2)},
-		// },
+		//	{
+		//		name: "pass function to closure",
+		//		prog: `let sub = fn(a, b i64) i64 { return a - b }
+		//			   let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
+		//			   do(1,2, sub)`,
+		//		want: []any{int64(2)},
+		//	},
 	}
 
 	for _, tt := range tests {
@@ -245,16 +245,17 @@ func TestArrayOperations(t *testing.T) {
 			prog: "let arr = [[1, 2], [3, 4]] arr[1][0]",
 			want: int64(3),
 		},
-		// {
-		// 	name: "negative index",
-		// 	prog: "let arr = [1, 2, 3] arr[-1]",
-		// 	want: int64(3),
-		// },
-		// {
-		// 	name: "index out of bounds",
-		// 	prog: "let arr = [1, 2, 3] arr[5]",
-		// 	want: nil,
-		// },
+		//	{
+		//		name: "negative index",
+		//		prog: "let arr = [1, 2, 3] arr[-1]",
+		//		want: int64(3),
+		//	},
+		//
+		//	{
+		//		name: "index out of bounds",
+		//		prog: "let arr = [1, 2, 3] arr[5]",
+		//		want: nil,
+		//	},
 	}
 
 	for _, tt := range tests {
@@ -279,11 +280,11 @@ func TestStructLiteral(t *testing.T) {
 		{
 			name: "named struct initialization",
 			prog: `struct user {
-					name string
-					age i64
-				}
-				let p = user{name: "ada", age: 24}
-				p`,
+				name string
+				age i64
+			}
+			let p = user{name: "ada", age: 24}
+			p`,
 			want: map[string]any{
 				"name": "ada",
 				"age":  int64(24),
@@ -292,8 +293,8 @@ func TestStructLiteral(t *testing.T) {
 		{
 			name: "unnamed struct initialization",
 			prog: `struct point { i64, i64 }
-				let p = point{1, 2} 
-				p`,
+			let p = point{1, 2} 
+			p`,
 			want: map[string]any{
 				"0": int64(1),
 				"1": int64(2),
@@ -302,13 +303,13 @@ func TestStructLiteral(t *testing.T) {
 		{
 			name: "nested struct",
 			prog: `struct person {
-					name string
-					addr address
-				}
-				struct address {
-					city string
-				}
-				let p = person{name: "ada", addr: address{city: "zurich"}} p`,
+				name string
+				addr address
+			}
+			struct address {
+				city string
+			}
+			let p = person{name: "ada", addr: address{city: "zurich"}} p`,
 			want: map[string]any{
 				"name": "ada",
 				"addr": map[string]any{
@@ -319,11 +320,11 @@ func TestStructLiteral(t *testing.T) {
 		{
 			name: "field access",
 			prog: `struct user {
-					name string
-					age i64
-				}
-				let p = user{name: "ada", age: 24} 
-				p.name`,
+				name string
+				age i64
+			}
+			let p = user{name: "ada", age: 24} 
+			p.name`,
 			want: "ada",
 		},
 		{
@@ -331,19 +332,19 @@ func TestStructLiteral(t *testing.T) {
 			prog: "struct point {i64,i64} let p = point{1, 2} p.0",
 			want: int64(1),
 		},
-		// {
-		// 	name: "nested struct",
-		// 	prog: `struct person {
-		// 			name string
-		// 			addr address
-		// 		}
-		// 		struct address {
-		// 			city string
-		// 		}
-		// 		let p = person{name: "ada", addr: address{city: "zurich"}}
-		// 		p.name.city`,
-		// 	want: "zurich",
-		// },
+		//	{
+		//		name: "nested struct",
+		//		prog: `struct person {
+		//				name string
+		//				addr address
+		//			}
+		//			struct address {
+		//				city string
+		//			}
+		//			let p = person{name: "ada", addr: address{city: "zurich"}}
+		//			p.name.city`,
+		//		want: "zurich",
+		//	},
 	}
 
 	for _, tt := range tests {
@@ -368,17 +369,17 @@ func TestEnumDotExpression(t *testing.T) {
 		{
 			name: "field access",
 			prog: `
-                enum status { on off }
-                let x = status.off
-                x`,
+			enum status { on off }
+			let x = status.off
+			x`,
 			want: int64(1),
 		},
 		{
 			name: "enum equality",
 			prog: `
-                enum status { on off }
-                let x = status.on == status.off
-                x`,
+			enum status { on off }
+			let x = status.on == status.off
+			x`,
 			want: false,
 		},
 	}
@@ -405,58 +406,59 @@ func TestForStatement(t *testing.T) {
 		{
 			name: "classic for loop",
 			prog: `
-		        var sum = 0
-		        for i = 0; i < 5; i++ {
-		        	sum = sum + 1
-		        }
-		        sum`,
+			var sum = 0
+			for i = 0; i < 5; i++ {
+				sum = sum + 1
+			}
+			sum`,
 			want: int64(5),
 		},
 		{
 			name: "boolean condition loop",
 			prog: `
-		             var x = 0
-		             for x < 3 {
-		                 x = x + 1
-		             }
-		             x`,
+			var x = 0
+			for x < 3 {
+				x = x + 1
+			}
+			x`,
 			want: int64(3),
 		},
 		{
 			name: "infinite loop with break",
 			prog: `
-		             var x = 0
-		             for {
-		                 x = x + 1
-		                 if x == 5 {
-		                     break
-		                 }
-		             }
-		             x`,
+			var x = 0
+			for {
+				x = x + 1
+				if x == 5 {
+			    	break
+				}
+			}
+			x`,
 			want: int64(5),
 		},
-		// {
-		// 	name: "for range over array",
-		// 	prog: `
-		//              var sum = 0
-		//              let arr = [1,2,3]
-		//              for i in arr {
-		//                  sum = sum + arr[i]
-		//              }
-		//              sum`,
-		// 	want: int64(6),
-		// },
-		// {
-		// 	name: "for range with element",
-		// 	prog: `
-		//              var sum = 0
-		//              let arr = [1,2,3]
-		//              for i, e in arr {
-		//                  sum = sum + e
-		//              }
-		//              sum`,
-		// 	want: int64(6),
-		// },
+		//	{
+		//		name: "for range over array",
+		//		prog: `
+		//	             var sum = 0
+		//	             let arr = [1,2,3]
+		//	             for i in arr {
+		//	                 sum = sum + arr[i]
+		//	             }
+		//	             sum`,
+		//		want: int64(6),
+		//	},
+		//
+		//	{
+		//		name: "for range with element",
+		//		prog: `
+		//	             var sum = 0
+		//	             let arr = [1,2,3]
+		//	             for i, e in arr {
+		//	                 sum = sum + e
+		//	             }
+		//	             sum`,
+		//		want: int64(6),
+		//	},
 	}
 
 	for _, tt := range tests {
@@ -484,54 +486,50 @@ func TestLenFunction(t *testing.T) {
 			want: int64(3),
 		},
 		// BUG: panic: type is nil in semsis
-		// {
-		// 	name: "empty array",
-		// 	prog: "len([])",
-		// 	want: int64(0),
-		// },
+		//
+		//	{
+		//		name: "empty array",
+		//		prog: "len([])",
+		//		want: int64(0),
+		//	},
 		{
 			name: "variable array",
 			prog: `
-                let arr = [1, 2, 3, 4]
-                len(arr)
-            `,
+			let arr = [1, 2, 3, 4]
+			len(arr)`,
 			want: int64(4),
 		},
 		{
 			name: "nested arrays",
 			prog: `
-                let arr = [[1, 2], [3, 4], [5, 6]]
-                len(arr)
-            `,
+			let arr = [[1, 2], [3, 4], [5, 6]]
+			len(arr)`,
 			want: int64(3),
 		},
 		{
 			name: "len in expression",
 			prog: `
-                let arr = [1, 2, 3]
-                len(arr) + 1
-            `,
+			let arr = [1, 2, 3]
+			len(arr) + 1`,
 			want: int64(4),
 		},
 		{
 			name: "len with function return",
 			prog: `
-                fn get_arr() []i64 { 
-                    return [1, 2, 3, 4, 5]
-                }
-                len(get_arr())
-            `,
+			fn get_arr() []i64 { 
+			    return [1, 2, 3, 4, 5]
+			}
+			len(get_arr())`,
 			want: int64(5),
 		},
 		{
 			name: "len with array argument",
 			prog: `
-                fn check_len(arr []i64) i64 {
-                    return len(arr)
-                }
-                let l = check_len([1, 2, 3])
-                l
-            `,
+			fn check_len(arr []i64) i64 {
+			    return len(arr)
+			}
+			let l = check_len([1, 2, 3])
+			l`,
 			want: int64(3),
 		},
 	}
@@ -568,18 +566,18 @@ func TestPrintln(t *testing.T) {
 		{
 			name: "print struct",
 			prog: `
-                struct point { x i64, y i64 }
-                let p = point{1, 2}
-                println(p)
-            `,
+			struct point { x i64, y i64 }
+			let p = point{1, 2}
+			println(p)
+			`,
 			wantText: "{0: 1, 1: 2}\n",
 		},
 		{
 			name: "print variable",
 			prog: `
-                let x = 42
-                println(x)
-            `,
+			let x = 42
+			println(x)
+			`,
 			wantText: "42\n",
 		},
 		{
@@ -590,9 +588,9 @@ func TestPrintln(t *testing.T) {
 		{
 			name: "print function result",
 			prog: `
-                fn add(a, b i64) i64 { return a + b }
-                println(add(2, 3))
-            `,
+			fn add(a, b i64) i64 { return a + b }
+			println(add(2, 3))
+			`,
 			wantText: "5\n",
 		},
 	}
@@ -678,22 +676,22 @@ func TestUseExpression(t *testing.T) {
 		{
 			name: "modify array using index expression",
 			prog: `
-              let buf = make([]i64, 3)
-              let buf' = use buf {
-                  buf[0] = 1
-                  buf[1] = 2
-              }
-              buf'`,
+			let buf = make([]i64, 3)
+			let buf' = use buf {
+			  buf[0] = 1
+			  buf[1] = 2
+			}
+			buf'`,
 			want: []any{int64(1), int64(2), int64(0)},
 		},
 		{
 			name: "modify array using slice expression",
 			prog: `
-	            let buf = make([]i64, 3)
-	            let buf' = use buf {
-	                buf[0:3] = [3,2,1]
-	            }
-	            buf'`,
+			let buf = make([]i64, 3)
+			let buf' = use buf {
+			    buf[0:3] = [3,2,1]
+			}
+			buf'`,
 			want: []any{int64(3), int64(2), int64(1)},
 		},
 	}
@@ -720,23 +718,23 @@ func TestCopyUpdateExpression(t *testing.T) {
 		{
 			name: "array update",
 			prog: `
-               let arr = [1, 2, 3]
-               let arr' = arr^{
-                   arr'[0] = 10
-                   arr'[2] = 30
-               }
-               arr'`,
+			let arr = [1, 2, 3]
+			let arr' = arr^{
+			   arr'[0] = 10
+			   arr'[2] = 30
+			}
+			arr'`,
 			want: []any{int64(10), int64(2), int64(30)},
 		},
 		{
 			name: "struct update",
 			prog: `
-               struct point { x i64, y i64 }
-               let p = point{x: 0, y: 1}
-               let p' = p^{
-                   p'.x = 5 
-               }
-               p'`,
+			struct point { x i64, y i64 }
+			let p = point{x: 0, y: 1}
+			let p' = p^{
+			   p'.x = 5 
+			}
+			p'`,
 			want: map[string]any{
 				"x": int64(5),
 				"y": int64(1),
@@ -766,59 +764,59 @@ func TestMatchStatement(t *testing.T) {
 		{
 			name: "single value match",
 			prog: `
-               let x = 1
-               let res = match x {
-               case 1: 10
-               case _: 0
-               }
-               res`,
+			let x = 1
+			let res = match x {
+			case 1: 10
+			case _: 0
+			}
+			res`,
 			want: int64(10),
 		},
 		{
 			name: "default case",
 			prog: `
-               let x = 5.2
-               let res = match x {
-               case 5.0: 10
-               case _: 0
-               }
-               res`,
+			let x = 5.2
+			let res = match x {
+			case 5.0: 10
+			case _: 0
+			}
+			res`,
 			want: int64(0),
 		},
 		{
 			name: "expression as scrutinee",
 			prog: `
-               let res = match 1 + 1 {
-               case 2: 10
-               case _: 0
-               }
-               res`,
+			let res = match 1 + 1 {
+			case 2: 10
+			case _: 0
+			}
+			res`,
 			want: int64(10),
 		},
 		{
 			name: "match enum field",
 			prog: `
-               enum status {
-                   online
-                   offline
-               }
-               let s = status.offline
-               match s {
-               case status.online: 1
-               case status.offline: 2
-               }`,
+			enum status {
+			   online
+			   offline
+			}
+			let s = status.offline
+			match s {
+			case status.online: 1
+			case status.offline: 2
+			}`,
 			want: int64(2),
 		},
 		{
 			name: "match enum from function",
 			prog: `
-               enum status { ok err }
-               fn get_status() status { return status.err }
-               let res = match get_status() {
-               case status.ok: 0
-               case status.err: 1
-               }
-               res`,
+			enum status { ok err }
+			fn get_status() status { return status.err }
+			let res = match get_status() {
+			case status.ok: 0
+			case status.err: 1
+			}
+			res`,
 			want: int64(1),
 		},
 	}
