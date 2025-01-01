@@ -632,27 +632,60 @@ func TestMake(t *testing.T) {
 		{
 			name: "make integer array",
 			prog: "make([]i64, 3)",
-			want: []any{int64(0), int64(0), int64(0)},
+			want: []any{[]any{int64(0), int64(0), int64(0)}},
 		},
 		{
 			name: "make float array",
 			prog: "make([]f64, 2)",
-			want: []any{float64(0), float64(0)},
+			want: []any{[]any{float64(0), float64(0)}},
 		},
 		{
 			name: "make string array",
 			prog: `make([]string, 2)`,
-			want: []any{"", ""},
+			want: []any{[]any{"", ""}},
 		},
 		{
 			name: "make bool array",
 			prog: "make([]bool, 2)",
-			want: []any{false, false},
+			want: []any{[]any{false, false}},
 		},
 		{
 			name: "make empty array",
 			prog: "make([]i64, 0)",
-			want: []any{},
+			want: []any{[]any{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			e := New()
+			got := e.Run(n)
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUseExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "modify array in use block",
+			prog: `
+                let buf = make([]i64, 3)
+                let buf' = use buf {
+                    buf[0] = 1
+                    buf[1] = 2
+                    buf[2] = 3
+                }
+                buf'`,
+			want: []any{int64(1), int64(2), int64(3)},
 		},
 	}
 

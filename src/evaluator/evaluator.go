@@ -59,6 +59,8 @@ func (e *Evaluator) Run(n ast.Node) any {
 		return e.evalKeywordStatement(n)
 	case *ast.ReturnStatement:
 		return e.evalReturnStatement(n)
+	case *ast.UseExpression:
+		return e.evalUseExpression(n)
 	case *ast.DotExpression:
 		return e.evalDotExpression(n)
 	case *ast.IndexExpression:
@@ -153,11 +155,36 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
 				e.vars.Set(decl.String(), res[i+j])
 			}
 		default:
-			res := e.Run(val)
 			decl := n.Declerations[i].Assignee
-			e.vars.Set(decl.String(), res)
+			switch exp := decl.(type) {
+			case *ast.IndexExpression:
+				e.evalAssignmentToArrayIndex(exp, val)
+			// case *ast.SliceExpression:
+			// e.evalAssignmentToArraySlice()
+			// case *ast.DotExpression:
+			// e.evalAssignmentToStructField()
+			default:
+				res := e.Run(val)
+				e.vars.Set(decl.String(), res)
+			}
 		}
 	}
+}
+
+func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast.Expression) {
+	res := e.Run(val)
+	// we know that LHS has to be an identifier as
+	// assigning to index of array is only possible
+	// within an use expression
+	ident := exp.Left.(*ast.Identifier)
+
+	arr, ok := e.vars.Get(ident.Value)
+	if !ok {
+		e.addError(exp, fmt.Errorf("this is a compiler error. please report"))
+		return
+	}
+	idx := e.Run(exp.Indices[0]).(int64)
+	arr.([]any)[idx] = res
 }
 
 // ----------------- //
@@ -256,6 +283,20 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement) any {
 		vals[i] = e.Run(n.Values[i])
 	}
 	return vals
+}
+
+func (e *Evaluator) evalUseExpression(n *ast.UseExpression) any {
+	arr := e.Run(n.Ident)
+
+	e.vars.Scope()
+	defer e.vars.Unscope()
+
+	e.vars.Set(n.Ident.Value, arr)
+
+	e.Run(n.Block)
+	arr, _ = e.vars.Get(n.Ident.Value)
+	fmt.Println(arr)
+	return arr
 }
 
 func (e *Evaluator) evalDotExpression(n *ast.DotExpression) any {
@@ -745,7 +786,7 @@ func (e *Evaluator) evalMake(args []ast.Expression) any {
 		arr[i] = defaultVal
 	}
 
-	return arr
+	return []any{arr}
 }
 
 // Performs
