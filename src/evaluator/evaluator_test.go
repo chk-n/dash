@@ -428,6 +428,80 @@ func TestForStatement(t *testing.T) {
 			x`,
 			want: int64(5),
 		},
+		{
+			name: "next in classic for loop",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 5; i++ {
+		        if i == 2 {
+		            next
+		        }
+		        sum = sum + 1
+		    }
+		    sum`,
+			want: int64(4),
+		},
+		{
+			name: "nested loops with break",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 3; i++ {
+		        for j = 0; j < 3; j++ {
+		            if j == 2 {
+		                break
+		            }
+		            sum = sum + 1
+		        }
+		    }
+		    sum`,
+			want: int64(6),
+		},
+		{
+			name: "nested loops with next",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 3; i++ {
+		        for j = 0; j < 3; j++ {
+		            if j == 1 {
+		                next
+		            }
+		            sum = sum + 1
+		        }
+		    }
+		    sum`,
+			want: int64(6),
+		},
+		{
+			name: "next inside conditional",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 5; i++ {
+		        if i > 0 {
+		            if i % 2 == 0 {
+		                next
+		            }
+		        }
+		        sum = sum + 1
+		    }
+		    sum`,
+			want: int64(3),
+		},
+		{
+			name: "break inside conditional",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 10; i++ {
+		        if i > 0 {
+		            if i == 5 {
+		                break
+		            }
+		        }
+		        sum = sum + 1
+		    }
+		    sum`,
+			want: int64(5),
+		},
+		// NOTE: for in not supported yet by frontend
 		//	{
 		//		name: "for range over array",
 		//		prog: `
@@ -619,27 +693,27 @@ func TestMake(t *testing.T) {
 		{
 			name: "make integer array",
 			prog: "make([]i64, 3)",
-			want: []any{[]any{int64(0), int64(0), int64(0)}},
+			want: &Return{[]any{[]any{int64(0), int64(0), int64(0)}}},
 		},
 		{
 			name: "make float array",
 			prog: "make([]f64, 2)",
-			want: []any{[]any{float64(0), float64(0)}},
+			want: &Return{[]any{[]any{float64(0), float64(0)}}},
 		},
 		{
 			name: "make string array",
 			prog: `make([]string, 2)`,
-			want: []any{[]any{"", ""}},
+			want: &Return{[]any{[]any{"", ""}}},
 		},
 		{
 			name: "make bool array",
 			prog: "make([]bool, 2)",
-			want: []any{[]any{false, false}},
+			want: &Return{[]any{[]any{false, false}}},
 		},
 		{
 			name: "make empty array",
 			prog: "make([]i64, 0)",
-			want: []any{[]any{}},
+			want: &Return{[]any{[]any{}}},
 		},
 	}
 
@@ -937,7 +1011,7 @@ func TestFirstClassFunctions(t *testing.T) {
 			}
 			fn double(x i64) i64 { return x * 2 }
 			apply(5, double)`,
-			want: []any{int64(10)},
+			want: &Return{[]any{int64(10)}},
 		},
 		{
 			name: "return function",
@@ -947,7 +1021,7 @@ func TestFirstClassFunctions(t *testing.T) {
 			}
 			let add5 = makeAdder(5)
 			add5(3)`,
-			want: []any{int64(8)},
+			want: &Return{[]any{int64(8)}},
 		},
 		// TODO: requires type definitions and type alias
 		// {
@@ -989,21 +1063,170 @@ func TestFirstClassFunctions(t *testing.T) {
 	}
 }
 
-func TestIArith(t *testing.T) {
-	input := "(5 - 9 + 5) * -10 / -5"
-	want := 2
-
-	exp := parseExpression(input)
-
-	eval := New()
-
-	got, ok := eval.IArith(exp)
-	if !ok {
-		t.Errorf("eval.IArith return 'not ok' status")
+func TestReturnInLoopConditional(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "return in loop conditional",
+			prog: `
+            fn find_number(target i64) i64 {
+                for i = 0; i < 10; i++ {
+                    if i == target {
+                        return i
+                    }
+                }
+                return -1
+            }
+            find_number(5)`,
+			want: &Return{[]any{int64(5)}},
+		},
+		{
+			name: "early return in nested conditionals",
+			prog: `
+            fn find_in_range(start, end i64) i64 {
+                for i = start; i < end; i++ {
+                    if i > 0 {
+                        if i % 3 == 0 {
+                            return i
+                        }
+                    }
+                }
+                return -1
+            }
+            find_in_range(1, 10)`,
+			want: &Return{[]any{int64(3)}},
+		},
+		{
+			name: "no match returns default",
+			prog: `
+            fn find_number(target i64) i64 {
+            	var i = 0
+                for i < 5 {
+                    if i == target {
+                        return i
+                    }
+                    i = i + 1
+                }
+                return -1
+            }
+            find_number(10)`,
+			want: &Return{[]any{int64(-1)}},
+		},
 	}
 
-	if want != got {
-		t.Errorf("want %d but got %d", want, got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			got := Run(n, NewStack(nil))
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVariableScoping(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "function scope isolation",
+			prog: `
+			let x = 5
+			fn add(x i64) i64 { return x + 1 }
+			let y = add(10)
+			x`,
+			want: int64(5),
+		},
+		{
+			name: "if block scope",
+			prog: `
+			let x = 5
+			if true {
+				let x = 10
+			}
+			x`,
+			want: int64(5),
+		},
+		{
+			name: "closure variable capture",
+			prog: `
+			let x = 1
+			fn make_adder() fn(i64) i64 {
+				let y = 2
+				return fn(z i64) i64 { return x + y + z }
+			}
+			let add = make_adder()
+			add(3)`,
+			want: &Return{[]any{int64(6)}},
+		},
+		{
+			name: "variable shadowing in nested functions",
+			prog: `
+			let x = 1
+			fn outer() i64 {
+				let x = 2
+				fn inner() i64 {
+					let x = 3
+					return x
+				}
+				return inner()
+			}
+			outer()`,
+			want: &Return{[]any{int64(3)}},
+		},
+		{
+			name: "match expression scope",
+			prog: `
+			let x = 1
+			let y = match x {
+				case 1: 
+					let x = 10
+					x
+				case _: x
+			}
+			x`,
+			want: int64(1),
+		},
+		{
+			name: "use expression scope",
+			prog: `
+			let arr = [1, 2, 3]
+			let x = 5
+			let arr' = use arr {
+				let x = 10
+				arr[0] = x
+			}
+			x`,
+			want: int64(5),
+		},
+		// NOTE: blocks not supported yet
+		// {
+		// 	name: "nested block scope",
+		// 	prog: `
+		// 		let x = 1
+		// 		{
+		// 			let x = 2
+		// 			let y = x + 1
+		// 		}
+		// 		x`,
+		// 	want: int64(1),
+		// },
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			got := Run(n, NewStack(nil))
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1057,6 +1280,12 @@ func deepEqual(a, b any) bool {
 			}
 		}
 		return true
+	case *Return:
+		b, ok := b.(*Return)
+		if !ok {
+			return false
+		}
+		return deepEqual(a.vals, b.vals)
 	default:
 		return a == b
 	}

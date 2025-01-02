@@ -17,6 +17,10 @@ const (
 	NEXT
 )
 
+type Return struct {
+	vals []any
+}
+
 type Optional struct {
 	isValid bool
 	value   any
@@ -164,10 +168,10 @@ func evalAssignmentStatement(n *ast.AssignmentStatement, stk *Stack) {
 	for i, val := range n.Values {
 		switch val := val.(type) {
 		case *ast.FunctionCallExpression:
-			res := Run(val, stk).([]any)
+			res := Run(val, stk).(*Return)
 			for j := range val.ReturnTypes {
 				decl := n.Declerations[i+j].Assignee
-				stk.Set(decl.String(), res[i+j])
+				stk.Set(decl.String(), res.vals[i+j])
 			}
 		case *ast.CopyUpdateExpression:
 			decl := n.Declerations[i].Assignee
@@ -266,7 +270,9 @@ func evalForStatement(n *ast.ForStatement, stk *Stack) any {
 				break
 			}
 			exp := Run(n.Block, stk)
-			if exp == BREAK {
+			if _, ok := exp.(*Return); ok {
+				return exp
+			} else if exp == BREAK {
 				break
 			} else if exp == NEXT {
 				Run(n.Change, stk)
@@ -280,12 +286,19 @@ func evalForStatement(n *ast.ForStatement, stk *Stack) any {
 	// conditional loop
 	if n.Condition != nil && n.Change == nil {
 		for {
-			cond := e.Run(n.Condition)
+			cond := Run(n.Condition, stk)
 			if !cond.(bool) {
 				break
 			}
 
-			e.Run(n.Block)
+			exp := Run(n.Block, stk)
+			if _, ok := exp.(*Return); ok {
+				return exp
+			} else if exp == BREAK {
+				break
+			} else if exp == NEXT {
+				continue
+			}
 		}
 		return nil
 	}
@@ -293,9 +306,13 @@ func evalForStatement(n *ast.ForStatement, stk *Stack) any {
 	// infinite loop
 	if n.Condition == nil {
 		for {
-			exp := e.Run(n.Block)
-			if exp == BREAK {
+			exp := Run(n.Block, stk)
+			if _, ok := exp.(*Return); ok {
+				return exp
+			} else if exp == BREAK {
 				break
+			} else if exp == NEXT {
+				continue
 			}
 		}
 		return nil
@@ -342,6 +359,11 @@ func evalBlockStatement(n *ast.BlockStatement, stk *Stack) any {
 	var exp any
 	for _, stmt := range n.Statements {
 		exp = Run(stmt, stk)
+		if _, ok := exp.(*Return); ok {
+			return exp
+		} else if exp == BREAK || exp == NEXT {
+			return exp
+		}
 	}
 	return exp
 }
@@ -375,7 +397,7 @@ func evalReturnStatement(n *ast.ReturnStatement, stk *Stack) any {
 			vals[i] = res
 		}
 	}
-	return vals
+	return &Return{vals: vals}
 }
 
 func evalUseExpression(n *ast.UseExpression, stk *Stack) any {
@@ -866,7 +888,7 @@ func evalLen(args []ast.Expression, stk *Stack) any {
 	var val any
 	switch args[0].(type) {
 	case *ast.FunctionCallExpression:
-		val = Run(args[0], stk).([]any)[0]
+		val = unwrapFunctionResult(Run(args[0], stk), 0)
 	default:
 		val = Run(args[0], stk)
 	}
@@ -886,7 +908,7 @@ func evalPrintln(args []ast.Expression, stk *Stack) any {
 	for _, arg := range args {
 		switch args[0].(type) {
 		case *ast.FunctionCallExpression:
-			rets := Run(arg, stk).([]any)
+			rets := Run(arg, stk).(*Return).vals
 			for _, ret := range rets {
 				values = append(values, valueToString(ret))
 			}
@@ -940,7 +962,7 @@ func evalMake(args []ast.Expression, stk *Stack) any {
 		arr[i] = defaultVal
 	}
 
-	return []any{arr}
+	return &Return{vals: []any{arr}}
 }
 
 // ------- //
@@ -953,18 +975,18 @@ func addError(n ast.Node, err error) {
 }
 
 func unwrapFunctionResult(res any, idx int) any {
-	returnValues, ok := res.([]any)
+	ret, ok := res.(*Return)
 	if !ok {
 		return res
 	}
-	if len(returnValues) == 0 {
+	if len(ret.vals) == 0 {
 		return nil
 	}
-	if 0 < idx || idx > len(returnValues)-1 {
+	if 0 < idx || idx > len(ret.vals)-1 {
 		panic("this is a compiler error. please report")
 	}
 
-	return returnValues[idx]
+	return ret.vals[idx]
 }
 
 func castTo[T any](v any) (T, error) {
