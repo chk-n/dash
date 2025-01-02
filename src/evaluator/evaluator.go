@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"dash-lang.io/src/ast"
-	"dash-lang.io/src/internal"
 	"dash-lang.io/src/token"
 	"dash-lang.io/src/types"
 )
@@ -24,85 +23,85 @@ type Optional struct {
 }
 
 type Function struct {
+	stk       *Stack
 	arguments []*ast.ParameterStatement
 	body      *ast.BlockStatement
 }
 
-type Evaluator struct {
-	vars *internal.StackedSymTab[any]
-}
-
-func New() *Evaluator {
-	return &Evaluator{
-		vars: internal.NewStackedSymbolTable[any](),
-	}
-}
-
-func (e *Evaluator) Run(n ast.Node) any {
+func Run(n ast.Node, stk *Stack) any {
 	switch n := n.(type) {
 	case *ast.Library:
 	case *ast.Evaluator:
 		var last any
 		for _, n := range n.Enums {
-			e.initialiseEnumStatement(n)
+			initialiseEnumStatement(n, stk)
 		}
 		for _, n := range n.Nodes {
-			last = e.Run(n)
+			last = Run(n, stk)
 		}
 		return last
 	case *ast.FunctionExpression:
 		if n.Name.Value == "main" {
-			e.evalMainFunction(n)
+			evalMainFunction(n, stk)
 		} else {
 			fn := &Function{
 				arguments: n.Arguments,
 				body:      n.Body,
+				stk:       stk,
 			}
-			e.vars.Set(n.Name.Value, fn)
+			stk.Set(n.Name.Value, fn)
 			return fn
 		}
 	case *ast.FunctionCallExpression:
-		return e.evalFunctionCall(n)
+		// check if it's a built-in function
+		if n.TokenLiteral() == "len" {
+			return evalLen(n.Arguments, stk)
+		} else if n.TokenLiteral() == "println" {
+			return evalPrintln(n.Arguments, stk)
+		} else if n.TokenLiteral() == "make" {
+			return evalMake(n.Arguments, stk)
+		}
+		return evalFunctionCall(n, stk)
 	case *ast.AssignmentStatement:
-		e.evalAssignmentStatement(n)
+		evalAssignmentStatement(n, stk)
 	case *ast.BlockStatement:
-		return e.evalBlockStatement(n)
+		return evalBlockStatement(n, stk)
 	case *ast.IfElseExpression:
-		return e.evalIfElseExpression(n)
+		return evalIfElseExpression(n, stk)
 	case *ast.ForStatement:
-		return e.evalForStatement(n)
+		return evalForStatement(n, stk)
 	case *ast.MatchExpressionStatement:
-		return e.evalMatchExpressionStatement(n)
+		return evalMatchExpressionStatement(n, stk)
 	case *ast.KeywordStatement:
-		return e.evalKeywordStatement(n)
+		return evalKeywordStatement(n)
 	case *ast.ReturnStatement:
-		return e.evalReturnStatement(n)
+		return evalReturnStatement(n, stk)
 	case *ast.UseExpression:
-		return e.evalUseExpression(n)
+		return evalUseExpression(n, stk)
 	case *ast.DotExpression:
-		return e.evalDotExpression(n)
+		return evalDotExpression(n, stk)
 	case *ast.IndexExpression:
-		return e.evalIndexExpression(n)
+		return evalIndexExpression(n, stk)
 	case *ast.PrefixExpression:
-		return e.evalPrefixExpression(n)
+		return evalPrefixExpression(n, stk)
 	case *ast.InfixExpression:
-		return e.evalInfixExpression(n)
+		return evalInfixExpression(n, stk)
 	case *ast.PostfixExpression:
-		e.evalPostfixExpression(n)
+		evalPostfixExpression(n, stk)
 	case *ast.Identifier:
-		val, ok := e.vars.Get(n.Value)
+		val, ok := stk.Get(n.Value)
 		if !ok {
-			// this is a serious issue
+			fmt.Println(n, "not found")
 			panic("this is a compiler bug. please report")
 		}
 		return val
 
 	case *ast.StructLiteral:
-		return e.evalStructLiteral(n)
+		return evalStructLiteral(n, stk)
 	case *ast.ArrayLiteral:
 		vals := make([]any, len(n.Values))
 		for i, val := range n.Values {
-			vals[i] = e.Run(val)
+			vals[i] = Run(val, stk)
 		}
 		return vals
 	case *ast.StringLiteral:
@@ -118,124 +117,115 @@ func (e *Evaluator) Run(n ast.Node) any {
 	case nil:
 		panic("eval failed as node was nil")
 	default:
-		e.addError(n, fmt.Errorf("unknown node type %T", n))
+		addError(n, fmt.Errorf("unknown node type %T", n))
 	}
 	return nil
 }
 
-func (e *Evaluator) initialiseEnumStatement(n *ast.EnumStatement) {
+func initialiseEnumStatement(n *ast.EnumStatement, stk *Stack) {
 	fields := make(map[string]any)
 	for i, field := range n.Fields {
 		fields[field.Value] = int64(i)
 	}
-	e.vars.Set(n.Name.Value, fields)
+	stk.Set(n.Name.Value, fields)
 }
 
-func (e *Evaluator) evalMainFunction(n *ast.FunctionExpression) {
-	e.Run(n.Body)
+func evalMainFunction(n *ast.FunctionExpression, stk *Stack) {
+	Run(n.Body, stk)
 }
 
 // returns list of function call results
-func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression) any {
-	// check if it's a built-in function
-	if n.TokenLiteral() == "len" {
-		return e.evalLen(n.Arguments)
-	} else if n.TokenLiteral() == "println" {
-		return e.evalPrintln(n.Arguments)
-	} else if n.TokenLiteral() == "make" {
-		return e.evalMake(n.Arguments)
-	}
-
+func evalFunctionCall(n *ast.FunctionCallExpression, stk *Stack) any {
 	var fn *Function
 	if n.Func == nil {
-		fn_, _ := e.vars.Get(n.TokenLiteral())
+		fn_, _ := stk.Get(n.TokenLiteral())
 		fn = fn_.(*Function)
 	} else {
-		fn = e.Run(n.Func).(*Function)
+		fn = Run(n.Func, stk).(*Function)
 	}
+
+	newStk := NewStack(fn.stk)
 
 	// evaluate arguments and set values in fresh symbol table
 	for i, arg := range n.Arguments {
 		fnArgName := fn.arguments[i].Name.Value
-		e.vars.Set(fnArgName, e.Run(arg))
+		newStk.Set(fnArgName, Run(arg, stk))
 	}
-	return e.Run(fn.body)
+	res := Run(fn.body, newStk)
+
+	return res
 }
 
-// -------------------- //
-// Assignment Statement //
-// -------------------- //
-
 // always returns nil
-func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement) {
+func evalAssignmentStatement(n *ast.AssignmentStatement, stk *Stack) {
 	// TODO: iterate over if function reached we need to handle that
 	// TODO: data can be assigned to identifiers, struct fields, array indices, slices
-	// e.g. if in use expression
+	// g. if in use expression
 	for i, val := range n.Values {
 		switch val := val.(type) {
 		case *ast.FunctionCallExpression:
-			res := e.Run(val).([]any)
+			res := Run(val, stk).([]any)
 			for j := range val.ReturnTypes {
 				decl := n.Declerations[i+j].Assignee
-				e.vars.Set(decl.String(), res[i+j])
+				stk.Set(decl.String(), res[i+j])
 			}
 		case *ast.CopyUpdateExpression:
 			decl := n.Declerations[i].Assignee
-			res := e.evalCopyUpdateExpression(decl.String(), val)
-			e.vars.Set(decl.String(), res)
+			res := evalCopyUpdateExpression(decl.String(), val, stk)
+			stk.Set(decl.String(), res)
 		default:
 			decl := n.Declerations[i].Assignee
 			switch exp := decl.(type) {
 			case *ast.IndexExpression:
-				e.evalAssignmentToArrayIndex(exp, val)
+				evalAssignmentToArrayIndex(exp, val, stk)
 			case *ast.SliceExpression:
-				e.evalAssignmentToArraySlice(exp, val)
+				evalAssignmentToArraySlice(exp, val, stk)
 			case *ast.DotExpression:
-				e.evalAssignmentToStructField(exp, val)
+				evalAssignmentToStructField(exp, val, stk)
 			default:
-				res := e.Run(val)
-				e.vars.Set(decl.String(), res)
+				res := Run(val, stk)
+				stk.Set(decl.String(), res)
 			}
 		}
 	}
 }
 
-func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast.Expression) {
-	res := e.Run(val)
+func evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast.Expression, stk *Stack) {
+	res := Run(val, stk)
 	// we know that LHS has to be an identifier as
 	// assigning to index of array is only possible
 	// within an use expression
 	ident := exp.Left.(*ast.Identifier)
 
-	arr, ok := e.vars.Get(ident.Value)
+	arr, ok := stk.Get(ident.Value)
 	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	idx := e.Run(exp.Indices[0]).(int64)
+	idx := Run(exp.Indices[0], stk).(int64)
 	arr.([]any)[idx] = res
 }
 
-func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast.Expression) {
-	res := e.Run(val)
+func evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast.Expression, stk *Stack) {
+	res := Run(val, stk)
 	// we know that LHS has to be an identifier as
 	// assigning to index of array is only possible
 	// within an use expression
 	ident := exp.Left.(*ast.Identifier)
 
-	arr, ok := e.vars.Get(ident.Value)
+	arr, ok := stk.Get(ident.Value)
 	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	rng := e.Run(exp.Indices[0]).([]any)
+	rng := Run(exp.Indices[0], stk).([]any)
 	start := rng[0].(int64)
 	end := rng[1].(int64)
 	copy(arr.([]any)[start:end], res.([]any))
 }
 
-func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, val ast.Expression) {
-	res := e.Run(val)
+func evalAssignmentToStructField(exp *ast.DotExpression, val ast.Expression, stk *Stack) {
+	res := Run(val, stk)
 
-	strct := e.Run(exp.Left).(map[string]any)
+	strct := Run(exp.Left, stk).(map[string]any)
 
 	// we know exp.Right must be an identifier or integer literal for struct fields
 	var field string
@@ -245,40 +235,44 @@ func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, val ast.
 	case *ast.IntegerLiteral:
 		field = fmt.Sprintf("%d", right.Value)
 	default:
-		panic("compiler error: invalid struct field access")
+		panic("this is a compiler error. please report")
 	}
 
 	strct[field] = res
 
 }
 
-// ----------------- //
-// IfElse Expression //
-// ----------------- //
+func evalIfElseExpression(n *ast.IfElseExpression, stk *Stack) any {
+	stk.Scope()
+	defer stk.Unscope()
 
-func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression) any {
 	for _, c := range n.Conditionals {
-		cond := e.Run(c.Condition)
+		cond := Run(c.Condition, stk)
 		if cond.(bool) {
-			return e.Run(c.Block)
+			return Run(c.Block, stk)
 		}
 	}
 	return nil
 }
 
-func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
+func evalForStatement(n *ast.ForStatement, stk *Stack) any {
 	// classic for loop
 	if n.Assignment != nil {
-		e.evalAssignmentStatement(n.Assignment)
+		evalAssignmentStatement(n.Assignment, stk)
 
 		for {
-			cond := e.Run(n.Condition)
+			cond := Run(n.Condition, stk)
 			if !cond.(bool) {
 				break
 			}
-			e.Run(n.Block)
-
-			e.Run(n.Change)
+			exp := Run(n.Block, stk)
+			if exp == BREAK {
+				break
+			} else if exp == NEXT {
+				Run(n.Change, stk)
+				continue
+			}
+			Run(n.Change, stk)
 		}
 		return nil
 	}
@@ -310,61 +304,64 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement) any {
 	return nil
 }
 
-func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement) any {
-	scrutinee := e.Run(n.Scrutinee)
+func evalMatchExpressionStatement(n *ast.MatchExpressionStatement, stk *Stack) any {
+	scrutinee := Run(n.Scrutinee, stk)
 
 	if _, ok := n.Scrutinee.(*ast.FunctionCallExpression); ok {
 		scrutinee = unwrapFunctionResult(scrutinee, 0)
 	}
 
+	stk.Scope()
+	defer stk.Unscope()
+
 	// TODO: handle multiple predicates in one case
 	for _, c := range n.Cases {
-		predValue := e.Run(c.Predicate)
+		predValue := Run(c.Predicate, stk)
 		if predValue == scrutinee {
-			return e.evalMatchCase(c)
+			return evalMatchCase(c, stk)
 		}
 	}
 
 	if n.Default != nil {
-		return e.evalMatchCase(n.Default)
+		return evalMatchCase(n.Default, stk)
 	}
 
 	panic("this is a compiler error. please report")
 
 }
-func (e *Evaluator) evalMatchCase(c *ast.MatchCase) any {
+func evalMatchCase(c *ast.MatchCase, stk *Stack) any {
 	var last any
 	for _, stmt := range c.Body {
-		last = e.Run(stmt)
+		last = Run(stmt, stk)
 	}
 	return last
 }
 
 // returns last expression in block if any otherwise nil
-func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement) any {
+func evalBlockStatement(n *ast.BlockStatement, stk *Stack) any {
 	var exp any
 	for _, stmt := range n.Statements {
-		exp = e.Run(stmt)
+		exp = Run(stmt, stk)
 	}
 	return exp
 }
 
-func (e *Evaluator) evalKeywordStatement(n *ast.KeywordStatement) any {
+func evalKeywordStatement(n *ast.KeywordStatement) any {
 	switch n.Token.Type {
 	case token.BREAK:
 		return BREAK
 	case token.NEXT:
 		return NEXT
 	default:
-		e.addError(n, fmt.Errorf("unknown keyword %s", n.Token.Literal))
+		addError(n, fmt.Errorf("unknown keyword %s", n.Token.Literal))
 	}
 	return nil
 }
 
-func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement) any {
+func evalReturnStatement(n *ast.ReturnStatement, stk *Stack) any {
 	vals := make([]any, len(n.Values))
 	for i := range n.Values {
-		res := e.Run(n.Values[i])
+		res := Run(n.Values[i], stk)
 		switch val := n.Values[i].(type) {
 		case *ast.FunctionCallExpression:
 			if len(val.ReturnTypes) == 1 {
@@ -381,21 +378,21 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement) any {
 	return vals
 }
 
-func (e *Evaluator) evalUseExpression(n *ast.UseExpression) any {
-	arr := e.Run(n.Ident)
+func evalUseExpression(n *ast.UseExpression, stk *Stack) any {
+	arr := Run(n.Ident, stk)
 
-	e.vars.Scope()
-	defer e.vars.Unscope()
+	stk.Scope()
+	defer stk.Unscope()
 
-	e.vars.Set(n.Ident.Value, arr)
+	stk.Set(n.Ident.Value, arr)
 
-	e.Run(n.Block)
-	arr, _ = e.vars.Get(n.Ident.Value)
+	Run(n.Block, stk)
+	arr, _ = stk.Get(n.Ident.Value)
 	return arr
 }
 
-func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression) any {
-	orig := e.Run(n.Ident)
+func evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression, stk *Stack) any {
+	orig := Run(n.Ident, stk)
 
 	// make a deep copy
 	var cpy any
@@ -413,19 +410,19 @@ func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExp
 		cpy = newMap
 
 	default:
-		e.addError(n, fmt.Errorf("copy-update only works on arrays and structs"))
+		addError(n, fmt.Errorf("copy-update only works on arrays and structs"))
 		return nil
 	}
 
-	e.vars.Set(newVar, cpy)
+	stk.Set(newVar, cpy)
 
-	e.Run(n.Block)
+	Run(n.Block, stk)
 
 	return cpy
 }
 
-func (e *Evaluator) evalDotExpression(n *ast.DotExpression) any {
-	obj := e.Run(n.Left)
+func evalDotExpression(n *ast.DotExpression, stk *Stack) any {
+	obj := Run(n.Left, stk)
 
 	switch right := n.Right.(type) {
 	// handles named structs and enums
@@ -448,17 +445,16 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression) any {
 	return nil
 }
 
-func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression) any {
-	arr := e.Run(n.Left)
+func evalIndexExpression(n *ast.IndexExpression, stk *Stack) any {
+	arr := Run(n.Left, stk)
 
 	// evaluate all indices
 	indices := make([]int, len(n.Indices))
 	for i, idx := range n.Indices {
-		val := e.Run(idx)
+		val := Run(idx, stk)
 		idx, err := castTo[int64](val)
 		if err != nil {
-			e.addError(n, fmt.Errorf("this is a compiler error plese report"))
-			return nil
+			panic("this is a compiler error. plese report")
 		}
 		indices[i] = int(idx)
 	}
@@ -468,13 +464,12 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression) any {
 	for _, idx := range indices {
 		slice, ok := curr.([]any)
 		if !ok {
-			e.addError(n, fmt.Errorf("this is a compiler error plese report"))
-			return nil
+			panic("this is a compiler error. plese report")
 		}
 
 		if idx < 0 || idx >= len(slice) {
-			e.addError(n, fmt.Errorf("index out of bounds"))
-			return nil
+			// TODO: add dash error handling
+			panic("index out of bounds")
 		}
 
 		curr = slice[idx]
@@ -486,30 +481,30 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression) any {
 // Prefix expression //
 // ----------------- //
 
-func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression) any {
-	val := e.Run(n.Right)
+func evalPrefixExpression(n *ast.PrefixExpression, stk *Stack) any {
+	val := Run(n.Right, stk)
 	var err error
 	switch n.Token.Type {
 	case token.MINUS:
-		val, err = e.evalPrefixMinus(val)
+		val, err = evalPrefixMinus(val)
 	case token.NOT:
-		val, err = e.evalPrefixNot(val)
+		val, err = evalPrefixNot(val)
 	// case token.AMPERSAND:
 	// case token.ASTERISK:
 	case token.OPTIONAL:
 		if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
 			val = unwrapFunctionResult(val, 0)
 		}
-		val = e.evalPrefixOptional(val)
+		val = evalPrefixOptional(val)
 	}
 
 	if err != nil {
-		e.addError(n, err)
+		addError(n, err)
 	}
 	return val
 }
 
-func (e *Evaluator) evalPrefixMinus(v any) (any, error) {
+func evalPrefixMinus(v any) (any, error) {
 	switch v := v.(type) {
 	case int:
 		return -v, nil
@@ -540,7 +535,7 @@ func (e *Evaluator) evalPrefixMinus(v any) (any, error) {
 	}
 }
 
-func (e *Evaluator) evalPrefixNot(v any) (any, error) {
+func evalPrefixNot(v any) (any, error) {
 	switch v := v.(type) {
 	case bool:
 		return !v, nil
@@ -549,7 +544,7 @@ func (e *Evaluator) evalPrefixNot(v any) (any, error) {
 	}
 }
 
-func (e *Evaluator) evalPrefixOptional(v any) any {
+func evalPrefixOptional(v any) any {
 	if opt, ok := v.(Optional); ok {
 		if !opt.isValid {
 			// NOTE: here Dash error handling would kick in
@@ -567,12 +562,12 @@ func (e *Evaluator) evalPrefixOptional(v any) any {
 // Infix expression //
 // ---------------- //
 
-func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression) any {
-	l := e.Run(n.Left)
+func evalInfixExpression(n *ast.InfixExpression, stk *Stack) any {
+	l := Run(n.Left, stk)
 	if _, ok := n.Left.(*ast.FunctionCallExpression); ok {
 		l = unwrapFunctionResult(l, 0)
 	}
-	r := e.Run(n.Right)
+	r := Run(n.Right, stk)
 	if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
 		r = unwrapFunctionResult(r, 0)
 	}
@@ -582,50 +577,50 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression) any {
 	switch n.Token.Type {
 	// Arithmetic
 	case token.PLUS:
-		val, err = e.evalInfixAdd(l, r)
+		val, err = evalInfixAdd(l, r)
 	case token.MINUS:
-		val, err = e.evalInfixSub(l, r)
+		val, err = evalInfixSub(l, r)
 	case token.ASTERISK:
-		val, err = e.evalInfixMul(l, r)
+		val, err = evalInfixMul(l, r)
 	case token.SLASH:
-		val, err = e.evalInfixDiv(l, r)
+		val, err = evalInfixDiv(l, r)
 	case token.MOD:
-		val, err = e.evalInfixMod(l, r)
+		val, err = evalInfixMod(l, r)
 	// Logical
 	case token.AND:
-		val, err = e.evalInfixAnd(l, r)
+		val, err = evalInfixAnd(l, r)
 	case token.OR:
-		val, err = e.evalInfixOr(l, r)
+		val, err = evalInfixOr(l, r)
 	// Relational
 	case token.GT:
-		val, err = e.evalInfixGreater(l, r)
+		val, err = evalInfixGreater(l, r)
 	case token.GTE:
-		val, err = e.evalInfixGreaterEqual(l, r)
+		val, err = evalInfixGreaterEqual(l, r)
 	case token.LT:
-		val, err = e.evalInfixLess(l, r)
+		val, err = evalInfixLess(l, r)
 	case token.LTE:
-		val, err = e.evalInfixLessEqual(l, r)
+		val, err = evalInfixLessEqual(l, r)
 	// Equality
 	case token.EQ:
-		val = e.evalInfixEqual(l, r)
+		val = evalInfixEqual(l, r)
 	case token.NEQ:
-		val = e.evalInfixNotEqual(l, r)
+		val = evalInfixNotEqual(l, r)
 	// Optional
 	case token.NULL_COALESCE:
-		val = e.evalInfixNullCoalesce(l, r)
+		val = evalInfixNullCoalesce(l, r)
 	// Special
 	case token.COLON:
 		val = []any{l, r}
 	}
 
 	if err != nil {
-		e.addError(n, err)
+		addError(n, err)
 	}
 
 	return val
 }
 
-func (e *Evaluator) evalInfixAdd(l, r any) (res any, err error) {
+func evalInfixAdd(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -644,7 +639,7 @@ func (e *Evaluator) evalInfixAdd(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixSub(l, r any) (res any, err error) {
+func evalInfixSub(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -658,7 +653,7 @@ func (e *Evaluator) evalInfixSub(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixMul(l, r any) (res any, err error) {
+func evalInfixMul(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -672,7 +667,7 @@ func (e *Evaluator) evalInfixMul(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixDiv(l, r any) (res any, err error) {
+func evalInfixDiv(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -692,7 +687,7 @@ func (e *Evaluator) evalInfixDiv(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixMod(l, r any) (res any, err error) {
+func evalInfixMod(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -707,7 +702,7 @@ func (e *Evaluator) evalInfixMod(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixAnd(l, r any) (res any, err error) {
+func evalInfixAnd(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case bool:
 		var r_ bool
@@ -717,7 +712,7 @@ func (e *Evaluator) evalInfixAnd(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixOr(l, r any) (res any, err error) {
+func evalInfixOr(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case bool:
 		var r_ bool
@@ -727,7 +722,7 @@ func (e *Evaluator) evalInfixOr(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixLess(l, r any) (res any, err error) {
+func evalInfixLess(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -741,7 +736,7 @@ func (e *Evaluator) evalInfixLess(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixGreater(l, r any) (res any, err error) {
+func evalInfixGreater(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -755,7 +750,7 @@ func (e *Evaluator) evalInfixGreater(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixLessEqual(l, r any) (res any, err error) {
+func evalInfixLessEqual(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -769,7 +764,7 @@ func (e *Evaluator) evalInfixLessEqual(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixGreaterEqual(l, r any) (res any, err error) {
+func evalInfixGreaterEqual(l, r any) (res any, err error) {
 	switch l := l.(type) {
 	case int64:
 		var r_ int64
@@ -783,7 +778,7 @@ func (e *Evaluator) evalInfixGreaterEqual(l, r any) (res any, err error) {
 	return
 }
 
-func (e *Evaluator) evalInfixEqual(l, r any) any {
+func evalInfixEqual(l, r any) any {
 	if l_, ok := l.(Optional); ok {
 		l = l_.value
 	}
@@ -793,7 +788,7 @@ func (e *Evaluator) evalInfixEqual(l, r any) any {
 	return l == r
 }
 
-func (e *Evaluator) evalInfixNotEqual(l, r any) any {
+func evalInfixNotEqual(l, r any) any {
 	if l_, ok := l.(Optional); ok {
 		l = l_.value
 	}
@@ -803,7 +798,7 @@ func (e *Evaluator) evalInfixNotEqual(l, r any) any {
 	return l != r
 }
 
-func (e *Evaluator) evalInfixNullCoalesce(l, r any) any {
+func evalInfixNullCoalesce(l, r any) any {
 	if opt, ok := l.(Optional); ok {
 		// NOTE: we can optimise by only computing r if not valid
 		if !opt.isValid {
@@ -822,22 +817,20 @@ func (e *Evaluator) evalInfixNullCoalesce(l, r any) any {
 // Postfix expression //
 // ------------------ //
 
-func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression) {
-	left := e.Run(n.Left)
+func evalPostfixExpression(n *ast.PostfixExpression, stk *Stack) {
+	left := Run(n.Left, stk)
 	val, ok := left.(int64)
 	if !ok {
-		e.addError(n, fmt.Errorf("postfix operation only works on integers"))
-		return
+		panic("this is a compiler error. please report")
 	}
 
 	switch n.Token.Type {
 	case token.INCR:
-		e.vars.Set(n.Left.String(), val+1)
+		stk.Set(n.Left.String(), val+1)
 	case token.DECR:
-		e.vars.Set(n.Left.String(), val-1)
+		stk.Set(n.Left.String(), val-1)
 	default:
-		e.addError(n, fmt.Errorf("unknown postfix operator %s", n.Token.Literal))
-		return
+		panic("this is a compiler error. please report")
 	}
 }
 
@@ -845,7 +838,7 @@ func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression) {
 // Literals //
 // -------- //
 
-func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral) map[string]any {
+func evalStructLiteral(n *ast.StructLiteral, stk *Stack) map[string]any {
 	strct := make(map[string]any)
 
 	for _, field := range n.Fields {
@@ -856,7 +849,7 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral) map[string]any {
 		} else {
 			name = fmt.Sprintf("%d", field.Index)
 		}
-		strct[name] = e.Run(field.Value)
+		strct[name] = Run(field.Value, stk)
 	}
 	return strct
 }
@@ -865,40 +858,40 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral) map[string]any {
 // Built-in functions //
 // ------------------ //
 
-func (e *Evaluator) evalLen(args []ast.Expression) any {
+func evalLen(args []ast.Expression, stk *Stack) any {
 	if len(args) != 1 {
-		panic("len() requires exactly one argument")
+		panic("this is a compiler error. please report")
 	}
 
 	var val any
 	switch args[0].(type) {
 	case *ast.FunctionCallExpression:
-		val = e.Run(args[0]).([]any)[0]
+		val = Run(args[0], stk).([]any)[0]
 	default:
-		val = e.Run(args[0])
+		val = Run(args[0], stk)
 	}
 
 	switch v := val.(type) {
 	case []any:
 		return int64(len(v))
 	default:
-		panic(fmt.Sprintf("len() not supported for type %T", v))
+		panic("this is a compiler error. please report")
 	}
 }
 
-func (e *Evaluator) evalPrintln(args []ast.Expression) any {
+func evalPrintln(args []ast.Expression, stk *Stack) any {
 	values := make([]string, 0, len(args))
 
 	// evaluate each argument and convert to string
 	for _, arg := range args {
 		switch args[0].(type) {
 		case *ast.FunctionCallExpression:
-			rets := e.Run(arg).([]any)
+			rets := Run(arg, stk).([]any)
 			for _, ret := range rets {
 				values = append(values, valueToString(ret))
 			}
 		default:
-			val := e.Run(arg)
+			val := Run(arg, stk)
 			values = append(values, valueToString(val))
 		}
 	}
@@ -910,15 +903,15 @@ func (e *Evaluator) evalPrintln(args []ast.Expression) any {
 	return n
 }
 
-func (e *Evaluator) evalMake(args []ast.Expression) any {
+func evalMake(args []ast.Expression, stk *Stack) any {
 
 	typ, _ := args[0].(*ast.TypeLiteral)
 	arrayType, _ := typ.T.(*types.Array)
 
-	size := e.Run(args[1])
+	size := Run(args[1], stk)
 	sizeVal, _ := size.(int64)
 	if sizeVal < 0 {
-		panic("make() size cannot be negative")
+		panic("this is a compiler error. please report")
 	}
 
 	// create array with default values
