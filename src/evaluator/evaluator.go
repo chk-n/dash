@@ -511,13 +511,13 @@ func evalPrefixExpression(n *ast.PrefixExpression, stk *Stack) any {
 		val, err = evalPrefixMinus(val)
 	case token.NOT:
 		val, err = evalPrefixNot(val)
-	// case token.AMPERSAND:
-	// case token.ASTERISK:
 	case token.OPTIONAL:
 		if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
 			val = unwrapFunctionResult(val, 0)
 		}
 		val = evalPrefixOptional(val)
+	case token.AMPERSAND, token.ASTERISK:
+		return val
 	}
 
 	if err != nil {

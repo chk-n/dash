@@ -1230,6 +1230,81 @@ func TestVariableScoping(t *testing.T) {
 	}
 }
 
+func TestPointers(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "take address of integer",
+			prog: `
+            let x = 42
+            let ptr = &x
+            ptr`,
+			want: int64(42),
+		},
+		{
+			name: "dereference pointer",
+			prog: `
+            let x = 42
+            let ptr = &x
+            let val = *ptr
+            val`,
+			want: int64(42),
+		},
+		{
+			name: "reference struct field",
+			prog: `
+			struct point { x i64 }
+			let p = point{x: 42}
+			let ptr = &p
+			ptr.x`,
+			want: int64(42),
+		},
+		{
+			name: "pass reference to function",
+			prog: `
+			fn use_ptr(p *i64) i64 {
+			  return *p + 1
+			}
+			let x = 42
+			use_ptr(&x)`,
+			want: &Return{[]any{int64(43)}},
+		},
+		// BUG: both of these cause semsis errors
+		// {
+		// 	name: "reference array element",
+		// 	prog: `
+		// 	let arr = [1, 2, 3]
+		// 	let ptr = &arr
+		// 	(*ptr)[1]`,
+		// 	want: int64(2),
+		// },
+		// {
+		// 	name: "return reference from function",
+		// 	prog: `
+		// 	fn get_ptr(x i64) *i64 {
+		// 	  return &x
+		// 	}
+		// 	let ptr = get_ptr(42)
+		// 	*ptr`,
+		// 	want: int64(42),
+		// },
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			got := Run(n, NewStack(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // ------ //
 // Helper //
 // ------ //
