@@ -943,54 +943,14 @@ func evalMake(args []ast.Expression, stk *Stack) any {
 	return []any{arr}
 }
 
-// Performs integer arithmetic
-func (e *Evaluator) IArith(n ast.Node) (int, bool) {
-	switch n := n.(type) {
-	case *ast.PrefixExpression:
-		r, ok := e.IArith(n.Right)
-		if !ok {
-			return 0, ok
-		}
-		switch n.Operator {
-		case "-":
-			return -r, true
-		}
-	case *ast.InfixExpression:
-		l, ok1 := e.IArith(n.Left)
-		if !ok1 {
-			return 0, ok1
-		}
-		r, ok2 := e.IArith(n.Right)
-		if !ok2 {
-			return 0, ok2
-		}
-		switch n.Operator {
-		case "+":
-			return l + r, true
-		case "-":
-			return l - r, true
-		case "*":
-			return l * r, true
-		case "/":
-			return l / r, true
-		}
-
-	case *ast.IntegerLiteral:
-		return int(n.Value), true
-
-	}
-
-	return 0, false
-}
-
-func (e *Evaluator) addError(n ast.Node, err error) {
-	pos := n.Pos()
-	fmt.Printf("[ERROR] Eval failed at %d:%d - %s\n", pos.Line(), pos.Column(), err)
-}
-
 // ------- //
 // Helpers //
 // ------- //
+
+func addError(n ast.Node, err error) {
+	pos := n.Pos()
+	fmt.Printf("[ERROR] Eval failed at %d:%d - %s\n", pos.Line(), pos.Column(), err)
+}
 
 func unwrapFunctionResult(res any, idx int) any {
 	returnValues, ok := res.([]any)
