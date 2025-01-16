@@ -33,7 +33,7 @@ func TestEvaluatePrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpression(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -97,7 +97,7 @@ func TestEvaluateInfix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpression(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -134,7 +134,7 @@ func TestAssignmentStatement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -158,7 +158,7 @@ func TestIfElseExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -256,7 +256,7 @@ func TestArrayOperations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -380,7 +380,7 @@ func TestEnumDotExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -530,7 +530,7 @@ func TestForStatement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -602,7 +602,7 @@ func TestLenFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -668,7 +668,7 @@ func TestPrintln(t *testing.T) {
 
 			// Run the program
 			n := parseExpressions(tt.prog)
-			Run(n, NewStack(nil))
+			Eval(n, NewStack(nil))
 
 			w.Close()
 			os.Stdout = old
@@ -720,7 +720,44 @@ func TestMake(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTypeCasting(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		// {
+		// 	name: "scalar type cast",
+		// 	prog: "let x = 2 u8(x)",
+		// 	want: uint8(2),
+		// },
+		{
+			name: "byte to string",
+			prog: "let x = byte(0) string(x)",
+			want: string(byte(0)),
+		},
+		{
+			name: "aggregate type cast",
+			prog: `
+			let x = "hello"
+			let y = []byte(x)
+			y`,
+			want: []byte{104, 101, 108, 108, 111},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpressions(tt.prog)
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -761,7 +798,7 @@ func TestUseExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -806,7 +843,7 @@ func TestCopyUpdateExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -884,7 +921,7 @@ func TestMatchStatement(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -989,7 +1026,7 @@ func TestOptionalTypes(t *testing.T) {
 			}
 
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1055,7 +1092,7 @@ func TestFirstClassFunctions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1120,7 +1157,7 @@ func TestReturnInLoopConditional(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1222,7 +1259,7 @@ func TestVariableScoping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1296,7 +1333,7 @@ func TestPointers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1332,6 +1369,18 @@ func parseExpressions(input string) ast.Node {
 
 func deepEqual(a, b any) bool {
 	switch a := a.(type) {
+	case []uint8:
+		b, ok := b.([]uint8)
+		if !ok || len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if !deepEqual(a[i], b[i]) {
+				return false
+			}
+		}
+		return true
+
 	case []any:
 		b, ok := b.([]any)
 		if !ok || len(a) != len(b) {
