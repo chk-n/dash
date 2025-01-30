@@ -330,25 +330,29 @@ func TestStructLiteral(t *testing.T) {
 			prog: "struct point {i64,i64} let p = point{1, 2} p.0",
 			want: int64(1),
 		},
-		//	{
-		//		name: "nested struct",
-		//		prog: `struct person {
-		//				name string
-		//				addr address
-		//			}
-		//			struct address {
-		//				city string
-		//			}
-		//			let p = person{name: "ada", addr: address{city: "zurich"}}
-		//			p.name.city`,
-		//		want: "zurich",
-		//	},
+		// NOTE: multiple dot expression not supported yet
+		// {
+		// 	name: "nested struct",
+		// 	prog: `struct person {
+		// 				name string
+		// 				addr address
+		// 			}
+		// 			struct address {
+		// 				city string
+		// 			}
+		// 			let p = person{name: "ada", addr: address{city: "zurich"}}
+		// 			p.name.city`,
+		// 	want: "zurich",
+		// },
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
-			got := Run(n, NewStack(nil))
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
