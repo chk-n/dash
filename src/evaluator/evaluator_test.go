@@ -133,7 +133,10 @@ func TestAssignmentStatement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
@@ -157,7 +160,10 @@ func TestIfElseExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
@@ -255,7 +261,10 @@ func TestArrayOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -379,7 +388,10 @@ func TestEnumDotExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -529,7 +541,10 @@ func TestForStatement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -601,7 +616,10 @@ func TestLenFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -667,7 +685,10 @@ func TestPrintln(t *testing.T) {
 			os.Stdout = w
 
 			// Run the program
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			Eval(n, NewStack(nil))
 
 			w.Close()
@@ -719,7 +740,10 @@ func TestMake(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -797,7 +821,10 @@ func TestUseExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -842,7 +869,10 @@ func TestCopyUpdateExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -920,7 +950,10 @@ func TestMatchStatement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1025,7 +1058,10 @@ func TestOptionalTypes(t *testing.T) {
 				}()
 			}
 
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1091,7 +1127,10 @@ func TestFirstClassFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1156,7 +1195,10 @@ func TestReturnInLoopConditional(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1258,7 +1300,10 @@ func TestVariableScoping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1332,7 +1377,10 @@ func TestPointers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {
@@ -1354,7 +1402,7 @@ func parseExpression(input string) ast.Node {
 	return p.ParseExpression()
 }
 
-func parseExpressions(input string) ast.Node {
+func parseExpressions(input string) (ast.Node, error) {
 	lcfg := &lexer.Config{SkipComments: true}
 	l := lexer.New("", input, lcfg)
 
@@ -1362,9 +1410,13 @@ func parseExpressions(input string) ast.Node {
 	ast := p.ParseExpressions()
 
 	s := semantic.New()
-	s.AnalyseNode(ast)
+	s.AnalyseExpressions(ast)
 
-	return ast
+	if len(s.Errors()) != 0 {
+		return nil, fmt.Errorf(strings.Join(s.Errors(), "\n"))
+	}
+
+	return ast, nil
 }
 
 func deepEqual(a, b any) bool {
