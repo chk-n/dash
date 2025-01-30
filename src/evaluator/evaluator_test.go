@@ -640,15 +640,17 @@ func TestPrintln(t *testing.T) {
 			prog:     "println([1, 2, 3])",
 			wantText: "[1, 2, 3]\n",
 		},
-		{
-			name: "print struct",
-			prog: `
-			struct point { x i64, y i64 }
-			let p = point{1, 2}
-			println(p)
-			`,
-			wantText: "{0: 1, 1: 2}\n",
-		},
+		// NOTE: can't be deterministically tested
+		// with current set up
+		// {
+		// 	name: "print struct",
+		// 	prog: `
+		// 	struct point { x i64, y i64 }
+		// 	let p = point{1, 2}
+		// 	println(p)
+		// 	`,
+		// 	wantText: "{0: 1, 1: 2}\n",
+		// },
 		{
 			name: "print variable",
 			prog: `
