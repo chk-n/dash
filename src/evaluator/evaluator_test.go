@@ -780,7 +780,48 @@ func TestTypeCasting(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			got := Eval(n, NewStack(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCustomTypeCasting(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "type definition type cast",
+			prog: `type age i64
+				let x = 1
+				let a = age(x)
+				a`,
+			want: int64(1),
+		},
+		{
+			name: "union type cast",
+			prog: `union num { i64, u64 } 
+				let x = 1
+				let n = num(x)
+				n`,
+			want: int64(1),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
 			got := Eval(n, NewStack(nil))
 
 			if !deepEqual(got, tt.want) {

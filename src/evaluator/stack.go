@@ -1,8 +1,12 @@
 package evaluator
 
-import "dash-lang.io/src/internal"
+import (
+	"dash-lang.io/src/internal"
+	"dash-lang.io/src/types"
+)
 
 type Stack struct {
+	typs *internal.Cache[string, types.TypeSpec]
 	vars *internal.StackedSymTab[any]
 	prev *Stack
 }
@@ -11,6 +15,7 @@ func NewStack(prev *Stack) *Stack {
 	return &Stack{
 		vars: internal.NewStackedSymbolTable[any](),
 		prev: prev,
+		typs: internal.NewCache[string, types.TypeSpec](),
 	}
 }
 

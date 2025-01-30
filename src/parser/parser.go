@@ -303,6 +303,10 @@ func (p *Parser) ParseExpressions() *ast.Evaluator {
 			blk.Structs = append(blk.Structs, p.parseStructStatement())
 		case token.ENUM:
 			blk.Enums = append(blk.Enums, p.parseEnumStatement())
+		case token.TYPE:
+			blk.Types = append(blk.Types, p.parseTypeDefinitionStatement())
+		case token.UNION:
+			blk.Unions = append(blk.Unions, p.parseUnionStatement())
 		default:
 			blk.Nodes = append(blk.Nodes, p.parseStatementInBlock())
 		}

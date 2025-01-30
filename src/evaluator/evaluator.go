@@ -26,6 +26,12 @@ type Optional struct {
 	value   any
 }
 
+type Union struct {
+	// hash of library name + type name
+	descriptor uint32
+	value      any
+}
+
 type Function struct {
 	stk       *Stack
 	arguments []*ast.ParameterStatement
@@ -37,6 +43,13 @@ func Eval(n ast.Node, stk *Stack) any {
 	case *ast.Library:
 	case *ast.Evaluator:
 		var last any
+		for _, n := range n.Unions {
+			stk.typs.Set(n.Name.String(), n.T)
+		}
+		for _, n := range n.Types {
+			stk.typs.Set(n.Name.String(), n.T)
+		}
+
 		for _, n := range n.Enums {
 			initialiseEnumStatement(n, stk)
 		}
@@ -64,6 +77,11 @@ func Eval(n ast.Node, stk *Stack) any {
 			return evalPrintln(n.Arguments, stk)
 		} else if n.TokenLiteral() == "make" {
 			return evalMake(n.Arguments, stk)
+		}
+		// If ok is true then it is a custom type cast
+		if _, ok := stk.typs.Get(n.TokenLiteral()); ok {
+			res := Eval(n.Arguments[0], stk)
+			return &Return{vals: []any{res}}
 		}
 		return evalFunctionCall(n, stk)
 	case *ast.TypeCastExpression:

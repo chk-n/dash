@@ -131,14 +131,35 @@ func (s *Semantics) Analyse(lib *ast.Library) {
 	s.analyse(lib, "")
 }
 
-func (s *Semantics) AnalyseNode(n *ast.Evaluator) {
+// This is a specialised TEMPORARY function to analyse a sequence of statements
+// and expressions to facilitate tests in the evaluator
+func (s *Semantics) AnalyseExpressions(n *ast.Evaluator) {
 	s.scope.Push(GLOBAL)
 	defer s.scope.Pop()
 
-	s.analyseStructDefinitions(n.Structs)
+	for _, def := range n.Types {
+		s.varSt.Set(def.Name.String(), &VarInfo{Type: def.T})
+	}
+
+	// for _, alias := range n.Aliases {
+	// 	s.varSt.Set(alias.Name.String(), &VarInfo{Type: alias.T})
+	// }
+
+	for _, union := range n.Unions {
+		s.varSt.Set(union.Name.String(), &VarInfo{Type: union.T})
+	}
+
+	for _, strct := range n.Structs {
+		s.varSt.Set(strct.Name.String(), &VarInfo{Type: strct.T})
+	}
+
 	for _, enum := range n.Enums {
 		s.varSt.Set(enum.Name.String(), &VarInfo{Type: enum.T})
 	}
+
+	s.analyseTypeDefinitions(n.Types)
+	s.analyseStructDefinitions(n.Structs)
+	s.analyseUnions(n.Unions)
 
 	for _, n := range n.Nodes {
 		s.analyse(n, "")

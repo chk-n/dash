@@ -150,6 +150,8 @@ func (l *Library) String() string {
 }
 
 type Evaluator struct {
+	Unions  []*UnionStatement
+	Types   []*TypeDefinitionStatement
 	Structs []*StructStatement
 	Enums   []*EnumStatement
 	Nodes   []Node
