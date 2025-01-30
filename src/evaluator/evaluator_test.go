@@ -2,8 +2,10 @@ package evaluator
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"dash-lang.io/src/ast"
