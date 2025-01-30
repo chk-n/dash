@@ -176,42 +176,37 @@ func TestFunctionClosures(t *testing.T) {
 	tests := []struct {
 		name string
 		prog string
-		want []any
+		want any
 	}{
 		{
 			name: "call closure",
 			prog: "let add = fn(a, b i64) i64 { return a + b } add(1,2)",
-			want: []any{int64(3)},
+			want: &Return{[]any{int64(3)}},
 		},
 		{
 			name: "call closure with variable captured",
 			prog: "let x = 1 let add = fn(a i64) i64 { return a + x } add(1)",
-			want: []any{int64(2)},
+			want: &Return{[]any{int64(2)}},
 		},
-		//	{
-		//		name: "pass function to closure",
-		//		prog: `let sub = fn(a, b i64) i64 { return a - b }
-		//			   let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
-		//			   do(1,2, sub)`,
-		//		want: []any{int64(2)},
-		//	},
+		{
+			name: "pass function to closure",
+			prog: `
+			let sub = fn(a, b i64) i64 { return a - b }
+			let do = fn(x, y i64, f fn(i64, i64) i64) i64 { return f(x, y) }
+			do(1,2, sub)`,
+			want: &Return{[]any{int64(-1)}},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := parseExpressions(tt.prog)
-			got_ := Run(n, NewStack(nil))
-			got, ok := got_.([]any)
-			if !ok {
-				t.Error("got is not an array")
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
 			}
-			if len(got) != len(tt.want) {
+			got := Eval(n, NewStack(nil))
+			if !deepEqual(got, tt.want) {
 				t.Errorf("got: %s but want: %s", got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("got: %s but want: %s", got[i], tt.want[i])
-				}
 			}
 		})
 	}
