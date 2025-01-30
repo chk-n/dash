@@ -1316,7 +1316,7 @@ func TestVariableScoping(t *testing.T) {
 		{
 			name: "use expression scope",
 			prog: `
-			let arr = [1, 2, 3]
+			let arr = make([]i64, 3)
 			let x = 5
 			let arr' = use arr {
 				let x = 10
