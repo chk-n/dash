@@ -816,9 +816,65 @@ func TestCustomTypeCasting(t *testing.T) {
 				let x = 1
 				let n = num(x)
 				n`,
-			want: int64(1),
+			want: &Union{descriptor: uint32(3332055654), value: int64(1)},
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			got := Eval(n, NewStack(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTypeDefinition(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "accept and return scalar type def",
+			prog: `type user string
+				fn get(u user) user {
+					return u
+				}
+				let u = get(user("peter"))
+				u`,
+			want: &Return{vals: []any{"peter"}},
+		},
+		// BUG: leads to semsis nil panic
+		// {
+		// 	name: "accept and return aggregate type def",
+		// 	prog: `struct person { name string }
+		// 		type user person
+		// 		fn get(u user) user {
+		// 			return u
+		// 		}
+		// 		let u = get(user(person{name: "peter"}))
+		// 		u`,
+		// 	want: &Return{vals: []any{"peter"}},
+		// },
+		// {
+		// 	name: "accept and return aggregate type def",
+		// 	prog: `type reduce fn(i64, i64) i64
+		// 		fn get(f reduce) reduce {
+		// 			return f
+		// 		}
+		// 		let r = fn(a, b i64) i64 { return a + b }
+		// 		let func = get(reduce(r))
+		// 		func(1, 2)`,
+		// 	want: &Return{vals: []any{3}},
+		// },
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n, err := parseExpressions(tt.prog)
@@ -989,6 +1045,28 @@ func TestMatchStatement(t *testing.T) {
 			}
 			res`,
 			want: int64(1),
+		},
+		{
+			name: "match union of scalar",
+			prog: `union num { i64, f64 }
+			let n = num(1.1)
+			match n {
+			case f64: 1
+			case i64: -1
+			}`,
+			want: int64(1),
+		},
+		{
+			name: "match union of struct",
+			prog: `struct a {}
+			struct b {}
+			union ab { a, b }
+			let n = ab(b{})
+			match n {
+			case a: 1
+			case b: -1
+			}`,
+			want: int64(-1),
 		},
 	}
 
@@ -1500,6 +1578,12 @@ func deepEqual(a, b any) bool {
 			}
 		}
 		return true
+	case *Union:
+		b, ok := b.(*Union)
+		if !ok {
+			return false
+		}
+		return a.descriptor == b.descriptor && deepEqual(a.value, b.value)
 	case *Return:
 		b, ok := b.(*Return)
 		if !ok {

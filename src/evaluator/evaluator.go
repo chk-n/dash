@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strconv"
 	"strings"
 
@@ -50,6 +51,10 @@ func Eval(n ast.Node, stk *Stack) any {
 			stk.typs.Set(n.Name.String(), n.T)
 		}
 
+		for _, n := range n.Structs {
+			stk.vars.Set(n.Name.String(), n.T)
+		}
+
 		for _, n := range n.Enums {
 			initialiseEnumStatement(n, stk)
 		}
@@ -81,6 +86,15 @@ func Eval(n ast.Node, stk *Stack) any {
 		// If ok is true then it is a custom type cast
 		if _, ok := stk.typs.Get(n.TokenLiteral()); ok {
 			res := Eval(n.Arguments[0], stk)
+			if _, ok := n.T.(*types.Union); ok {
+				typeName := n.Arguments[0].Type().Ident()
+				descriptor := generateTypeDescriptor(typeName)
+
+				res = &Union{
+					descriptor: descriptor,
+					value:      res,
+				}
+			}
 			return &Return{vals: []any{res}}
 		}
 		return evalFunctionCall(n, stk)
@@ -115,11 +129,19 @@ func Eval(n ast.Node, stk *Stack) any {
 	case *ast.Identifier:
 		val, ok := stk.Get(n.Value)
 		if !ok {
-			fmt.Println(n, "not found")
 			panic("this is a compiler bug. please report")
 		}
 		return val
 
+	case *ast.TypeLiteral:
+		switch t := n.T.(type) {
+		case *types.Int:
+			return int64(0)
+		case *types.Float:
+			return float64(0)
+		case *types.Struct:
+			return "strct." + t.Name
+		}
 	case *ast.StructLiteral:
 		return evalStructLiteral(n, stk)
 	case *ast.ArrayLiteral:
@@ -429,10 +451,29 @@ func evalMatchExpressionStatement(n *ast.MatchExpressionStatement, stk *Stack) a
 	defer stk.Unscope()
 
 	// TODO: handle multiple predicates in one case
-	for _, c := range n.Cases {
-		predValue := Eval(c.Predicate, stk)
-		if predValue == scrutinee {
-			return evalMatchCase(c, stk)
+	if _, ok := n.Scrutinee.Type().(*types.Union); ok {
+		unionVal, ok := scrutinee.(*Union)
+		if !ok {
+			panic("matching against non-union type")
+		}
+
+		for _, c := range n.Cases {
+			// Get type name from predicate
+			typeName := c.Predicate.String()
+			// Hash it for comparison
+			caseDescriptor := generateTypeDescriptor(typeName)
+
+			// Match descriptors
+			if caseDescriptor == unionVal.descriptor {
+				return evalMatchCase(c, stk)
+			}
+		}
+	} else {
+		for _, c := range n.Cases {
+			predValue := Eval(c.Predicate, stk)
+			if predValue == scrutinee {
+				return evalMatchCase(c, stk)
+			}
 		}
 	}
 
@@ -1065,6 +1106,12 @@ func evalMake(args []ast.Expression, stk *Stack) any {
 // ------- //
 // Helpers //
 // ------- //
+
+func generateTypeDescriptor(typeName string) uint32 {
+	hash := fnv.New32a()
+	hash.Write([]byte(typeName))
+	return hash.Sum32()
+}
 
 func addError(n ast.Node, err error) {
 	pos := n.Pos()
