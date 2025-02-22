@@ -217,6 +217,8 @@ func (p *Parser) ParseLibrary() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.USE:
+			lib.Imports = append(lib.Imports, p.parseUseStatement())
 		case token.TYPE:
 			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
@@ -337,43 +339,34 @@ func (p *Parser) registerAttribute(attr string, fn attributeParseFn) {
 // Statements //
 // ---------- //
 
-// use (
+// import "path/to/lib"
+// import (
 //
 //	"internal/code"
 //
 // )
-func (p *Parser) parseUseStatement() []*ast.ImportStatement {
-	stmt := ast.ImportStatement{Token: p.curToken}
+func (p *Parser) parseUseStatement() *ast.UseStatement {
+	stmt := &ast.UseStatement{Token: p.curToken}
 
 	if !p.curTokenIs(token.USE) {
+		p.nextToken()
 		return nil
 	}
 
 	p.nextToken()
 
-	// single import statement
-	if !p.curTokenIs(token.LPAREN) {
-		if p.curTokenIs(token.STRING) {
-			stmt.Package = p.curToken
-			return []*ast.ImportStatement{&stmt}
-		}
+	if !p.curTokenIs(token.STRING) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
 
-	// multiple imports under one statement
-	imports := []*ast.ImportStatement{}
-	for p.curToken.Type != token.RPAREN {
-		if p.curToken.Type == token.STRING {
-			stmt.Package = p.curToken
-			imports = append(imports, &stmt)
-		}
-		p.nextToken()
+	name, ok := p.parseStringLiteral().(*ast.StringLiteral)
+	if !ok {
+		return nil
 	}
+	stmt.Name = name
 
-	p.nextToken()
-
-	return imports
+	return stmt
 }
 
 func (p *Parser) parseTypeDefinitionStatement() *ast.TypeDefinitionStatement {
@@ -1474,7 +1467,6 @@ func (p *Parser) parseFloatLiteral() ast.Expression {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	lit := &ast.StringLiteral{Token: p.curToken}
-	lit.Value = p.curToken.Literal
 	p.nextToken()
 	return lit
 }

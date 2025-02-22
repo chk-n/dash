@@ -1452,13 +1452,13 @@ func TestLibrary(t *testing.T) {
 		input string
 		want  string
 	}{
-		// {
-		// 	name: "test import",
-		// 	input: `lib test
-		// 			use "abc"
-		// 			fn main() { 1 + 1 }`,
-		// 	want: `lib test use "abc" fn main() { (1 + 1) }`,
-		// },
+		{
+			name: "test import",
+			input: `lib test
+					use "abc"
+					fn main() { 1 + 1 }`,
+			want: `lib test use "abc" fn main() { (1 + 1) }`,
+		},
 		{
 			name:  "public struct",
 			input: "lib test pub struct user {x f64}",

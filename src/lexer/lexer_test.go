@@ -211,7 +211,6 @@ func TestNextToken(t *testing.T) {
 			name: "keywords",
 			input: `
 				lib
-				import
 				pub
 				struct
 				gen
@@ -238,7 +237,6 @@ func TestNextToken(t *testing.T) {
 			`,
 			tokens: []wantToken{
 				{"lib", token.LIBRARY},
-				{"import", token.IMPORT},
 				{"pub", token.PUBLIC},
 				{"struct", token.STRUCT},
 				{"gen", token.GENERIC},

@@ -42,7 +42,7 @@ type Expression interface {
 type Library struct {
 	Token           token.Token
 	Name            *Identifier
-	Imports         []*ImportStatement
+	Imports         []*UseStatement
 	TypeDefinitions []*TypeDefinitionStatement
 	TypeAliases     []*TypeAliasStatement
 	GenericStructs  []*GenericStructStatement
@@ -191,18 +191,18 @@ func (f *FileFormat) Format() string {
 // Statements //
 // ------------//
 
-type ImportStatement struct {
-	Token   token.Token
-	Package token.Token
+type UseStatement struct {
+	Token token.Token
+	Name  *StringLiteral
 }
 
-func (s *ImportStatement) statementNode()       {}
-func (s *ImportStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *ImportStatement) String() string {
+func (s *UseStatement) statementNode()       {}
+func (s *UseStatement) TokenLiteral() string { return s.Token.Literal }
+func (s *UseStatement) String() string {
 	var out bytes.Buffer
-	out.WriteString(s.TokenLiteral() + " ")
 
-	out.WriteString("\"" + s.Package.Literal + "\"")
+	out.WriteString(s.TokenLiteral() + " ")
+	out.WriteString(s.Name.String())
 
 	return out.String()
 }
