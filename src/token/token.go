@@ -195,8 +195,6 @@ const (
 
 	// lib
 	LIBRARY
-	// import
-	IMPORT
 	// pub
 	PUBLIC
 	// struct
@@ -258,7 +256,6 @@ func NewFromLiteral(t Type, lit string) Token {
 
 var keywords = map[string]Type{
 	"lib":    LIBRARY,
-	"import": IMPORT,
 	"main":   MAIN,
 	"struct": STRUCT,
 	"gen":    GENERIC,
@@ -280,9 +277,9 @@ var keywords = map[string]Type{
 	"next":   NEXT,
 	"let":    LET,
 	"var":    VAR,
-	"use":    USE,
 	"case":   CASE,
 	"union":  UNION,
+	"use":    USE,
 
 	//
 	"true":  BOOL,
