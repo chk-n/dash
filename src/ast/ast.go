@@ -1456,6 +1456,7 @@ const (
 	InlineNever
 	InlineHint
 	InlineAlways
+	Test
 )
 
 type BasicAttribute struct {
@@ -1473,8 +1474,12 @@ func (a *BasicAttribute) String() string {
 		return "@inline(never)"
 	case InlineHint:
 		return "@inline(hint)"
-	default:
+	case InlineAlways:
 		return "@inline(always)"
+	case Test:
+		return "@test"
+	default:
+		panic("invalid attribute type")
 	}
 }
 

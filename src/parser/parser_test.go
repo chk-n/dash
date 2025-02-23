@@ -1354,6 +1354,11 @@ func TestFunctionAttributes(t *testing.T) {
 			input: "@inline(always) fn test() {}",
 			want:  "lib main @inline(always) fn test() { } fn main() { }",
 		},
+		{
+			name:  "test",
+			input: "@test fn abc() {}",
+			want:  "lib main @test fn abc() { } fn main() { }",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

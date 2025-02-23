@@ -185,6 +185,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.attributeParseFns = make(map[string]attributeParseFn)
 	p.registerAttribute("extern", p.parseExternAttribute)
 	p.registerAttribute("inline", p.parseInlineAttribute)
+	p.registerAttribute("test", p.parseBasicAttribute)
 
 	return p
 }
@@ -1658,6 +1659,23 @@ func (p *Parser) parseAttribute() ast.Attribute {
 	}
 
 	return fn()
+}
+
+// Parser non parametrized attributed e.g. "test"
+func (p *Parser) parseBasicAttribute() ast.Attribute {
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	switch p.curToken.Literal {
+	case "test":
+		p.nextToken()
+		return &ast.BasicAttribute{Type: ast.Test}
+	}
+
+	p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+	return nil
 }
 
 // assumes current token literal is 'extern' when function called
