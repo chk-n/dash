@@ -10,7 +10,7 @@ import (
 	"dash-lang.io/src/lexer"
 	"dash-lang.io/src/parser"
 	"dash-lang.io/src/semantic"
-	"dash-lang.io/src/transformer"
+	// "dash-lang.io/src/transformer"
 )
 
 const WELCOME = `██████╗  █████╗ ███████╗██╗  ██╗
@@ -73,8 +73,8 @@ func Start(in io.Reader, out io.Writer) {
 			fmt.Fprintf(out, "Semantic analysis error: %s", s.Errors())
 		}
 
-		t := transformer.New()
-		t.Tranform(script)
+		// t := transformer.New()
+		// t.Tranform(script)
 
 		cfg := &generator.Config{
 			// leave Triple nil to use system native
