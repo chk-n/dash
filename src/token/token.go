@@ -41,7 +41,6 @@ const (
 	STRING
 	BOOL
 	BYTE
-	ERROR
 	NULL
 	CHAR
 
@@ -85,8 +84,6 @@ const (
 	STRUCTTYPE
 	// // []T or [n]T
 	// ARRAYTYPE
-	// error
-	ERRORTYPE
 	// memory
 	MEMORYTYPE
 	// dirty
@@ -119,7 +116,7 @@ const (
 	// ||
 	OR
 	// !
-	NOT
+	BANG
 	// >=
 	GTE
 	// <=
@@ -211,10 +208,14 @@ const (
 	IF
 	// else
 	ELSE
+	// error
+	ERROR
 	// try
 	TRY
 	// catch
 	CATCH
+	// raise
+	RAISE
 	// defer
 	DEFER
 	// return
@@ -269,8 +270,10 @@ var keywords = map[string]Type{
 	"return": RETURN,
 	"defer":  DEFER,
 	"match":  MATCH,
+	"error":  ERROR,
 	"try":    TRY,
 	"catch":  CATCH,
+	"raise":  RAISE,
 	"for":    FOR,
 	"in":     IN,
 	"break":  BREAK,
@@ -303,7 +306,6 @@ var keywords = map[string]Type{
 	"byte":   BYTETYPE,
 	"char":   CHARTYPE,
 	"bool":   BOOLTYPE,
-	"error":  ERRORTYPE,
 	"memory": MEMORYTYPE,
 	"dirty":  DIRTYTYPE,
 

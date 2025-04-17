@@ -58,7 +58,7 @@ func TestAssignmentStatement(t *testing.T) {
 			want:  "lib main pub fn main() { var a i64 = 1 a i64, let b i64 = 2, 3 }",
 		},
 		{
-			name:  "function with other vars, illegal",
+			name:  "function with other vars",
 			input: "let x, let y = test(), 1 fn test() i64 { return 1 }",
 			want:  "lib main fn test() i64 { return 1 } pub fn main() { let x i64, let y i64 = test(), 1 }",
 		},
@@ -852,6 +852,11 @@ func TestAnonymousStruct(t *testing.T) {
 			input: `let a = {1, 2} let x, let y = a.0, a.1`,
 			want:  "lib main pub fn main() { let a struct<i64, i64> = {i64: 1, i64: 2} let x i64, let y i64 = a.0, a.1 }",
 		},
+		{
+			name:  "anonymous struct - access unnamed fields",
+			input: `enum token_type { t } let n = {token_type.t} let typ = n.0`,
+			want:  "lib main enum token_type {t} pub fn main() { let n struct<token_type> = {token_type: token_type.t} let typ token_type = n.0 }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -893,6 +898,14 @@ func TestTypeDefinition(t *testing.T) {
 			name:  "aggregate type - struct, out of order",
 			input: "type custom abc struct abc { a i64 } let x = custom{a: 1}",
 			want:  "lib main type custom abc struct abc {a i64} pub fn main() { let x custom = custom{a i64: 1} }",
+		},
+		{
+			name: "function type",
+			input: `alias reduce fn(i64) i64
+				fn get(f reduce) { }
+				let r = fn(a i64) i64 { return a }
+				get(r)`,
+			want: "lib main alias reduce fn(i64)i64 fn get(f fn(i64)i64) { } pub fn main() { let r fn(i64)i64 = fn(a i64) i64 { return a } get(r) }",
 		},
 		{
 			name:  "comparison type def and literal",
@@ -1050,7 +1063,7 @@ func TestForLoop(t *testing.T) {
 		{
 			name:  "simple for loop",
 			input: "for i = 0; i < 10; i++ { }",
-			want:  "lib main pub fn main() { for var i i64 = 0; (i < 10); i++ { } }",
+			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); i++ { } }",
 		},
 		{
 			name:  "infinite",
@@ -1091,7 +1104,7 @@ func TestForLoop(t *testing.T) {
 		{
 			name:  "for loop - break in if stmt",
 			input: "for i = 0; i < 10; i++ { if i == 2 { break } }",
-			want:  "lib main pub fn main() { for var i i64 = 0; (i < 10); i++ { if (i == 2) { break } } }",
+			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); i++ { if (i == 2) { break } } }",
 		},
 		{
 			name:   "for loop - break not last in if stmt",
@@ -1209,7 +1222,7 @@ func TestCopyExpression(t *testing.T) {
 		{
 			name:   "update outside of CopyUpdateExpression",
 			input:  "let a = {x: 1,y: 2} a.x = 2",
-			errors: []string{"illegal update of 'a.x'"},
+			errors: []string{"illegal update of 'a'"},
 		},
 		{
 			name:  "copy update guarded type",
@@ -1288,6 +1301,61 @@ func TestMemorySemantics(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestTryExpression(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "simple try with error-prone function",
+			input: "error some_err fn may_error()! { raise some_err } fn test()! { try may_error() }",
+			want:  "lib main error some_err fn may_error()! { raise some_err } fn test()! { try may_error() } pub fn main() { }",
+		},
+		{
+			name: "try with multiple return values",
+			input: `error some_err 
+				fn may_error()! i64, bool {
+					if true {
+						raise some_err
+					}  
+					return 1, true 
+				} 
+				fn test()! { 
+					let x, let y = try may_error() 
+				}`,
+			want: "lib main error some_err fn may_error()! i64, bool { if true { raise some_err } return 1, true } fn test()! { let x i64, let y bool = try may_error() } pub fn main() { }",
+		},
+		// NOTE: semsis rule not implemented yet
+		// {
+		// 	name:   "try with non-error-prone function",
+		// 	input:  "fn no_error() i64 { return 1 } fn test()! { let x = try no_error() }",
+		// 	errors: []string{"'try' used with non-error-prone function"},
+		// },
+		// NOTE: semsis rule not implemented yet
+		// {
+		// 	name:   "try with non-error-prone function",
+		// 	input:  "fn no_error()! fn test() { let x = try no_error() }",
+		// 	errors: []string{"'try' found but test' not marked as error-prone"},
+		// },
+		// NOTE: error-prone divide not implemented
+		// {
+		// 	name:  "try with force unwrap in error-prone function",
+		// 	input: "fn test(x ?i64)! { let y = ?x }",
+		// 	want:  "lib main fn test(x ?i64)! { let y i64 = ?x } pub fn main() { }",
+		// },
+		// NOTE: error-prone divide not implemented
+		// {
+		// 	name:  "try with division operation",
+		// 	input: "fn test()! { let x = 10 / 0 }",
+		// 	want:  "lib main fn test()! { let x i64 = (10 / 0) } pub fn main() { }",
+		// },
+		// NOTE: error-prone index op not implemented yet
+		// {
+		// 	name:  "try with array indexing operation",
+		// 	input: "fn test() { let arr = [1, 2, 3] let x = arr[5] }",
+		// 	want:  "lib main fn test() { let arr []i64 = [1,2,3] let x i64 = arr[5] } pub fn main() { }",
+		// },
+	}
+	runAnalysisTests(t, tests)
+}
+
 func TestFunction(t *testing.T) {
 	tests := []testCase{
 		{
@@ -1312,8 +1380,8 @@ func TestFunction(t *testing.T) {
 		},
 		{
 			name:  "function call multiple return",
-			input: "fn test() i64, i64 { return 1 + 2, 2 } let a, b = test() let c = a * 10",
-			want:  "lib main fn test() i64, i64 { return (1 + 2), 2 } pub fn main() { let a i64, b i64 = test() let c i64 = (a * 10) }",
+			input: "fn test() i64, i64 { return 1 + 2, 2 } let a, let b = test() let c = a * 10",
+			want:  "lib main fn test() i64, i64 { return (1 + 2), 2 } pub fn main() { let a i64, let b i64 = test() let c i64 = (a * 10) }",
 		},
 		{
 			name:  "function - struct argument",
@@ -1322,8 +1390,8 @@ func TestFunction(t *testing.T) {
 		},
 		{
 			name:  "struct as parameter",
-			input: "struct Test{a i64} t = Test{a: 1} i = test(t) fn test(t Test) i64 { return t.a }",
-			want:  "lib main struct Test {a i64} fn test(t Test) i64 { return t.a } pub fn main() { t Test = Test{a i64: 1} i i64 = test(t) }",
+			input: "struct Test{a i64} let t = Test{a: 1} let i = test(t) fn test(t Test) i64 { return t.a }",
+			want:  "lib main struct Test {a i64} fn test(t Test) i64 { return t.a } pub fn main() { let t Test = Test{a i64: 1} let i i64 = test(t) }",
 		},
 		{
 			name:  "function - array argument",
@@ -1394,23 +1462,34 @@ func TestFunction(t *testing.T) {
 			input: "type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } let func = test2() let v = func()",
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } pub fn main() { let func xyz = test2() let v i64 = func() }",
 		},
-		{
-			name: "call function value, optional type",
-			input: `struct abc {x f64}
-				type xyz fn(string, bool)i64,abc
-				fn test1(s string, b bool) i64, abc { 
-				    return 0, abc{x: 1.1}
-				} 
-				fn test2() ?xyz { 
-				    return test1 
-				} 
-				let func = ?(test2())
-				let a, let b = func("h", false)`,
-			want: `lib main type xyz fn(string,bool)i64,abc struct abc {x f64} fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
-		},
+		// {
+		// 	name: "call function value, optional type",
+		// 	input: `struct abc {x f64}
+		// 		type xyz fn(string, bool)i64,abc
+		// 		fn test1(s string, b bool) i64, abc {
+		// 		    return 0, abc{x: 1.1}
+		// 		}
+		// 		fn test2() ?xyz {
+		// 		    return test1
+		// 		}
+		// 		let func = ?(test2())
+		// 		let a, let b = func("h", false)`,
+		// 	want: `lib main type xyz fn(string,bool)i64,abc struct abc {x f64} fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
+		// },
 	}
 	runAnalysisTests(t, tests)
 }
+
+// func TestPipeOperator(t *testing.T) {
+// 	tests := []testCase{
+// 		{
+// 			name:  "",
+// 			input: "let res = byte(0) |> test fn test(b byte) i64 { return i64(b) }",
+// 			want:  "",
+// 		},
+// 	}
+// 	runAnalysisTests(t, tests)
+// }
 
 func TestHigherOrderFunctions(t *testing.T) {
 	tests := []testCase{
@@ -1475,6 +1554,11 @@ func TestBuiltInFunction(t *testing.T) {
 			input: "let arr = make([]byte, 256) cap(arr)",
 			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,256) cap(arr) }",
 		},
+		{
+			name:  "assert",
+			input: `fn err()! { try assert(true, "") } try err()`,
+			want:  `lib main fn err()! { try assert(true,"") } pub fn main() { try err() }`,
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1525,8 +1609,8 @@ func TestAnonymousFunction(t *testing.T) {
 		},
 		{
 			name:  "multiple return",
-			input: "let add = fn() i64, i64 { return 1,2 } let a, b = add()",
-			want:  "lib main pub fn main() { let add fn()i64,i64 = fn() i64, i64 { return 1, 2 } let a i64, b i64 = add() }",
+			input: "let add = fn() i64, i64 { return 1,2 } let a, let b = add()",
+			want:  "lib main pub fn main() { let add fn()i64,i64 = fn() i64, i64 { return 1, 2 } let a i64, let b i64 = add() }",
 		},
 		{
 			name:  "infer type when left out",

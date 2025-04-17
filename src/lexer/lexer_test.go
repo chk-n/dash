@@ -126,7 +126,7 @@ func TestNextToken(t *testing.T) {
 				{"&", token.AMPERSAND},
 				{"&&", token.AND},
 				{"||", token.OR},
-				{"!", token.NOT},
+				{"!", token.BANG},
 				{">=", token.GTE},
 				{"<=", token.LTE},
 				{"==", token.EQ},
@@ -183,7 +183,6 @@ func TestNextToken(t *testing.T) {
 				bool
 				byte
 				char
-				error
 				memory
 			`,
 			tokens: []wantToken{
@@ -203,7 +202,6 @@ func TestNextToken(t *testing.T) {
 				{"bool", token.BOOLTYPE},
 				{"byte", token.BYTETYPE},
 				{"char", token.CHARTYPE},
-				{"error", token.ERRORTYPE},
 				{"memory", token.MEMORYTYPE},
 			},
 		},
@@ -219,8 +217,10 @@ func TestNextToken(t *testing.T) {
 				fn
 				if
 				else
+				error
 				try
 				catch
+				raise
 				defer
 				return
 				for
@@ -245,8 +245,10 @@ func TestNextToken(t *testing.T) {
 				{"fn", token.FUNCTION},
 				{"if", token.IF},
 				{"else", token.ELSE},
+				{"error", token.ERROR},
 				{"try", token.TRY},
 				{"catch", token.CATCH},
+				{"raise", token.RAISE},
 				{"defer", token.DEFER},
 				{"return", token.RETURN},
 				{"for", token.FOR},

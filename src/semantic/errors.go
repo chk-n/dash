@@ -63,6 +63,9 @@ var (
 	errTooLittleReturnValues = func(got, want string) error {
 		return fmt.Errorf("too little return values, got (%s) want (%s)", got, want)
 	}
+	errInvalidTry = func() error {
+		return fmt.Errorf("invalid use of 'try' with a non error-prone function")
+	}
 )
 
 // ---------------- //
@@ -163,6 +166,9 @@ var (
 			return fmt.Errorf("'next' used outside of for loop")
 		}
 		panic("unknown keyword")
+	}
+	errInvalidAssignment = func() error {
+		return fmt.Errorf("invalid assignment: expected <identifier> = <expression>")
 	}
 )
 
