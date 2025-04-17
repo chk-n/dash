@@ -1,0 +1,208 @@
+lib lexer
+
+@test
+fn next_token()! {
+    let tests = [
+        {"", tag.EOF},
+        // operators
+        {"+", tag.ADD},
+        {"-", tag.SUB},
+        {"*", tag.MUL},
+        {"/", tag.DIV},
+        {"%", tag.MOD},   
+        // compound operators
+        {"==", tag.EQ},
+        {"!=", tag.NEQ},
+        {"=", tag.ASSGN},
+        {">", tag.GT},
+        {">=", tag.GEQ},
+        {"<", tag.LT},
+        {"<=", tag.LEQ},
+        {">>", tag.RSH},
+        {"<<", tag.LSH},
+        {"&", tag.AND},
+        {"|", tag.OR},
+        {"^", tag.XOR},
+        {"~", tag.NOT},
+        {"&&", tag.LAND},
+        {"||", tag.LOR},
+        {"!", tag.LNOT},
+        {"|>", tag.PIPE},
+        {"&^", tag.ANDNOT},
+        {"?", tag.QMARK},
+        {"??", tag.QQMARK},
+        // delimiters
+        {"{", tag.LBRACE},
+        {"}", tag.RBRACE},
+        {"(", tag.LPAREN},
+        {")", tag.RPAREN},
+        {"[", tag.LBRACK},
+        {"]", tag.RBRACK},
+        {",", tag.COMMA},
+        {".", tag.DOT},
+        {":", tag.COLON},
+        {";", tag.SEMICOLON},
+        {"@", tag.AT},
+        // identifiers
+        {"abc", tag.IDENT},
+        {"i64", tag.IDENT},
+        {"ifelse", tag.IDENT},
+        // keywords
+        {"pub", tag.PUB},
+        {"lib", tag.LIB},
+        {"use", tag.USE},
+        {"struct", tag.STRUCT},
+        {"type", tag.TYPE},
+        {"alias", tag.ALIAS},
+        {"enum", tag.ENUM},
+        {"union", tag.UNION},
+        {"gen", tag.GEN},
+        {"error", tag.ERROR},
+        {"fn", tag.FN},
+        {"let", tag.LET},
+        {"var", tag.VAR},
+        {"if", tag.IF},
+        {"else", tag.ELSE},
+        {"for", tag.FOR},
+        {"in", tag.IN},
+        {"next", tag.NEXT},
+        {"break", tag.BREAK},
+        {"match", tag.MATCH},
+        {"case", tag.CASE},
+        {"try", tag.TRY},
+        {"catch", tag.CATCH},
+        {"defer", tag.DEFER},
+        {"return", tag.RETURN},
+        {"raise", tag.RAISE},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        let l, let tkn = next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.0, "literal mismatch")
+    }
+}
+
+@test
+fn test_string()! {
+    let tests = [
+        {`""`, tag.STRING},                   
+        {`"hello world"`, tag.STRING},        
+        {`"hello\nworld"`, tag.STRING},       
+        // {`"`, tag.ILLEGAL},                   
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        let l, let tkn = next_tkn(l)
+        
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.0, "literal mismatch")
+    }
+}
+
+@test
+fn test_number()! {
+    let tests = [
+        {"0", tag.INT, "0"},                      
+        {"123_456", tag.INT, "123_456"},                
+        {"_123", tag.IDENT, "_123"},                 
+        {"0.5", tag.FLOAT, "0.5"},                  
+        {"123.456", tag.FLOAT, "123.456"},              
+        {"123.", tag.FLOAT, "123."},                 
+        {".123", tag.DOT, "."},               
+        {"123.456.789", tag.ILLEGAL, "123.456."},        
+        {"0..", tag.ILLEGAL, "0.."},
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        let l, let tkn = next_tkn(l)
+        
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
+fn test_comment()! {
+    let tests = [
+        {"// normal comment", tag.COMMENT},
+        {`
+        // comment at end of file
+        `, tag.COMMENT},
+        {"/* block comment */", tag.COMMENT},
+        // NOTE: string literals are not interpreted yet so \n is just
+        // character '\' and character 'n'
+        {"/* multi\nline\ncomment */", tag.COMMENT},
+        {"/**/", tag.COMMENT},                
+        {"/*", tag.ILLEGAL},
+]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        let l, let tkn = next_tkn(l)
+        
+        try assert(tkn.tag == tc.1, "token type mismatch")
+    }
+}
+
+@test
+fn test_whitespace()! {
+    let tests = [
+        {"  abc", tag.IDENT, "abc"},
+        {` 
+        abc`, tag.IDENT, "abc"},
+        {`    abc`, tag.IDENT, "abc"},
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        let l, let tkn = next_tkn(l)
+       
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
+fn test_sequential()! {
+    let tests = [
+        {"a+b", 3},
+        {"if(x>10){return true}", 10},
+        {"let x = 123 + 456", 6},
+        {"fn add(a, b int) { return a + b }", 14},
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0))
+        
+        var count = 0
+        for {
+            let l, let tkn = next_tkn(l)
+            let lit = get_literal(l, tkn)
+            if tkn.tag == tag.EOF {
+                break
+            }
+            count = count + 1
+        }
+        
+        try assert(count == tc.1, "token count mismatch")
+    }
+}
