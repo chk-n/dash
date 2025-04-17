@@ -667,29 +667,6 @@ func (s *ForRangeStatement) String() string {
 	return out.String()
 }
 
-type WhileStatement struct {
-	Token     token.Token
-	Condition Expression
-	Block     *BlockStatement
-}
-
-func (s *WhileStatement) statementNode()       {}
-func (s *WhileStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *WhileStatement) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(s.Token.Literal + " ")
-	out.WriteString(s.Condition.String() + " ")
-
-	if s.Block != nil {
-		out.WriteString(s.Block.String())
-	} else {
-		out.WriteString("{ }")
-	}
-
-	return out.String()
-}
-
 type KeywordStatement struct {
 	Token token.Token
 }
@@ -1700,10 +1677,6 @@ func (s *ForStatement) Pos() token.Pos {
 }
 
 func (s *ForRangeStatement) Pos() token.Pos {
-	return s.Token.Position
-}
-
-func (s *WhileStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 

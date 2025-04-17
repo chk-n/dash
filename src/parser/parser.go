@@ -1010,22 +1010,6 @@ func (p *Parser) parseForRangeStatement() *ast.ForRangeStatement {
 
 }
 
-func (p *Parser) parseWhileStatement() *ast.WhileStatement {
-	stmt := &ast.WhileStatement{Token: p.curToken}
-	p.nextToken()
-
-	stmt.Condition = p.parseExpression(LOWEST)
-
-	if !p.curTokenIs(token.LBRACE) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-
-	stmt.Block = p.parseBlockStatement()
-
-	return stmt
-}
-
 func (p *Parser) parseMatchExpression() ast.Expression {
 	es := &ast.MatchExpressionStatement{Token: p.curToken}
 	p.nextToken()
