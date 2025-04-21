@@ -2,7 +2,7 @@ package evaluator
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -1765,7 +1765,7 @@ func parseExpressions(input string) (ast.Node, error) {
 	s.AnalyseExpressions(ast)
 
 	if len(s.Errors()) != 0 {
-		return nil, fmt.Errorf(strings.Join(s.Errors(), "\n"))
+		return nil, errors.New(strings.Join(s.Errors(), "\n"))
 	}
 
 	return ast, nil
