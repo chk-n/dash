@@ -95,17 +95,14 @@ func (s *Semantics) Analyse(lib *ast.Library) {
 	s.scope.Push(GLOBAL)
 	defer s.scope.Pop()
 
-	s.analyseHeaders(lib)
-
+	s.analyseEnumDefinitions(lib.Enums)
 	s.analyseStructDefinitions(lib.Structs)
 	s.analyseGenericStructDefinitions(lib.GenericStructs)
-
 	s.analyseTypeDefinitions(lib.TypeDefinitions)
 	s.analyseTypeAliases(lib.TypeAliases)
+	s.analyseUnionDefinitions(lib.Unions)
 
-	s.analyseUnions(lib.Unions)
-
-	// s.analyseTypeHierarchy(n.TypeDefinitions, n.TypeAliases)
+	s.resolveAllTypeReferences(lib)
 
 	for _, v := range lib.GlobalVariables {
 		s.analyseAssignmentStatement(v)
@@ -169,7 +166,7 @@ func (s *Semantics) AnalyseExpressions(n *ast.Evaluator) {
 
 	s.analyseTypeDefinitions(n.Types)
 	s.analyseStructDefinitions(n.Structs)
-	s.analyseUnions(n.Unions)
+	s.analyseUnionDefinitions(n.Unions)
 
 	for _, n := range n.Nodes {
 		s.analyse(n, "")
@@ -1523,31 +1520,9 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.TypeSpec, fnName string) type
 	}
 }
 
-// Populates symbol table with names and basic (unprocessed) types
-// for type definitions, aliases, structs, generic structs and unions.
-func (s *Semantics) analyseHeaders(lib *ast.Library) {
-	for _, enum := range lib.Enums {
+func (s *Semantics) analyseEnumDefinitions(enums []*ast.EnumStatement) {
+	for _, enum := range enums {
 		s.varSt.Set(enum.Name.TokenLiteral(), &VarInfo{Type: enum.T})
-	}
-
-	for _, def := range lib.TypeDefinitions {
-		s.varSt.Set(def.Name.TokenLiteral(), &VarInfo{Type: def.T})
-	}
-
-	for _, alias := range lib.TypeAliases {
-		s.varSt.Set(alias.Name.TokenLiteral(), &VarInfo{Type: alias.T})
-	}
-
-	for _, union := range lib.Unions {
-		s.varSt.Set(union.Name.TokenLiteral(), &VarInfo{Type: union.T})
-	}
-
-	for _, strct := range lib.Structs {
-		s.varSt.Set(strct.Name.TokenLiteral(), &VarInfo{Type: strct.T})
-	}
-
-	for _, gen := range lib.GenericStructs {
-		s.varSt.Set(gen.Name.TokenLiteral(), &VarInfo{Type: gen.T})
 	}
 }
 
@@ -1572,11 +1547,20 @@ func (s *Semantics) analyseStructDefinitions(sds []*ast.StructStatement) {
 	for _, sd := range sds {
 		strct := &types.Struct{Name: sd.Name.TokenLiteral()}
 		for _, f := range sd.Fields {
+			_, exists := s.varSt.Get(f.Type.Ident())
+
+			var fieldType types.TypeSpec
+			if !exists && !types.IsTypeIdent(f.Type.Ident()) {
+				fieldType = &types.UnknownNamed{Name: f.Type.Ident()}
+			} else {
+				fieldType = f.Type
+			}
+
 			if f.Name != nil {
-				field := types.StructField{Name: f.Name.TokenLiteral(), T: f.Type}
+				field := types.StructField{Name: f.Name.TokenLiteral(), T: fieldType}
 				strct.Ts = append(strct.Ts, field)
 			} else {
-				field := types.StructField{T: f.Type}
+				field := types.StructField{T: fieldType}
 				strct.Ts = append(strct.Ts, field)
 			}
 		}
@@ -1618,23 +1602,6 @@ func (s *Semantics) analyseStructDefinitions(sds []*ast.StructStatement) {
 			names[i] = sds[idx].Name.TokenLiteral()
 		}
 		s.addError(sds[path[0]], errCyclicalTypeDeclarations(names))
-	}
-
-	//  set type and infer any missing unknown_name types
-	for _, sd := range sds {
-		for i, fT := range sd.T.Ts {
-			typ := s.inferUnknownNamedType(fT.T)
-			if typ == nil {
-				s.addError(sd.Fields[i], errTypeNotFound(fT.T.String()))
-				continue
-			}
-			sd.T.Ts[i].T = typ
-			sd.Fields[i].Type = typ
-		}
-		// TODO: for struct type conversion we need to ensure function accepts
-		// ANY struct with the same fields named or unknown
-		s.varSt.Set(sd.Name.TokenLiteral(), &VarInfo{Type: sd.Type()})
-		s.typeSt.Set(sd.Name.TokenLiteral(), sd.Type())
 	}
 }
 
@@ -1803,11 +1770,6 @@ func (s *Semantics) analyseTypeDefinitions(tds []*ast.TypeDefinitionStatement) {
 		}
 	}
 
-	// initially set all values in symbol table
-	for _, td := range tds {
-		s.varSt.Set(td.Name.TokenLiteral(), &VarInfo{Type: td.Type()})
-	}
-
 	//  set type in symbol table
 	for _, td := range tds {
 		// ensure underlying type not unknown
@@ -1872,7 +1834,11 @@ func (s *Semantics) analyseTypeAliases(tas []*ast.TypeAliasStatement) {
 	}
 }
 
-func (s *Semantics) analyseUnions(uns []*ast.UnionStatement) {
+func (s *Semantics) analyseUnionDefinitions(uns []*ast.UnionStatement) {
+	for _, u := range uns {
+		s.varSt.Set(u.Name.TokenLiteral(), &VarInfo{Type: u.T})
+	}
+
 	m := make(map[string]uint16, len(uns))
 
 	// check for duplicate union defs
@@ -1958,6 +1924,68 @@ func (s *Semantics) analyseUnions(uns []*ast.UnionStatement) {
 				dups[typ.String()] = struct{}{}
 			}
 		}
+	}
+}
+
+func (s *Semantics) resolveAllTypeReferences(lib *ast.Library) {
+	for _, sd := range lib.Structs {
+		for i, field := range sd.Fields {
+			typ := s.inferUnknownNamedType(field.Type)
+			if typ == nil {
+				s.addError(field, errTypeNotFound(field.Type.String()))
+				continue
+			}
+			sd.T.Ts[i].T = typ
+			field.Type = typ
+		}
+
+		s.varSt.Set(sd.Name.TokenLiteral(), &VarInfo{Type: sd.Type()})
+		s.typeSt.Set(sd.Name.TokenLiteral(), sd.Type())
+
+	}
+
+	for _, gs := range lib.GenericStructs {
+		for i, field := range gs.Fields {
+			typ := s.inferUnknownNamedType(field.Type)
+			if typ == nil {
+				s.addError(field, errTypeNotFound(field.Type.String()))
+				continue
+			}
+			gs.T.Ts[i].T = typ
+			field.Type = typ
+		}
+	}
+
+	for _, td := range lib.TypeDefinitions {
+		typ := s.inferUnknownNamedType(td.UnderlyingType)
+		if typ == nil {
+			s.addError(td, errTypeNotFound(td.UnderlyingType.String()))
+			continue
+		}
+		td.UnderlyingType = typ
+
+		if td.Guard != nil {
+			td.T = &types.Dirty{T: &types.Definition{Name: td.Name.TokenLiteral(), Underlying: td.UnderlyingType}}
+		} else {
+			td.T = &types.Definition{Name: td.Name.TokenLiteral(), Underlying: td.UnderlyingType}
+		}
+
+		// Update symbol table with resolved type
+		s.varSt.Set(td.Name.TokenLiteral(), &VarInfo{Type: td.Type()})
+		s.typeSt.Set(td.Name.TokenLiteral(), td.Type())
+	}
+
+	for _, ta := range lib.TypeAliases {
+		typ := s.inferUnknownNamedType(ta.UnderlyingType)
+		if typ == nil {
+			s.addError(ta, errTypeNotFound(ta.UnderlyingType.String()))
+			continue
+		}
+		ta.UnderlyingType = typ
+		ta.T = typ
+
+		s.varSt.Set(ta.Name.TokenLiteral(), &VarInfo{Type: ta.Type()})
+		s.typeSt.Set(ta.Name.TokenLiteral(), ta.Type())
 	}
 }
 

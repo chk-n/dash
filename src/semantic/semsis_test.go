@@ -947,6 +947,11 @@ func TestTypeDefinition(t *testing.T) {
 			input: "struct abc { a i64 } type custom abc fn main() { let c = custom{a: 1} let val = c.a ",
 			want:  "lib main type custom abc struct abc {a i64} pub fn main() { let c custom = custom{a i64: 1} let val i64 = c.a } pub fn main() { }",
 		},
+		{
+			name:  "out of order type def reference in struct",
+			input: "type a u32 struct b { f a }",
+			want:  "lib main type a u32 struct b {f a} pub fn main() { }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
