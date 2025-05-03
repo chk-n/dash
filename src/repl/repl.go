@@ -67,7 +67,7 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		s := semantic.New()
+		s := semantic.New("", nil)
 		s.Analyse(script)
 		if len(s.Errors()) != 0 {
 			fmt.Fprintf(out, "Semantic analysis error: %s", s.Errors())

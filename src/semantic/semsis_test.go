@@ -1637,7 +1637,7 @@ func runAnalysisTests(t *testing.T, tests []testCase) {
 			p := GetParser(tt.input)
 			ast := p.ParseREPL()
 
-			semsis := New()
+			semsis := New("", nil)
 			semsis.Analyse(ast)
 
 			if len(tt.errors) != len(semsis.Errors()) {

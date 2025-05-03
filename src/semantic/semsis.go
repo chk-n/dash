@@ -43,7 +43,7 @@ type TypeInfo struct {
 
 type Semantics struct {
 	// Path to file being analysed
-	filepath string
+	path string
 
 	// symbol table for functions
 	fnSt *internal.StackedSymTab[*FnInfo]
@@ -78,15 +78,22 @@ type SemanticalError struct {
 	Err error
 }
 
-func New() *Semantics {
+func New(path string, typeTable *internal.Cache[string, types.TypeSpec]) *Semantics {
+	typeSt := internal.NewStackedSymbolTable[types.TypeSpec]()
+	if typeTable != nil {
+		for k, v := range typeTable.GetAll() {
+			typeSt.Set(k, v)
+		}
+	}
+
 	return &Semantics{
-		// filepath:    filepath,
+		path:        path,
 		fnSt:        internal.NewStackedSymbolTable[*FnInfo](),
 		varSt:       internal.NewStackedSymbolTable[*VarInfo](),
 		expSt:       internal.NewStackedSymbolTable[ast.Expression](),
 		scope:       internal.NewStack[scope](),
 		fnScope:     internal.NewStack[*types.Function](),
-		typeSt:      internal.NewStackedSymbolTable[types.TypeSpec](),
+		typeSt:      typeSt,
 		guardedType: internal.NewCache[string, struct{}](),
 	}
 }
@@ -2204,7 +2211,7 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 
 func (s *Semantics) addError(n ast.Node, err error) {
 	pos := n.Pos()
-	fmt.Printf("[ERROR] Semsis failed in %s at %d:%d - %s\n", s.filepath, pos.Line(), pos.Column(), err)
+	fmt.Printf("[ERROR] Semsis failed in %s at %d:%d - %s\n", s.path, pos.Line(), pos.Column(), err)
 	s.errors = append(s.errors, &SemanticalError{At: n, Err: err})
 }
 

@@ -1761,7 +1761,7 @@ func parseExpressions(input string) (ast.Node, error) {
 	p := parser.New(l)
 	ast := p.ParseExpressions()
 
-	s := semantic.New()
+	s := semantic.New("", nil)
 	s.AnalyseExpressions(ast)
 
 	if len(s.Errors()) != 0 {

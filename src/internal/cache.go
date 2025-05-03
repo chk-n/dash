@@ -15,6 +15,10 @@ func (c *Cache[K, V]) Get(k K) (V, bool) {
 	return v, ok
 }
 
+func (c *Cache[K, V]) GetAll() map[K]V {
+	return c.m
+}
+
 func (c *Cache[K, V]) Set(k K, v V) {
 	c.m[k] = v
 }
