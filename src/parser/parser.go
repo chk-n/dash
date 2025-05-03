@@ -263,6 +263,35 @@ func (p *Parser) ParseLibrary() *ast.Library {
 	return lib
 }
 
+func (p *Parser) ParseImports() *ast.Library {
+	if !p.curTokenIs(token.LIBRARY) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib := &ast.Library{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.MAIN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+
+	for !p.curTokenIs(token.EOF) {
+		switch p.curToken.Type {
+		case token.USE:
+			lib.Imports = append(lib.Imports, p.parseUseStatement())
+		case token.PUBLIC:
+			p.nextToken()
+		default:
+			p.nextToken()
+		}
+	}
+	return lib
+
+}
+
 func (p *Parser) ParseREPL() *ast.Library {
 	lib := &ast.Library{
 		Token: token.Token{Type: token.LIBRARY, Literal: "lib"},
