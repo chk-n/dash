@@ -1914,7 +1914,11 @@ func (p *Parser) parseType() types.TypeSpec {
 	case token.FUNCTION:
 		typ = p.parseFunctionType()
 	case token.IDENT:
-		typ = p.parseUnknownNamedType()
+		if p.peekTokenIs(token.DOT) {
+			typ = p.parseImportedNamedType()
+		} else {
+			typ = p.parseUnknownNamedType()
+		}
 	case token.ASTERISK:
 		typ = p.parsePointerType()
 	case token.MEMORYTYPE:
@@ -2026,6 +2030,16 @@ func (p *Parser) parsePrimitiveType() types.TypeSpec {
 	defer p.nextToken()
 
 	return types.TokenToType(p.curToken)
+}
+
+func (p *Parser) parseImportedNamedType() types.TypeSpec {
+	typ := &types.ImportedNamed{Lib: p.curToken.Literal}
+	p.nextToken()
+	// wat "." token
+	p.nextToken()
+	typ.Typ = p.parseType()
+
+	return typ
 }
 
 func (p *Parser) parseUnknownNamedType() types.TypeSpec {

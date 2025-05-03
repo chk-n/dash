@@ -10,70 +10,92 @@ func TestType(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
+		want  string
 	}{
 		{
 			name:  "simple array",
 			input: "[]i64",
+			want:  "[]i64",
 		},
 		{
 			name:  "simple array - optional",
 			input: "?[]i64",
+			want:  "?[]i64",
 		},
 		{
 			name:  "optional array pointer",
 			input: "?*[]i64",
+			want:  "?*[]i64",
 		},
 		{
 			name:  "pointer to optional array",
 			input: "*?[]i64",
+			want:  "*?[]i64",
 		},
 		{
 			name:  "array with size",
 			input: "[5]i64",
+			want:  "[5]i64",
 		},
 		{
 			name:  "2d array",
 			input: "[][]i64",
+			want:  "[][]i64",
+		},
+		{
+			name:  "array imported type",
+			input: "[]ast.token",
+			want:  "[]ast.unknown<token>",
 		},
 		{
 			name:  "function empty",
 			input: "fn()",
+			want:  "fn()",
 		},
 		{
 			name:  "function with return",
 			input: "fn()string",
+			want:  "fn()string",
 		},
 		{
 			name:  "function with multi return",
 			input: "fn()i64,i64",
+			want:  "fn()i64,i64",
 		},
 		{
 			name:  "function with singe param",
 			input: "fn(string)",
+			want:  "fn(string)",
 		},
 		{
 			name:  "function with params",
 			input: "fn(i64,string)",
+			want:  "fn(i64,string)",
 		},
 		{
 			name:  "simple pointer type",
 			input: "*[]i64",
+			want:  "*[]i64",
 		},
 		{
 			name:  "function pointer type",
 			input: "*fn(string)i64",
+			want:  "*fn(string)i64",
 		},
 		{
 			name:  "memory",
 			input: "memory<string>",
+			want:  "memory<string>",
 		},
 		{
 			name:  "memory nested",
 			input: "memory<[]i64>",
+			want:  "memory<[]i64>",
 		},
 		{
 			name:  "char",
 			input: "char",
+			want:  "char",
 		},
 	}
 
@@ -82,7 +104,7 @@ func TestType(t *testing.T) {
 			p := getParser(tc.input)
 			typ := p.parseType()
 
-			if tc.input != typ.String() {
+			if tc.want != typ.String() {
 				t.Errorf("want %s but got %s\n%v", tc.input, typ.String(), typ)
 			}
 		})

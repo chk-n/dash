@@ -714,6 +714,23 @@ func (t *Dirty) Equal(other TypeSpec) bool {
 	return t.T.Equal(otherD.T)
 }
 
+type ImportedNamed struct {
+	Lib string
+	Typ TypeSpec
+}
+
+func (t *ImportedNamed) Type() TypeSpec { return t }
+func (t *ImportedNamed) Ident() string {
+	return t.Lib + "." + t.Typ.Ident()
+}
+func (t *ImportedNamed) String() string {
+	return t.Lib + "." + t.Typ.String()
+}
+func (t *ImportedNamed) Equal(other TypeSpec) bool {
+	otherUn, ok := other.(*ImportedNamed)
+	return ok && t.Ident() == otherUn.Ident()
+}
+
 // ------------- //
 // Special types //
 // ------------- //
