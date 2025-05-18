@@ -1209,7 +1209,7 @@ func (g *Generator) buildInternal(node ast.Node, name string) llvm.Value {
 			case g.ctx.FloatType(), g.ctx.DoubleType():
 				return g.builder.CreateFNeg(r, "fneg")
 			}
-		case token.NOT:
+		case token.BANG:
 			return g.builder.CreateNot(r, "not")
 		case token.AMPERSAND:
 			// switch n.Right.(type) {
