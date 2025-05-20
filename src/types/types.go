@@ -450,8 +450,7 @@ func (t *Function) ReturnTypesString() []string {
 	}
 	return typs
 }
-func (t *Function) IsOptional() bool { return false }
-func (t *Function) Ident() string    { return t.String() }
+func (t *Function) Ident() string { return t.String() }
 func (t *Function) String() string {
 	var out bytes.Buffer
 	out.WriteString("fn(")
