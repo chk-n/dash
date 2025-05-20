@@ -157,16 +157,16 @@ func findProjectRoot(startDir string) (string, error) {
 
 	currentDir := absDir
 	for {
-		// return root dir if contains dash.yaml
-		dashYamlPath := filepath.Join(currentDir, "dash.yaml")
-		if _, err := os.Stat(dashYamlPath); err == nil {
+		// return root dir if contains dash.toml
+		dashTomlPath := filepath.Join(currentDir, "dash.toml")
+		if _, err := os.Stat(dashTomlPath); err == nil {
 			return currentDir, nil
 		}
 
 		// climb up until root
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
-			return "", fmt.Errorf("project root not found: no dash.yaml file found in directory tree from %s", startDir)
+			return "", fmt.Errorf("project root not found: no dash.toml file found in directory tree from %s", startDir)
 		}
 		currentDir = parentDir
 	}
