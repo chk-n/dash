@@ -1,3 +1,3 @@
 module dash-lang.io
 
-go 1.21.7
+go 1.24
