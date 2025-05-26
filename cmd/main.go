@@ -7,6 +7,7 @@ import (
 
 	"dash-lang.io/src/builder"
 	"dash-lang.io/src/evaluator"
+	"dash-lang.io/src/repl"
 	"dash-lang.io/src/tester"
 	// "dash-lang.io/src/repl"
 )
@@ -38,7 +39,7 @@ func main() {
 	case "version":
 		fmt.Printf("dash v%s %s/%s\n", version, osName, archName)
 	case "play":
-		// repl.Start(os.Stdin, os.Stdout)
+		repl.Start(os.Stdin, os.Stdout)
 	case "test":
 		testCmd.Parse(os.Args[2:])
 		dir := "."
