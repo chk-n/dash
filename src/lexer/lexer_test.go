@@ -107,7 +107,6 @@ func TestNextToken(t *testing.T) {
 				_
 				..
 				...
-				=>
 				++
 				--
 				@
@@ -156,7 +155,6 @@ func TestNextToken(t *testing.T) {
 				{"_", token.WILDCARD},
 				{"..", token.RANGE},
 				{"...", token.ELLIPSIS},
-				{"=>", token.ARROW},
 				{"++", token.INCR},
 				{"--", token.DECR},
 				{"@", token.AT},
