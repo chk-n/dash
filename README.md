@@ -1,4 +1,4 @@
-⚠️ NOTE: The language is currently in pre-alpha stage
+⚠️ NOTE: The language is currently in pre-alpha stage. I am currently bootstrapping the compiler
 
 ```
 ██████╗  █████╗ ███████╗██╗  ██╗
@@ -16,7 +16,7 @@ A simple, safe and productive programming language for creating fast and reliabl
 - simple language
 - data oriented
 - strongly typed and compiled
-- no GC, no manual memory management 
+- memory safe
 - immutable data with efficient
 	- data construction
  	- data usage (generic structs)
@@ -39,23 +39,11 @@ A simple, safe and productive programming language for creating fast and reliabl
 - and many more small features :)
 
 ## Installation
-Currently only macos arm64 is supported. 
 
-### MacOS
-1. Install llvm version 18
-2. Download `dash-<VERSION>-darwin-arm64.pkg` from release and install it
-3. Test installation worked by running `dash play`
-
-## Future
-- memory management
-- import and export libraries
-- error handling
-- parametric polymorphism
-- ad hoc polymorphism 
-- built-in build system
-- built-in testing framework (fuzzing, property-based testing)
-- LSP
-- concurrency
+Run in project root directory to build interpreter:
+```
+go build cmd/main.go
+```
 
 ## Example
 
@@ -68,7 +56,3 @@ fn main() {
     fmt.println("Hello, World!")
 }
 ```
-
-## Current status
-- Only MacOS aarch64 supported and tested
-- NOT SAFE (yet), no bound checking (requires error handling)
