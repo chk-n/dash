@@ -32,7 +32,7 @@ jobs:
         ./scripts/macos/install_macos.sh
         
     - name: Verify Dash
-      run: dash version
+      run: dsc version
       
     - name: Test
       run: make test
