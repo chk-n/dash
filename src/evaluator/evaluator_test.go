@@ -1585,12 +1585,11 @@ func TestVariableScoping(t *testing.T) {
 		{
 			name: "closure variable capture",
 			prog: `
-			let x = 1
-			fn make_adder() fn(i64) i64 {
+			fn make_adder(x i64) fn(i64) i64 {
 				let y = 2
 				return fn(z i64) i64 { return x + y + z }
 			}
-			let add = make_adder()
+			let add = make_adder(1)
 			add(3)`,
 			want: &Return{[]any{int64(6)}},
 		},
