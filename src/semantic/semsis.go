@@ -14,11 +14,6 @@ import (
 	"dash-lang.io/src/types"
 )
 
-// TODO: fix difference build vs analyse vs infer functions
-// build => prepares symbol table
-// infer => infers type
-// analyse => perform semantic analysis
-
 type scope uint
 
 const (
@@ -447,11 +442,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.analyse(n.Block, "")
 
 	case *ast.StructLiteral:
-		// As we only need this for escape analysis we use the variable name as key
-		// If literal returned directly or free floating on a block we ignore
-		if name != "" {
-			s.expSt.Set(name, n)
-		}
 		// Infer types of anonymous structs
 		if n.Name == nil {
 			var typ types.Struct
@@ -625,12 +615,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.ArrayLiteral:
 		if len(n.Values) == 0 {
 			return
-		}
-
-		// As we only store need this for escape analysis we use the variable name as key
-		// If literal returned directly or free floating on a block we ignore
-		if name != "" {
-			s.expSt.Set(name, n)
 		}
 
 		for _, el := range n.Values {

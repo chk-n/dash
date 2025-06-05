@@ -1505,10 +1505,6 @@ func (l *Library) Pos() token.Pos {
 	return l.Token.Position
 }
 
-func (f *FileFormat) Pos() token.Pos {
-	return f.Token.Position
-}
-
 func (s *UseStatement) Pos() token.Pos {
 	return s.Token.Position
 }

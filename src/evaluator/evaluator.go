@@ -86,7 +86,6 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 			e.ctxs[libName] = ctxLib
 		}
 	}
-	// TODO: handle generic structs
 
 	// initialise types
 	for _, n := range n.Nodes {
