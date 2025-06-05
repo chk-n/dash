@@ -225,7 +225,12 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 	case *ast.StringLiteral:
 		return n.TokenLiteral()
 	case *ast.CharacterLiteral:
-		return rune(n.Value)
+		switch n.T.(type) {
+		case *types.Byte:
+			return byte(n.Value)
+		default:
+			return rune(n.Value)
+		}
 	case *ast.IntegerLiteral:
 		return n.Value
 	case *ast.BooleanLiteral:
@@ -284,7 +289,8 @@ func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Conte
 		return e.evalIntCast(t, val)
 	case *types.Byte:
 		return e.evalByteCast(t, val)
-	// case *types.Char:
+	case *types.Char:
+		return e.evalCharCast(t, val)
 	case *types.String:
 		return e.evalStringCast(t, val)
 	case *types.Array:
@@ -334,6 +340,15 @@ func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 }
 
 // Char casting
+func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
+	switch v := v.(type) {
+	case byte:
+		return rune(v)
+	case int64:
+		return rune(v)
+	}
+	panic("invalid cast to char")
+}
 
 // String casting
 func (e *Evaluator) evalStringCast(t *types.String, v any) any {
@@ -356,9 +371,9 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 	switch t.T.(type) {
 	case *types.Byte:
 		str := v.(string)
-		newArr := make([]any, len(str))
-		for i, ch := range str {
-			newArr[i] = ch
+		newArr := make([]byte, len(str))
+		for i := range str {
+			newArr[i] = str[i]
 		}
 		return newArr
 	}
@@ -925,6 +940,14 @@ func (e *Evaluator) evalInfixAdd(l, r any) (res any, err error) {
 	case string:
 		var r_ string
 		r_, err = castTo[string](r)
+		res = l + r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l + r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
 		res = l + r_
 	}
 

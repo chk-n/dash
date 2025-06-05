@@ -647,10 +647,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 	case *ast.DotExpression:
 		s.analyse(n.Left, "")
-
 		switch left := n.Left.Type().(type) {
 		case *types.Array:
 			s.analyse(n.Right, "")
+			n.SetType(n.Right.Type())
 		case *types.Enum:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
@@ -658,6 +658,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				panic("todo: add semsis error")
 			}
+			n.SetType(n.Right.Type())
 		case *types.Struct:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
@@ -675,6 +676,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
 		case *types.Pointer:
 			switch left := left.T.(type) {
 			case *types.Struct:
@@ -691,6 +693,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 			}
 
+			n.SetType(n.Right.Type())
 		case *types.Definition, *types.Alias:
 			u := types.GetUnderlyingType(left)
 			structType, ok := u.(*types.Struct)
@@ -708,6 +711,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
 		case *types.AbstractStruct:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
@@ -719,10 +723,30 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			case *ast.FunctionCallExpression:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
+		case *types.ImportedNamed:
+			var name string
+			if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+				name = fn.TokenLiteral()
+			} else {
+				name = n.Right.String()
+			}
+			// set type of expression
+			typ := s.importedSt[n.Left.String()][name]
+			switch typ := typ.(type) {
+			case *types.Function:
+				n.SetType(&types.Multi{Ts: typ.Ret})
+			default:
+				n.SetType(typ)
+			}
+
 		}
-		n.SetType(n.Right.Type())
 	case *ast.IndexExpression:
 		s.analyse(n.Left, "")
+		// another error occured
+		if n.Type() == nil {
+			return
+		}
 		switch typ := n.Left.Type().(type) {
 		case nil:
 			panic("this is a compiler error. please report")
@@ -809,7 +833,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		} else {
 			s.analyse(n.Scrutinee, "")
 		}
-
 		sT := n.Scrutinee.Type()
 		// this means scrutinee was not defined or
 		// another error occured
@@ -817,7 +840,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			return
 		}
 
-		_, isUnion := n.Scrutinee.Type().(*types.Union)
 		for _, c := range n.Cases {
 			s.analyse(c.Predicate, "")
 			cT := c.Predicate.Type()
@@ -829,6 +851,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// As the types match, we can replace type of predicate.
 			// This is required to be able to, for example, match byte
 			// with char literals
+			_, isUnion := n.Scrutinee.Type().(*types.Union)
 			if !isUnion {
 				c.Predicate.SetType(sT)
 			}
@@ -1284,6 +1307,10 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 			case *ast.IndexExpression, *ast.SliceExpression, *ast.DotExpression:
 				exp := decl.(ast.Expression)
 				s.analyse(exp, "")
+				if exp.Type() == nil {
+					// another error occured
+					return
+				}
 				if _, ok := val.(ast.Literal); ok {
 					s.analyseLiteralWithType(val, exp.Type())
 					val.SetType(exp.Type())

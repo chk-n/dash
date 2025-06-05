@@ -143,7 +143,7 @@ func TestCharOperations(t *testing.T) {
 		{
 			name: "char arithmetic",
 			prog: "'a' + byte(1)",
-			want: 'b',
+			want: byte('b'),
 		},
 		// {
 		// 	name: "char to string",

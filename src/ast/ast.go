@@ -1044,25 +1044,19 @@ type IndexExpression struct {
 	Token   token.Token // [
 	Left    Expression
 	Indices []Expression
-
-	// set by semsis
-	T types.TypeSpec
 }
 
 func (e *IndexExpression) expressionNode() {}
 func (e *IndexExpression) SetType(t types.TypeSpec) {
-	e.T = t
+	panic("this method should not be used")
 }
 
 // Returns type that a variable would have when index expression executed
 // v [][]i64 = a[0][0]
 // Type() == i64
 func (e *IndexExpression) Type() types.TypeSpec {
-	if e.T == nil {
-		depth := len(e.Indices)
-		return e.GetTypeAt(depth)
-	}
-	return e.T
+	depth := len(e.Indices)
+	return e.GetTypeAt(depth)
 }
 
 // a = [[1,2], [3,4]]
@@ -1097,7 +1091,7 @@ start:
 		depth--
 		goto start
 	}
-	panic("attempted to access index expression type at an invalid index")
+	return nil
 }
 func (e *IndexExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *IndexExpression) String() string {
@@ -1590,6 +1584,10 @@ func (s *StructFieldStatement) Pos() token.Pos {
 		return s.Name.Pos()
 	}
 	return token.Pos(0)
+}
+
+func (s *ErrorStatement) Pos() token.Pos {
+	return s.Token.Position
 }
 
 func (s *DeferStatement) Pos() token.Pos {
