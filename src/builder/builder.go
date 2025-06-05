@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"dash-lang.io/src/ast"
-	"dash-lang.io/src/internal"
 	"dash-lang.io/src/lexer"
 	"dash-lang.io/src/merger"
 	"dash-lang.io/src/parser"
@@ -96,14 +95,18 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 
 		// extract all global exported types from imported libs
 		// and create a map for semsis
-		typeTable := internal.NewCache[string, types.TypeSpec]()
-		for _, importStmt := range lib.Imports {
-			importName := "/Users/personal/Documents/GitHub/dash/src/" + importStmt.Name.TokenLiteral()
+		typeTable := make(map[string]map[string]types.TypeSpec)
+		for _, n := range lib.Nodes {
+			switch lib := n.(type) {
+			case *ast.UseStatement:
+				importName := "/Users/personal/Documents/GitHub/dash/src/" + lib.Name.TokenLiteral()
 
-			if importedLib, ok := libs[importName]; ok {
-				extractPublicTypes(importedLib, typeTable)
-			} else {
-				panic("unable to find libary " + importName)
+				importedLib, ok := libs[importName]
+				if !ok {
+					panic("unable to find libary " + importName)
+				}
+				typeTable[importName] = importedLib.Exports()
+
 			}
 		}
 
@@ -249,8 +252,11 @@ func buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dep
 				return nil, err
 			}
 
-			for _, imp := range lib.Imports {
-				importMap[dir] = append(importMap[dir], "/Users/personal/Documents/GitHub/dash/src/"+imp.Name.TokenLiteral())
+			for _, n := range lib.Nodes {
+				switch imp := n.(type) {
+				case *ast.UseStatement:
+					importMap[dir] = append(importMap[dir], "/Users/personal/Documents/GitHub/dash/src/"+imp.Name.TokenLiteral())
+				}
 			}
 		}
 	}
@@ -279,51 +285,4 @@ func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) 
 
 	parent.Visitied = true
 	visit(parent)
-}
-
-func extractPublicTypes(lib *ast.Library, typeTable *internal.Cache[string, types.TypeSpec]) {
-	// BUG: if we only use type name then its not visible we also need the lib name e.g. name.type
-	// but then we also need to modify semsis
-	for _, typeDef := range lib.TypeDefinitions {
-		if typeDef.Public {
-			typeTable.Set(typeDef.Name.String(), typeDef.T)
-		}
-	}
-
-	for _, typeAlias := range lib.TypeAliases {
-		if typeAlias.Public {
-			typeTable.Set(typeAlias.Name.String(), typeAlias.T)
-		}
-	}
-
-	for _, genericStruct := range lib.GenericStructs {
-		if genericStruct.Public {
-			typeTable.Set(genericStruct.Name.String(), genericStruct.T)
-		}
-	}
-
-	for _, structDef := range lib.Structs {
-		if structDef.Public {
-			typeTable.Set(structDef.Name.String(), structDef.T)
-		}
-	}
-
-	for _, enum := range lib.Enums {
-		if enum.Public {
-			typeTable.Set(enum.Name.String(), enum.T)
-		}
-	}
-
-	for _, union := range lib.Unions {
-		if union.Public {
-			typeTable.Set(union.Name.String(), union.T)
-		}
-	}
-
-	for _, err := range lib.Errors {
-		if err.Public {
-			errType := &types.Error{Name: err.Name.String()}
-			typeTable.Set(err.Name.String(), errType)
-		}
-	}
 }

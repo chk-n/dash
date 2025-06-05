@@ -6,14 +6,15 @@ import (
 	"io"
 	"strings"
 
-	"dash-lang.io/src/generator"
+	"dash-lang.io/src/ast"
+	"dash-lang.io/src/evaluator"
 	"dash-lang.io/src/lexer"
 	"dash-lang.io/src/parser"
 	"dash-lang.io/src/semantic"
-	// "dash-lang.io/src/transformer"
 )
 
-const WELCOME = `██████╗  █████╗ ███████╗██╗  ██╗
+const WELCOME = `
+██████╗  █████╗ ███████╗██╗  ██╗
 ██╔══██╗██╔══██╗██╔════╝██║  ██║
 ██║  ██║███████║███████╗███████║
 ██║  ██║██╔══██║╚════██║██╔══██║
@@ -58,35 +59,54 @@ func Start(in io.Reader, out io.Writer) {
 		l := lexer.New("", lines.String()+line, lcfg)
 		p := parser.New(l)
 
-		script := p.ParseREPL()
+		lib := p.ParseREPL()
+		// remove main fn
+		script := &ast.Library{Token: lib.Token, Name: lib.Name}
+		for _, n := range lib.Nodes {
+			switch n := n.(type) {
+			case *ast.FunctionExpression:
+				if n.Name.Value != "main" {
+					script.Nodes = append(script.Nodes, n)
+					continue
+				}
+				for _, stmt := range n.Body.Statements {
+					script.Nodes = append(script.Nodes, stmt)
+				}
+			default:
+				script.Nodes = append(script.Nodes, n)
+			}
+		}
 
 		if len(p.Errors()) != 0 {
-			for _, msg := range p.Errors() {
-				fmt.Fprintf(out, "Parser error: %s\n", msg)
-			}
-			continue
+			fmt.Fprintln(out, strings.Join(p.Errors(), "\n"))
 		}
 
-		s := semantic.New("", nil)
+		s := semantic.New("REPL", nil)
 		s.Analyse(script)
 		if len(s.Errors()) != 0 {
-			fmt.Fprintf(out, "Semantic analysis error: %s", s.Errors())
-		}
-
-		// t := transformer.New()
-		// t.Tranform(script)
-
-		cfg := &generator.Config{
-			// leave Triple nil to use system native
-			Mode:      generator.REPL,
-			ModuleTag: "repl",
-		}
-		c := generator.New(cfg)
-		err := c.GenerateAndExec(script)
-		if err != nil {
-			fmt.Fprintf(out, "Compilation error: %s\n", err)
+			fmt.Fprintln(out, strings.Join(s.Errors(), "\n"))
 			continue
 		}
+
+		e := evaluator.New(nil)
+		val := e.Eval(script, evaluator.NewContext(nil))
+		switch val := val.(type) {
+		case *evaluator.Return:
+			if len(val.Values) == 0 {
+				break
+			}
+			// check if error
+			switch val := val.Values[0].(type) {
+			case *evaluator.Error:
+				fmt.Fprintf(out, "[ERROR] %v\n", val.Err)
+				continue
+			}
+			fmt.Fprintf(out, "%v\n", val.Values...)
+		default:
+			fmt.Fprintf(out, "%v\n", val)
+
+		}
+
 		// only add line if no errors
 		lines.WriteString(line + "\n")
 	}

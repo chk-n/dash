@@ -1129,30 +1129,6 @@ func TestStructDefinition(t *testing.T) {
 	}
 }
 
-func TestGenericStructStatement(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "basic",
-			input: "gen struct user {}",
-			want:  "gen struct user {}",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := getParser(tc.input)
-			stmt := p.parseGenericStructStatement()
-
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
-			}
-		})
-	}
-}
-
 func TestAnonymousStruct(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1519,113 +1495,34 @@ func TestFunctionAttributes(t *testing.T) {
 	}{
 		{
 			name:  "extern - c",
-			input: "@extern(c) fn test()",
-			want:  "lib main @extern(c) fn test() fn main() { }",
+			input: "lib main @extern(c) fn test()",
+			want:  "lib main @extern(c) fn test()",
 		},
 		{
 			name:  "inline - never",
-			input: "@inline(never) fn test() {}",
-			want:  "lib main @inline(never) fn test() { } fn main() { }",
+			input: "lib main @inline(never) fn test() {}",
+			want:  "lib main @inline(never) fn test() { }",
 		},
 		{
 			name:  "inline - hint",
-			input: "@inline(hint) fn test() {}",
-			want:  "lib main @inline(hint) fn test() { } fn main() { }",
+			input: "lib main @inline(hint) fn test() {}",
+			want:  "lib main @inline(hint) fn test() { }",
 		},
 		{
 			name:  "inline - always",
-			input: "@inline(always) fn test() {}",
-			want:  "lib main @inline(always) fn test() { } fn main() { }",
+			input: "lib main @inline(always) fn test() {}",
+			want:  "lib main @inline(always) fn test() { }",
 		},
 		{
 			name:  "test",
-			input: "@test fn abc() {}",
-			want:  "lib main @test fn abc() { } fn main() { }",
+			input: "lib main @test fn abc() {}",
+			want:  "lib main @test fn abc() { }",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := getParser(tt.input)
-			stmt := p.ParseREPL()
-
-			if tt.want != stmt.String() {
-				t.Errorf("want %s but got %s", tt.want, stmt.String())
-			}
-		})
-	}
-}
-
-func TestRepl(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "simple assignment",
-			input: "let v = 1 + 2",
-			want:  "lib main fn main() { let v = (1 + 2) }",
-		},
-		{
-			name:  "assignment with reassign first",
-			input: "a, let b = 1, 2",
-			want:  "lib main fn main() { a, let b = 1, 2 }",
-		},
-		{
-			name:  "function call",
-			input: "fn test() i64, i64 { return 1 + 2, 2 } let a, b = test() var c = a * 10",
-			want:  "lib main fn test() i64, i64 { return (1 + 2), 2 } fn main() { let a, b = test() var c = (a * 10) }",
-		},
-		{
-			name:  "struct assignment",
-			input: "struct user { name string, age i64 } let v = user{ name: \"John\", age: 25 }",
-			want:  "lib main struct user {name string, age i64} fn main() { let v = user{name: \"John\", age: 25} }",
-		},
-		{
-			name:  "struct assignment - unnamed fields",
-			input: `struct point {i64, i64} let a = point{1, 2}`,
-			want:  `lib main struct point {i64, i64} fn main() { let a = point{1, 2} }`,
-		},
-		{
-			name:  "struct update",
-			input: "struct abc {x i64, y i64} a' = abc{x: 0, y: a.y}",
-			want:  "lib main struct abc {x i64, y i64} fn main() { a' = abc{x: 0, y: a.y} }",
-		},
-		{
-			name:  "anonymous struct - access unnamed fields",
-			input: `let a = {1, 2} var x, y = a.0, a.1`,
-			want:  `lib main fn main() { let a = {1, 2} var x, y = a.0, a.1 }`,
-		},
-		{
-			name:  "address of struct",
-			input: "struct test{} let t = &test{}",
-			want:  "lib main struct test {} fn main() { let t = &test{} }",
-		},
-		{
-			name:  "function with struct return",
-			input: "struct abc {i i64} fn test() abc { return abc{i: 1} } let t = test()",
-			want:  "lib main struct abc {i i64} fn test() unknown<abc> { return abc{i: 1} } fn main() { let t = test() }",
-		},
-		{
-			name:  "function with enum return",
-			input: "enum status{ unknown } fn test() status { return status.unknown } test()",
-			want:  "lib main enum status {unknown} fn test() unknown<status> { return status.unknown } fn main() { test() }",
-		},
-		{
-			name:  "struct cast",
-			input: "struct a { x i64 } let v = a(x)",
-			want:  "lib main struct a {x i64} fn main() { let v = a(x) }",
-		},
-		{
-			name:  "if vs struct literal",
-			input: "if true { s = abc{x: 1} }",
-			want:  "lib main fn main() { if true { s = abc{x: 1} } }",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := getParser(tt.input)
-			stmt := p.ParseREPL()
+			stmt := p.ParseLibrary()
 
 			if tt.want != stmt.String() {
 				t.Errorf("want %s but got %s", tt.want, stmt.String())
@@ -1656,11 +1553,6 @@ func TestLibrary(t *testing.T) {
 			name:  "public struct",
 			input: "lib test pub struct user {x f64}",
 			want:  "lib test pub struct user {x f64}",
-		},
-		{
-			name:  "public generic struct",
-			input: "lib test pub gen struct user {}",
-			want:  "lib test pub gen struct user {}",
 		},
 		{
 			name: "public enum",

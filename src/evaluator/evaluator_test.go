@@ -1759,16 +1759,33 @@ func parseExpressions(input string) (ast.Node, error) {
 	l := lexer.New("", input, lcfg)
 
 	p := parser.New(l)
-	ast := p.ParseExpressions()
+	lib := p.ParseREPL()
 
+	// sanity check
 	s := semantic.New("", nil)
-	s.AnalyseExpressions(ast)
-
-	if len(s.Errors()) != 0 {
-		return nil, errors.New(strings.Join(s.Errors(), "\n"))
+	s.Analyse(lib)
+	if len(s.ErrorsFmt()) != 0 {
+		return nil, errors.New(strings.Join(s.ErrorsFmt(), "\n"))
 	}
 
-	return ast, nil
+	// remove main fn
+	lib1 := &ast.Library{Token: lib.Token, Name: lib.Name}
+	for _, n := range lib.Nodes {
+		switch n := n.(type) {
+		case *ast.FunctionExpression:
+			if n.Name.Value != "main" {
+				lib1.Nodes = append(lib1.Nodes, n)
+				continue
+			}
+			for _, stmt := range n.Body.Statements {
+				lib1.Nodes = append(lib1.Nodes, stmt)
+			}
+		default:
+			lib1.Nodes = append(lib1.Nodes, n)
+		}
+	}
+
+	return lib1, nil
 }
 
 func NewEvaluator() *Evaluator {

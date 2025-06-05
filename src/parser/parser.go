@@ -205,7 +205,6 @@ func (p *Parser) nextToken() {
 }
 
 func (p *Parser) ParseLibrary() *ast.Library {
-
 	if !p.curTokenIs(token.LIBRARY) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -223,27 +222,25 @@ func (p *Parser) ParseLibrary() *ast.Library {
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
 		case token.USE:
-			lib.Imports = append(lib.Imports, p.parseUseStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
-			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
-			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
-		case token.GENERIC:
-			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
 		case token.STRUCT:
-			lib.Structs = append(lib.Structs, p.parseStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
-			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+			lib.Nodes = append(lib.Nodes, p.parseEnumStatement())
 		case token.UNION:
-			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
 		case token.LET:
 			assgn := p.parseAssignmentStatement().(*ast.AssignmentStatement)
-			lib.GlobalVariables = append(lib.GlobalVariables, assgn)
+			lib.Nodes = append(lib.Nodes, assgn)
 		case token.VAR:
 			// TODO: throw proper error
 			panic("var not allowed in global lib scope")
 		case token.ERROR:
-			lib.Errors = append(lib.Errors, p.parseErrorStatement())
+			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
 		case token.COMMENT:
 			// ignore comments for now
 			p.nextToken()
@@ -252,7 +249,7 @@ func (p *Parser) ParseLibrary() *ast.Library {
 			p.attributes.Push(attr)
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
-			lib.Functions = append(lib.Functions, exp)
+			lib.Nodes = append(lib.Nodes, exp)
 		case token.PUBLIC:
 			p.nextToken()
 		default:
@@ -263,6 +260,7 @@ func (p *Parser) ParseLibrary() *ast.Library {
 	return lib
 }
 
+// Only parses import statements of a lib, ignoring all other tokens
 func (p *Parser) ParseImports() *ast.Library {
 	if !p.curTokenIs(token.LIBRARY) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -281,7 +279,7 @@ func (p *Parser) ParseImports() *ast.Library {
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
 		case token.USE:
-			lib.Imports = append(lib.Imports, p.parseUseStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.PUBLIC:
 			p.nextToken()
 		default:
@@ -292,6 +290,10 @@ func (p *Parser) ParseImports() *ast.Library {
 
 }
 
+// Parsing for REPL automatically creates a main function and adds
+// statements and expressions within the function body except for
+// structs, unions, enums, type defs, type aliases and functons,
+// which get added to global library scope
 func (p *Parser) ParseREPL() *ast.Library {
 	lib := &ast.Library{
 		Token: token.Token{Type: token.LIBRARY, Literal: "lib"},
@@ -308,52 +310,31 @@ func (p *Parser) ParseREPL() *ast.Library {
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
 		case token.TYPE:
-			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
-			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
 		case token.GENERIC:
-			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseGenericStructStatement())
 		case token.STRUCT:
-			lib.Structs = append(lib.Structs, p.parseStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
-			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+			lib.Nodes = append(lib.Nodes, p.parseEnumStatement())
 		case token.UNION:
-			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
 		case token.ERROR:
-			lib.Errors = append(lib.Errors, p.parseErrorStatement())
+			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
 		case token.AT:
 			attr := p.parseAttribute()
 			p.attributes.Push(attr)
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
-			lib.Functions = append(lib.Functions, exp)
+			lib.Nodes = append(lib.Nodes, exp)
 		default:
 			mainFn.Body.Statements = append(mainFn.Body.Statements, p.parseStatementInBlock())
 		}
 	}
-	lib.Functions = append(lib.Functions, mainFn)
+	lib.Nodes = append(lib.Nodes, mainFn)
 	return lib
-}
-
-func (p *Parser) ParseExpressions() *ast.Evaluator {
-	blk := &ast.Evaluator{}
-	for !p.curTokenIs(token.EOF) {
-		switch p.curToken.Type {
-		case token.STRUCT:
-			blk.Structs = append(blk.Structs, p.parseStructStatement())
-		case token.ENUM:
-			blk.Enums = append(blk.Enums, p.parseEnumStatement())
-		case token.TYPE:
-			blk.Types = append(blk.Types, p.parseTypeDefinitionStatement())
-		case token.UNION:
-			blk.Unions = append(blk.Unions, p.parseUnionStatement())
-		case token.ERROR:
-			blk.Errors = append(blk.Errors, p.parseErrorStatement())
-		default:
-			blk.Nodes = append(blk.Nodes, p.parseStatementInBlock())
-		}
-	}
-	return blk
 }
 
 func (p *Parser) ParseExpression() ast.Node {

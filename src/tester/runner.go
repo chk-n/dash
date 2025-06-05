@@ -57,8 +57,12 @@ func (tr *TestRunner) RunAll() error {
 		// Create new context for test
 		ctx := evaluator.NewContext(nil)
 		eval.InitialiseLib(lib, ctx)
-		for _, fn := range lib.Functions {
-			if isTestFunction(fn) {
+		for _, n := range lib.Nodes {
+			switch fn := n.(type) {
+			case *ast.FunctionExpression:
+				if !isTestFunction(fn) {
+					continue
+				}
 				result := tr.runTest(fn, eval, ctx)
 				tr.results = append(tr.results, result)
 				if result.Passed {

@@ -3,7 +3,6 @@ package semantic
 import (
 	"testing"
 
-	"dash-lang.io/src/ast"
 	"dash-lang.io/src/lexer"
 	"dash-lang.io/src/parser"
 )
@@ -394,15 +393,10 @@ func TestStructDefinition(t *testing.T) {
 			input: "struct test{a i64, b ?test} let t = test{a: 1}",
 			want:  "lib main struct test {a i64, b ?test} pub fn main() { let t test = test{a i64: 1} }",
 		},
-		// {
-		// 	name:  "struct definition, one optional field, not set",
-		// 	input: "struct test{a ?i64} let t = test{}",
-		// 	want:  "lib main struct test {a ?test} pub fn main() { let t test = test{} }",
-		// },
 		{
 			name:   "struct definition - recursive, illegal",
 			input:  "struct test{a i64, b test} let t = test{a: 1, b: test{a: 1}}",
-			errors: []string{"field 'b' in struct 'test' cannot reference itself (unless its an optional)", "struct field 'b' not defined"},
+			errors: []string{"field 'b' in struct 'test' cannot reference itself", "struct field 'b' not defined"},
 		},
 		{
 			name:  "struct definition - recursive pointer optional",
@@ -535,70 +529,6 @@ func TestSliceExpression(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
-func TestGenericStruct(t *testing.T) {
-	// TODO: test nested, recursive, out of order,
-	// TODO: test no cycle, no struct def used
-	// TODO: test passing struct to fn argument with alias as type
-	tests := []testCase{
-		{
-			name:  "recursive optional",
-			input: "gen struct test {a i64, b ?test}",
-			want:  "lib main gen struct test {a i64, b ?test} pub fn main() { }",
-		},
-		{
-			name:  "alias definition - recursive pointer optional",
-			input: "gen struct test {a i64, b *?test}",
-			want:  "lib main gen struct test {a i64, b *?test} pub fn main() { }",
-		},
-		{
-			name:   "recursive, illegal",
-			input:  "gen struct test {a i64, b test}",
-			errors: []string{"field 'b' in struct 'test' cannot reference itself (unless its an optional)"},
-		},
-		{
-			name:  "out of order",
-			input: "gen struct abc {a xyz} gen struct xyz {x i64}",
-			want:  "lib main gen struct abc {a xyz} gen struct xyz {x i64} pub fn main() { }",
-		},
-		{
-			name:  "in order",
-			input: "gen struct xyz {x i64} gen struct abc {a xyz}",
-			want:  "lib main gen struct xyz {x i64} gen struct abc {a xyz} pub fn main() { }",
-		},
-		{
-			name:   "recursive out of order",
-			input:  "gen struct abc {b xyz} gen struct xyz {a abc} ",
-			errors: []string{"cyclical type declarations: abc -> xyz"},
-		},
-		{
-			name:   "using generic struct as literal",
-			input:  "gen struct abc { a i64 } let s = abc{a: 1}",
-			errors: []string{"aliases can't be used as literals"},
-		},
-		{
-			name:  "pass struct to generic struct- valid",
-			input: "struct abc {a i64} gen struct xyz {a i64} let s = abc{a: 1} fn test(s xyz) {} test(s)",
-			want:  "lib main gen struct xyz {a i64} struct abc {a i64} fn test(s xyz) { } pub fn main() { let s abc = abc{a i64: 1} test(s) }",
-		},
-		{
-			name:   "pass struct to generic struct - field name mismatch",
-			input:  "struct abc { a i64 } gen struct xyz { b i64 } fn test(s xyz) { } let a = abc{a: 1} test(a)",
-			errors: []string{"type mistmatch, expected type 'xyz' but got 'abc'"},
-		},
-		{
-			name:   "pass struct to generic struct - type mismatch",
-			input:  "struct abc { a i64 } gen struct xyz { a string } fn test(s xyz) { } let a = abc{a: 1} test(a)",
-			errors: []string{"type mistmatch, expected type 'xyz' but got 'abc'"},
-		},
-		{
-			name:   "pass struct to generic struct - type mismatch in return",
-			input:  "gen struct xyz { a string } fn test(s xyz) i64 { return s.b }",
-			errors: []string{"alias 's' has no field named 'b'"},
-		},
-	}
-	runAnalysisTests(t, tests)
-}
-
 func TestArray(t *testing.T) {
 	tests := []testCase{
 		{
@@ -656,11 +586,6 @@ func TestArray(t *testing.T) {
 			input:  "let arr = make([]byte, 1) let arr' = use arr { arr[0] = 0 + '0' }",
 			errors: []string{"type mistmatch, expected type 'byte' but got 'char'"},
 		},
-		// {
-		// 	name:  "array slicing with index",
-		// 	input: "arr = [1,2,3,4] arr' = arr[1:3][0]",
-		// 	want:  "lib main pub fn main() { arr []i64 = [1,2,3,4] arr' i64 = arr[(1 : 3)][0] }",
-		// },
 	}
 	runAnalysisTests(t, tests)
 }
@@ -743,7 +668,7 @@ func TestUnion(t *testing.T) {
 		{
 			name:  "normal",
 			input: "union abc { a, b, c, f64 } struct a {} enum b {} type c i64",
-			want:  "lib main type c i64 struct a {} enum b {} union abc {a, b, c, f64} pub fn main() { }",
+			want:  "lib main union abc {a, b, c, f64} struct a {} enum b {} type c i64 pub fn main() { }",
 		},
 		{
 			name:   "cycle between union and union field",
@@ -753,12 +678,12 @@ func TestUnion(t *testing.T) {
 		{
 			name:   "cycle between unions",
 			input:  "union abc { xyz } union xyz { abc }",
-			errors: []string{"cyclical reference between unions: abc, xyz"},
+			errors: []string{"cyclical type declarations: abc -> xyz"},
 		},
 		{
 			name:  "with type def and underlying type",
 			input: "union abc { a, i64 } type a i64",
-			want:  "lib main type a i64 union abc {a, i64} pub fn main() { }",
+			want:  "lib main union abc {a, i64} type a i64 pub fn main() { }",
 		},
 		{
 			name:   "with duplicate types",
@@ -810,14 +735,14 @@ func TestMatchUnion(t *testing.T) {
 			name: "ensure type infered if dot expression",
 			input: `
 			union abc { a }
-			struct a { x *abc }
+			struct a { x ?abc }
 			fn test(n abc) i64 {
 				match n' = n {
 				case a:
 					let x = n'.x
 				}
 			}`,
-			want: "lib main struct a {x *abc} union abc {a} fn test(n abc) i64 { match (n' = n) { case a: let x *abc = n'.x } } pub fn main() { }",
+			want: "lib main union abc {a} struct a {x ?abc} fn test(n abc) i64 { match (n' = n) { case a: let x ?abc = n'.x } } pub fn main() { }",
 		},
 		{
 			name:  "ensure default case infers type",
@@ -873,12 +798,11 @@ func TestTypeDefinition(t *testing.T) {
 			input: "type custom []u64 let x = custom([1, 2]) let y = x[0]",
 			want:  "lib main type custom []u64 pub fn main() { let x custom = custom([1,2]) let y u64 = x[0] }",
 		},
-		// BUG: this does not get caught by semsis
-		// {
-		// 	name:   "aggregate type - array, invalid type",
-		// 	input:  "type custom []u64 let x = custom([1, 2.1]) let y = x[0]",
-		// 	errors: []string{"type mistmatch, expected type 'u64' but got 'f64'"},
-		// },
+		{
+			name:   "aggregate type - array, invalid type",
+			input:  "type custom []u64 let x = custom([1, 2.1]) let y = x[0]",
+			errors: []string{"type mistmatch, expected type 'u64' but got 'f64'"},
+		},
 		{
 			name:  "aggregate type - passed and return",
 			input: "type custom []byte fn test(c custom) custom { return c }",
@@ -892,7 +816,7 @@ func TestTypeDefinition(t *testing.T) {
 		{
 			name:  "aggregate type - struct",
 			input: "struct abc { a i64 } type custom abc let x = custom{a: 1}",
-			want:  "lib main type custom abc struct abc {a i64} pub fn main() { let x custom = custom{a i64: 1} }",
+			want:  "lib main struct abc {a i64} type custom abc pub fn main() { let x custom = custom{a i64: 1} }",
 		},
 		{
 			name:  "aggregate type - struct, out of order",
@@ -944,8 +868,8 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "access struct field of type definition",
-			input: "struct abc { a i64 } type custom abc fn main() { let c = custom{a: 1} let val = c.a ",
-			want:  "lib main type custom abc struct abc {a i64} pub fn main() { let c custom = custom{a i64: 1} let val i64 = c.a } pub fn main() { }",
+			input: "struct abc { a i64 } type custom abc let c = custom{a: 1} let val = c.a",
+			want:  "lib main struct abc {a i64} type custom abc pub fn main() { let c custom = custom{a i64: 1} let val i64 = c.a }",
 		},
 		{
 			name:  "out of order type def reference in struct",
@@ -1054,7 +978,7 @@ func TestTypeCast(t *testing.T) {
 			input: `let s = "12" let n = i64(s[0] - '0')`,
 			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64((s[0] - '0')) }`,
 		},
-		// 	{
+		// {
 		// 	name:   "int literal array to string, overflow",
 		// 	input:  "let s = string([1,0,256])",
 		// 	errors: []string{"integer literal '256' overflows 'string'"},
@@ -1443,10 +1367,11 @@ func TestFunction(t *testing.T) {
 			input: "struct xyz { i i64 } struct abc { a xyz b ?abc } fn test(x *abc) ?abc { return x.b }",
 			want:  "lib main struct xyz {i i64} struct abc {a xyz, b ?abc} fn test(x *abc) ?abc { return x.b } pub fn main() { }",
 		},
-		// {
-		// 	name:  "regression prevention, ",
-		// 	input: "struct abc { i i64 } fn test(a *abc, b abc) { } let x = &abc{i:1} test(x, abc{i: 2})",
-		// },
+		{
+			name:  "regression prevention, ",
+			input: "struct abc { i i64 } fn test(a *abc, b abc) { } let x = &abc{i:1} test(x, abc{i: 2})",
+			want:  "lib main struct abc {i i64} fn test(a *abc,b abc) { } pub fn main() { let x *abc = &abc{i i64: 1} test(x,abc{i i64: 2}) }",
+		},
 		{
 			name:  "return function value",
 			input: "fn test1() i64, f64 { return 0, 0.0 } fn test2() fn()i64,f64 { return test1 }",
@@ -1467,20 +1392,20 @@ func TestFunction(t *testing.T) {
 			input: "type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } let func = test2() let v = func()",
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } pub fn main() { let func xyz = test2() let v i64 = func() }",
 		},
-		// {
-		// 	name: "call function value, optional type",
-		// 	input: `struct abc {x f64}
-		// 		type xyz fn(string, bool)i64,abc
-		// 		fn test1(s string, b bool) i64, abc {
-		// 		    return 0, abc{x: 1.1}
-		// 		}
-		// 		fn test2() ?xyz {
-		// 		    return test1
-		// 		}
-		// 		let func = ?(test2())
-		// 		let a, let b = func("h", false)`,
-		// 	want: `lib main type xyz fn(string,bool)i64,abc struct abc {x f64} fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
-		// },
+		{
+			name: "call function value, optional type",
+			input: `struct abc {x f64}
+				type xyz fn(string, bool)i64,abc
+				fn test1(s string, b bool) i64, abc {
+				    return 0, abc{x: 1.1}
+				}
+				fn test2() ?xyz {
+				    return test1
+				}
+				let func = ?test2()
+				let a, let b = func("h", false)`,
+			want: `lib main struct abc {x f64} type xyz fn(string,bool)i64,abc fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1634,6 +1559,7 @@ func TestAnonymousFunction(t *testing.T) {
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+
 			p := GetParser(tt.input)
 			ast := p.ParseREPL()
 
@@ -1659,134 +1585,9 @@ func runAnalysisTests(t *testing.T, tests []testCase) {
 	}
 }
 
-// type variableEscape struct {
-// 	name    string
-// 	escapes ast.VariableEscape
-// }
-
-// func TestEscapeAnalysis(t *testing.T) {
-// 	tests := []struct {
-// 		name  string
-// 		input string
-// 		want  []variableEscape
-// 	}{
-// 		// array escape anaylsis
-// 		{
-// 			name:  "array - variable returned",
-// 			input: "lib main fn test() []i64 { let a = [1,2,3] return a }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.RETURNED},
-// 			},
-// 		},
-// 		{
-// 			name:  "array - variable passed to function",
-// 			input: "lib main pub fn main() { let a = [1,2,3] test(a) } fn test(x []i64) { }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.PASSED},
-// 			},
-// 		},
-// 		{
-// 			name:  "array - variable no escape",
-// 			input: "lib main pub fn main() { let a = [1,2,3] }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.NO_ESCAPE},
-// 			},
-// 		},
-// 		// {
-// 		// 	name:  "array - argument passed and returned",
-// 		// 	input: "lib main fn test(a [3]i64) [3]i64 { return a }",
-// 		// 	want: []variableEscape{
-// 		// 		{name: "a", escapes: ast.RETURNED},
-// 		// 	},
-// 		// },
-// 		// Struct escape analysis
-// 		{
-// 			name:  "struct - variable returned",
-// 			input: "lib main struct abc {x i64} fn test() abc { let a = abc{x: 1} return a }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.RETURNED},
-// 			},
-// 		},
-// 		{
-// 			name:  "struct - variable passed to function",
-// 			input: "lib main struct abc {x i64} pub fn main() { let a = abc{x: 1} test(a) } fn test(a abc) { }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.PASSED},
-// 			},
-// 		},
-// 		{
-// 			name:  "struct - variable no escape",
-// 			input: "lib main struct abc {x i64} pub fn main() { let a = abc{x: 1} }",
-// 			want: []variableEscape{
-// 				{name: "a", escapes: ast.NO_ESCAPE},
-// 			},
-// 		},
-// 		// {
-// 		// 	name:  "struct - argument passed and returned",
-// 		// 	input: "lib main struct abc{x i64} fn test(a abc) abc { return a }",
-// 		// 	want: []variableEscape{
-// 		// 		{name: "a", escapes: ast.RETURNED},
-// 		// 	},
-// 		// },
-// 	}
-
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			parser := GetParser(tt.input)
-// 			ast := parser.ParseLibrary()
-// 			s := New()
-// 			s.Analyse(ast)
-
-// 			if len(s.Errors()) != 0 {
-// 				t.Errorf("semantic analysis: %s", s.Errors())
-// 			}
-
-// 			for _, ve := range tt.want {
-// 				got := findIdentifier(ast, ve.name)
-// 				if got == nil {
-// 					t.Errorf("variable not found: %s", ve.name)
-// 				} else if *got != ve.escapes {
-// 					t.Errorf("want %d but got %d", ve.escapes, got)
-// 				}
-// 			}
-
-// 		})
-// 	}
-// }
-
 // ------- //
 // Helpers //
 // ------- //
-
-// Search top-down for variable with matching name and return whether it escapes or not
-func findIdentifier(n ast.Node, name string) *ast.VariableEscape {
-	switch n := n.(type) {
-	case *ast.Library:
-		for _, fn := range n.Functions {
-			if esc := findIdentifier(fn, name); esc != nil {
-				return esc
-			}
-		}
-	case *ast.FunctionExpression:
-		for _, stmt := range n.Body.Statements {
-			if esc := findIdentifier(stmt, name); esc != nil {
-				return esc
-			}
-		}
-	case *ast.AssignmentStatement:
-		// TODO: we need to fix this garbage
-		// for _, decl := range n.Declerations {
-		// 	if decl.Assignee.String() == name {
-		// 		return findIdentifier(...., name)
-		// 	}
-		// }
-	case *ast.ArrayLiteral:
-		return &n.Escapes
-	case *ast.StructLiteral:
-		return &n.Escapes
-	}
-	return nil
-}
 
 func GetParser(input string) *parser.Parser {
 	lcfg := &lexer.Config{SkipComments: true}

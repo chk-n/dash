@@ -67,7 +67,11 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 	// For all imports of current library ensure
 	// context is aware of imports and initialise
 	// those imported libraries if not already done
-	for _, imp := range n.Imports {
+	for _, n := range n.Nodes {
+		imp, ok := n.(*ast.UseStatement)
+		if !ok {
+			continue
+		}
 		libName := imp.Name.TokenLiteral()
 		lib, ok := e.libs[libName]
 		if !ok {
@@ -84,30 +88,20 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 	// TODO: handle generic structs
 
 	// initialise types
-	for _, n := range n.Unions {
-		ctx.typs.Set(n.Name.TokenLiteral(), n.T)
-	}
-	for _, n := range n.TypeDefinitions {
-		ctx.typs.Set(n.Name.TokenLiteral(), n.T)
-	}
-	for _, n := range n.TypeAliases {
-		ctx.typs.Set(n.Name.TokenLiteral(), n.T)
-	}
-	for _, n := range n.Structs {
-		ctx.vars.Set(n.Name.TokenLiteral(), n.T)
-	}
-	for _, n := range n.Enums {
-		e.initialiseEnumStatement(n, ctx)
-	}
-	// initialise variables and functions
-	for _, n := range n.GlobalVariables {
-		e.evalAssignmentStatement(n, ctx)
-	}
-	for _, fn := range n.Functions {
-		if fn.Name.Value == "main" || n.Name.TokenLiteral() == "main" {
-			e.evalMainFunction(fn, ctx)
-		} else {
-			e.Eval(fn, ctx)
+	for _, n := range n.Nodes {
+		switch n := n.(type) {
+		case *ast.UnionStatement:
+			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
+		case *ast.TypeDefinitionStatement:
+			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
+		case *ast.TypeAliasStatement:
+			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
+		case *ast.StructStatement:
+			ctx.vars.Set(n.Name.TokenLiteral(), n.T)
+		case *ast.EnumStatement:
+			e.initialiseEnumStatement(n, ctx)
+		case *ast.ErrorStatement:
+			ctx.vars.Set(n.Name.String(), n.Name.TokenLiteral())
 		}
 	}
 }
@@ -123,28 +117,16 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		}
 
 		e.InitialiseLib(n, ctx)
-	case *ast.Evaluator:
 		var last any
-		for _, n := range n.Unions {
-			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
-		}
-		for _, n := range n.Types {
-			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
-		}
-
-		for _, n := range n.Structs {
-			ctx.vars.Set(n.Name.TokenLiteral(), n.T)
-		}
-
-		for _, n := range n.Enums {
-			e.initialiseEnumStatement(n, ctx)
-		}
-		for _, n := range n.Errors {
-			ctx.vars.Set(n.Name.TokenLiteral(), n.Name.TokenLiteral())
-		}
-
 		for _, n := range n.Nodes {
-			last = e.Eval(n, ctx)
+			switch n := n.(type) {
+			case *ast.UnionStatement, *ast.TypeDefinitionStatement,
+				*ast.StructStatement, *ast.EnumStatement,
+				*ast.ErrorStatement:
+				// skip as already initialised
+			default:
+				last = e.Eval(n, ctx)
+			}
 		}
 		return last
 	case *ast.FunctionExpression:

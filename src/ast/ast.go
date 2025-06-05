@@ -40,18 +40,9 @@ type Expression interface {
 }
 
 type Library struct {
-	Token           token.Token
-	Name            *Identifier
-	Imports         []*UseStatement
-	TypeDefinitions []*TypeDefinitionStatement
-	TypeAliases     []*TypeAliasStatement
-	GenericStructs  []*GenericStructStatement
-	Structs         []*StructStatement
-	Enums           []*EnumStatement
-	Unions          []*UnionStatement
-	GlobalVariables []*AssignmentStatement
-	Errors          []*ErrorStatement
-	Functions       []*FunctionExpression
+	Token token.Token
+	Name  *Identifier
+	Nodes []Node
 }
 
 func (l *Library) statementNode()       {}
@@ -61,142 +52,52 @@ func (l *Library) String() string {
 	out.WriteString(l.TokenLiteral() + " ")
 	out.WriteString(l.Name.TokenLiteral())
 
-	if len(l.Imports) > 0 {
+	if len(l.Nodes) > 0 {
 		out.WriteString(" ")
 	}
-	for i := 0; i < len(l.Imports); i++ {
-		out.WriteString(l.Imports[i].String())
-	}
-
-	if len(l.TypeDefinitions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.TypeDefinitions); i++ {
-		out.WriteString(l.TypeDefinitions[i].String())
-		if i != len(l.TypeDefinitions)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.TypeAliases) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.TypeAliases); i++ {
-		out.WriteString(l.TypeAliases[i].String())
-		if i != len(l.TypeAliases)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.GenericStructs) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.GenericStructs); i++ {
-		out.WriteString(l.GenericStructs[i].String())
-		if i != len(l.GenericStructs)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Structs) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Structs); i++ {
-		out.WriteString(l.Structs[i].String())
-		if i != len(l.Structs)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Enums) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Enums); i++ {
-		out.WriteString(l.Enums[i].String())
-		if i != len(l.Enums)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Unions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Unions); i++ {
-		out.WriteString(l.Unions[i].String())
-		if i != len(l.Unions)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Errors) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Errors); i++ {
-		out.WriteString(l.Errors[i].String())
-		if i != len(l.Errors)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.GlobalVariables) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.GlobalVariables); i++ {
-		out.WriteString(l.GlobalVariables[i].String())
-		if i != len(l.GlobalVariables)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Functions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Functions); i++ {
-		out.WriteString(l.Functions[i].String())
-		if i != len(l.Functions)-1 {
+	for i := range len(l.Nodes) {
+		out.WriteString(l.Nodes[i].String())
+		if i != len(l.Nodes)-1 {
 			out.WriteString(" ")
 		}
 	}
 	return out.String()
 }
 
-type Evaluator struct {
-	Unions  []*UnionStatement
-	Types   []*TypeDefinitionStatement
-	Structs []*StructStatement
-	Enums   []*EnumStatement
-	Errors  []*ErrorStatement
-	Nodes   []Node
-}
+func (l *Library) Exports() map[string]types.TypeSpec {
+	export := make(map[string]types.TypeSpec)
+	for _, n := range l.Nodes {
+		switch n := n.(type) {
+		case *StructStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *UnionStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *EnumStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *FunctionExpression:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *TypeDefinitionStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *TypeAliasStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *ErrorStatement:
+			// name = n.Name.Value
 
-func (e *Evaluator) Pos() token.Pos                { return token.Pos(0) }
-func (e *Evaluator) TokenLiteral() string          { return "" }
-func (e *Evaluator) String() string                { return "" }
-func (e *Evaluator) visitChildren(fn func(n Node)) {}
-
-type FileFormat struct {
-	Token token.Token
-	Name  *Identifier
-	// Ordered list of pointer to statement or expression as they appear in file
-	// Required so file can be formatted properly
-	Nodes []Node
-}
-
-func (f *FileFormat) Format() string {
-	var out bytes.Buffer
-	out.WriteString(f.Token.Literal + " ")
-	out.WriteString(f.Name.TokenLiteral())
-
-	if len(f.Nodes) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(f.Nodes); i++ {
-		out.WriteString(f.Nodes[i].String())
-		if i != len(f.Nodes)-1 {
-			out.WriteString(" ")
 		}
 	}
-	return out.String()
+	return export
 }
 
 // ------------//
