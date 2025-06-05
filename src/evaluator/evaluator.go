@@ -3,6 +3,7 @@ package evaluator
 import (
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -677,9 +678,7 @@ func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExp
 
 	case map[string]any:
 		newMap := make(map[string]any, len(v))
-		for k, val := range v {
-			newMap[k] = val
-		}
+		maps.Copy(newMap, v)
 		cpy = newMap
 
 	default:

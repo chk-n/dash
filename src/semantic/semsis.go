@@ -5,6 +5,7 @@ package semantic
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"dash-lang.io/src/ast"
@@ -1238,7 +1239,7 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 
 	declCnt := 0
 	isFnCall := false
-	for i := 0; i < len(n.Values); i++ {
+	for i := range n.Values {
 		val := n.Values[i]
 		s.analyse(val, n.VarNameAt(i))
 		// this generally means another error happened
@@ -1880,7 +1881,7 @@ func validateOperator(t types.TypeSpec, tkn token.Type) bool {
 // - sets function signature type in symbol table
 func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name string) {
 	argTypes := make([]types.TypeSpec, len(n.Arguments))
-	for i := 0; i < len(n.Arguments); i++ {
+	for i := range n.Arguments {
 		arg := n.Arguments[i]
 		if arg.Type == nil {
 			// walk forwards until not nil, if end of loop raise error
@@ -2052,10 +2053,8 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 	path = append(path, i)
 	for _, j := range adj[i] {
 		// early check if cycle to path
-		for _, pIdx := range path {
-			if j == pIdx {
-				return path, true
-			}
+		if slices.Contains(path, j) {
+			return path, true
 		}
 		if path, hasCycle := _isCyclic(j, adj, path); hasCycle {
 			return path, true

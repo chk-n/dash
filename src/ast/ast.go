@@ -477,7 +477,7 @@ func (s *ReturnStatement) String() string {
 	if len(s.Values) != 0 {
 		out.WriteString(" ")
 	}
-	for i := 0; i < len(s.Values); i++ {
+	for i := range len(s.Values) {
 		out.WriteString(s.Values[i].String())
 		if i != len(s.Values)-1 {
 			out.WriteString(", ")
@@ -544,7 +544,7 @@ func (s *ForRangeStatement) String() string {
 
 	out.WriteString(s.Token.Literal)
 	if s.Variables != nil {
-		for i := 0; i < len(s.Variables); i++ {
+		for i := range len(s.Variables) {
 			if i%2 != 0 {
 				out.WriteString(",")
 			}
@@ -1369,7 +1369,7 @@ func (l *ArrayLiteral) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("[")
-	for i := 0; i < len(l.Values); i++ {
+	for i := range len(l.Values) {
 		out.WriteString(l.Values[i].String())
 		if i != len(l.Values)-1 {
 			out.WriteString(",")
