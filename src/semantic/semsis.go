@@ -1156,12 +1156,24 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			n.T = fnInfo.Type
 			return
 		}
+		if _, ok := s.importedSt[n.TokenLiteral()]; ok {
+			n.T = &types.ImportedNamed{
+				Lib: n.TokenLiteral(),
+				// NOTE: we purposly dont set this
+				// field as we dont know what the
+				// unknown named value is here
+				// Typ:
+			}
+			return
+		}
 		s.addError(n, errIdentifierNotFound(n.TokenLiteral()))
 	case *ast.BlockStatement:
 		// enter new scope
 		s.varSt.Scope()
 		defer s.varSt.Unscope()
 
+		// TODO: this scope can be removed by making a new function
+		// s.analyseBlockStatement(blk, TAG) e.g. USE, FOR etc.
 		// case: 1 we are in a for loop
 		scope := s.scope.GetLast()
 		for i, st := range n.Statements {
