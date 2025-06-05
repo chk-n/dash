@@ -58,7 +58,6 @@ var (
 	ConstChar   = Char{}
 	ConstString = String{}
 	ConstNull   = Null{}
-	ConstVoid   = Void{}
 )
 
 // ------------ //
@@ -423,9 +422,10 @@ func (t *Union) Equal(other TypeSpec) bool {
 }
 
 type Function struct {
-	Arg        []TypeSpec
-	Ret        []TypeSpec
-	IsVariadic bool
+	Arg          []TypeSpec
+	Ret          []TypeSpec
+	IsErrorProne bool
+	IsVariadic   bool
 }
 
 func (t *Function) Type() TypeSpec { return t }
@@ -450,8 +450,7 @@ func (t *Function) ReturnTypesString() []string {
 	}
 	return typs
 }
-func (t *Function) IsOptional() bool { return false }
-func (t *Function) Ident() string    { return t.String() }
+func (t *Function) Ident() string { return t.String() }
 func (t *Function) String() string {
 	var out bytes.Buffer
 	out.WriteString("fn(")
@@ -461,6 +460,10 @@ func (t *Function) String() string {
 	}
 	out.WriteString(strings.Join(args, ","))
 	out.WriteString(")")
+
+	if t.IsErrorProne {
+		out.WriteString("!")
+	}
 
 	if len(t.Ret) > 0 {
 		rets := make([]string, 0, len(t.Ret))
@@ -512,24 +515,21 @@ func (t *Pointer) Equal(other TypeSpec) bool {
 	return t.T.Equal(otherPtr.T)
 }
 
-// TODO: remove size field and us Ts for `error xyz {string, i64}`
 type Error struct {
 	Name string
-	Size int
-	// Ts   []Type
 }
 
 func (t *Error) Type() TypeSpec { return t }
-func (t *Error) Ident() string  { return "error" }
+func (t *Error) Ident() string  { return t.Name }
 func (t *Error) String() string {
-	return "error"
+	return t.Name
 }
 func (t *Error) Equal(other TypeSpec) bool {
 	otherErr, ok := other.(*Error)
 	if !ok {
 		return false
 	}
-	return t.Name == otherErr.Name && t.Size == otherErr.Size
+	return t.Name == otherErr.Name
 }
 
 type Generic struct {
@@ -713,6 +713,23 @@ func (t *Dirty) Equal(other TypeSpec) bool {
 	return t.T.Equal(otherD.T)
 }
 
+type ImportedNamed struct {
+	Lib string
+	Typ TypeSpec
+}
+
+func (t *ImportedNamed) Type() TypeSpec { return t }
+func (t *ImportedNamed) Ident() string {
+	return t.Lib + "." + t.Typ.Ident()
+}
+func (t *ImportedNamed) String() string {
+	return t.Lib + "." + t.Typ.String()
+}
+func (t *ImportedNamed) Equal(other TypeSpec) bool {
+	otherUn, ok := other.(*ImportedNamed)
+	return ok && t.Ident() == otherUn.Ident()
+}
+
 // ------------- //
 // Special types //
 // ------------- //
@@ -720,21 +737,6 @@ func (t *Dirty) Equal(other TypeSpec) bool {
 // These types don't formally exist within language
 // they are merely here to convey additional meaning
 // when parsing or analysing.
-
-type Void struct{}
-
-func (t *Void) Ident() string { return t.String() }
-func (t *Void) Equal(other TypeSpec) bool {
-	_, ok := other.(*Void)
-	return ok
-}
-func (t *Void) Type() TypeSpec {
-	return t
-}
-
-func (t *Void) String() string {
-	return "void"
-}
 
 type UnknownNamed struct {
 	Name string
@@ -1182,8 +1184,6 @@ func TokenToType(tk token.Token) TypeSpec {
 		return &ConstByte
 	case token.CHARTYPE:
 		return &ConstChar
-	case token.ERRORTYPE:
-		return &Error{}
 	case token.ASTERISK:
 		return &Pointer{}
 	case token.MEMORYTYPE:

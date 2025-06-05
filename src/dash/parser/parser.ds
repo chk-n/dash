@@ -1,0 +1,170 @@
+lib parser
+
+use "dash/ast"
+use "dash/lexer"
+
+// bug: comment in struct
+// bug: []ast.token
+struct parser {
+    src    string
+    // TODO: replace with column list
+    tkns   []ast.token
+    nodes  []ast.node
+    tkn_i  ast.token_index
+    // errs   []error
+    // extras []
+}
+
+enum mode {
+    lib
+    // use if only expressions should be parsed
+    exp
+}
+
+pub fn parse(src string, m mode)! ast.ast {
+    // TODO: keep track of tokens (type and offset in source)
+    // TODO: keep track of nodes 
+    // TODO: keep track of extras
+
+    var tkns = try make([]ast.token, len(src) / 8)
+    var l = lexer.new(src)
+    for {
+        l, let tkn = lexer.next_tkn(l)
+        tkns = append(tkns, {
+            tag:   tkn.tag, 
+            start: ast.token_index(tkn.start),
+        })
+
+        if tkn.typ == lexer.tag.EOF { break } 
+    }
+
+    var p = parser{src: src, tkns: tkns, nodes: []}
+    p = match m {
+    // case mode.lib: try parse_library(p)
+    case mode.exp: try parse_expression(p, precedence.none)
+    } 
+
+    return ast.ast{
+        src: src,
+        tkns: tkns,
+        nodes: p.nodes,
+    }
+}
+
+fn next_token(p parser) parser {
+    return p^{ p.tkn_i = p.tkn_i + 1 }
+}
+
+enum precedence {
+    none
+    add
+    sub
+    mul
+    div
+}
+
+fn parse_expression(p parser, prec precedence)! parser, ast.index {
+    var p = p
+    
+    p, var node = try parse_prefix_expression(p)
+    if node == 0 {
+        // ERROR
+        return p, 0
+    }
+    
+    // if lexer.is_postfix() {
+    //     p, node = try parse_postfix_expression(p, node)
+    //     if node == 0 {
+    //         // ERROR
+    //         return p, 0
+    //     }
+    //     return p, node
+    // }
+
+    for prec < get_precedence(p.tkns[p.tkn_i].tag) {
+        if is_infix(p.tkns[p.tkn_i].tag) {
+            return p, node
+        }
+        p, node = try parse_infix_expression(p, node)
+        if node == 0 {
+            // ERROR
+            return p, 0
+        }
+    }
+}
+
+// ----------- //
+// Expressions //
+// ----------- //
+
+fn parse_prefix_expression(p parser) parser, ast.index {
+    match p.tkns[i].tag {
+    case lexer.IDENT:
+        return try parse_literal(p)        
+    case lexer.INT:
+        return try parse_literal(p)        
+    case lexer.FLOAT: 
+        return try parse_literal(p)        
+    case _:
+        return p, 0
+    }
+}
+
+fn parse_literal(p parser) parser, ast.index {
+    var nodes = p.nodes
+    nodes = append(nodes, {
+        tag: p.tkns[p.tkn_i].tag,
+        token: p.tkn_i,
+        data: ast.NULL_DATA,
+    })
+    
+    let index = ast.index(len(nodes)-1)
+
+    p = p^{ p.nodes = nodes }
+    return next_token(p), index
+}
+
+fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
+    var p = p
+
+    // advance by one token
+    p = next_token(p)
+    p, let node = try parse_expression(p, precedence.none)
+    
+    var nodes = p.nodes
+    nodes = append(nodes, {
+        tag: p.tkns[p.tkn_i].tag,
+        token: p.tkn_i,
+        data: {start: prev, end: node}
+    })
+
+    p = p^{ p.nodes = nodes }
+    p = next_token(p)
+
+    let index = prev + 1
+    return p, index
+}
+
+// ------ //
+// Helper //
+// ------ //
+
+// maps tokens to a parsing precedence
+fn get_precedence(tag lexer.tag) precedence {
+    match tag {
+    case lexer.ADD: 
+        return precedence.add
+    case _:
+        // this should not happen
+        return precedence.none
+    }
+}
+
+fn is_infix(tag lexer.tag) bool {
+    match tag {
+    case lexer.ADD: 
+        return true
+    case _:
+        return false
+    }
+}

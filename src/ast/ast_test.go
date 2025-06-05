@@ -13,10 +13,10 @@ func TestString(t *testing.T) {
 			Token: token.Token{Type: token.IDENT, Literal: "test"},
 			Value: "test",
 		},
-		Imports: []*ImportStatement{
-			{
-				Token:   token.Token{Type: token.USE, Literal: "use"},
-				Package: token.Token{Type: token.STRING, Literal: "github.io/code"},
+		Nodes: []Node{
+			&UseStatement{
+				Token: token.Token{Type: token.USE, Literal: "use"},
+				Name:  &StringLiteral{Token: token.Token{Type: token.STRING, Literal: "github.io/code"}},
 			},
 		},
 	}

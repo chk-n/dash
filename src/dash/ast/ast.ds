@@ -1,0 +1,82 @@
+// contains the code to represent dash source as an AST
+// and helper methods to print the AST
+lib ast
+
+use "dash/lexer"
+
+pub let NULL_DATA = data{start: 0, end: 0}
+
+// TODO: replace with column list
+pub struct ast {
+    src    string
+    tkns   []token
+    nodes  []node
+    // errs   []error
+    // extras []
+}
+
+// index used to access nodes in the AST or extra data
+pub type index u32
+// index used to access lexed tokens e.g ast.tkns
+pub type token_index u32
+// index used to access bytes in raw source e.g. ast.src
+pub type source_index u32 
+
+pub struct token {
+    tag   lexer.tag
+    start source_index
+}
+
+// stores data related to prefix, 
+// infix and postfix
+// use <string_literal>
+// pub <stmt> or <exp>
+// struct <name> <fields>
+// gen struct <name> <fields>
+// enum <name> <ident_list>
+// union <name> <ident_list>
+// error <name> or with params
+// fn
+// let, var
+// for 
+// try <exp>
+// catch
+// if <exp> else <exp>
+// if <exp> else if <exp>
+// fn_call1 <ident> <exp>
+// fn_calln <ident> <subrange>
+// index_exp
+// slice_exp
+// copy_exp <ident> 
+// copy_update <ident> <block>
+// use <ident> <block>
+// raise <exp>
+// defer <block> or <exp> 
+// match
+// return <exp_list>
+// { <stmt_list> }
+// <ident> <type> | <exp>
+// <ident>
+// <literal>
+// array_lit <subrange>
+// struct_lit
+pub struct data {
+    // can also refer to lhs
+    start index
+    // can als orefer to rhs
+    end   index
+}
+
+pub enum tag {
+    add
+}
+
+pub struct node {
+    tag   tag
+    token token_index
+    data  data
+}
+
+pub fn to_string(a ast) string {
+    return ""
+}

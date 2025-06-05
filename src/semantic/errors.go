@@ -63,6 +63,9 @@ var (
 	errTooLittleReturnValues = func(got, want string) error {
 		return fmt.Errorf("too little return values, got (%s) want (%s)", got, want)
 	}
+	errInvalidTry = func() error {
+		return fmt.Errorf("invalid use of 'try' with a non error-prone function")
+	}
 )
 
 // ---------------- //
@@ -83,7 +86,7 @@ var (
 var (
 	// This error should be used when cycle between field in union
 	// and union itself is detected
-	errCyclicalUnionField = func(union string) error {
+	errRecursiveUnionReference = func(union string) error {
 		return fmt.Errorf("type in union '%s' cannot reference itself", union)
 	}
 	// This error should be used when cycle detected between union
@@ -105,7 +108,7 @@ var (
 	// 	return fmt.Errorf("duplicate struct definition: %s and %s", struct1, struct2)
 	// }
 	errRecursiveStructReference = func(field, struct1 string) error {
-		return fmt.Errorf("field '%s' in struct '%s' cannot reference itself (unless its an optional)", field, struct1)
+		return fmt.Errorf("field '%s' in struct '%s' cannot reference itself", field, struct1)
 	}
 	// errCyclicalStructDefinitions = func() error {
 	// 	return errors.New("cyclical struct definitions")
@@ -163,6 +166,9 @@ var (
 			return fmt.Errorf("'next' used outside of for loop")
 		}
 		panic("unknown keyword")
+	}
+	errInvalidAssignment = func() error {
+		return fmt.Errorf("invalid assignment: expected <identifier> = <expression>")
 	}
 )
 

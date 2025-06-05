@@ -1,0 +1,19 @@
+lib parser
+
+use "dash/ast"
+
+// BUG: highlight bug when comment removed
+@test
+fn test_parse_expression()! {
+    tests = [
+        {"1+1", "(1 + 1)"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[0]
+        let a = try parse(tc.0, mode.exp)
+
+        let got = ast.to_string(a)
+        try assert(tc.1 == got, "expected ast to match")
+    }
+}

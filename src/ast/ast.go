@@ -21,6 +21,7 @@ type Node interface {
 	TokenLiteral() string
 	String() string
 }
+
 type Statement interface {
 	Node
 	statementNode()
@@ -39,17 +40,9 @@ type Expression interface {
 }
 
 type Library struct {
-	Token           token.Token
-	Name            *Identifier
-	Imports         []*ImportStatement
-	TypeDefinitions []*TypeDefinitionStatement
-	TypeAliases     []*TypeAliasStatement
-	GenericStructs  []*GenericStructStatement
-	Structs         []*StructStatement
-	Enums           []*EnumStatement
-	Unions          []*UnionStatement
-	GlobalVariables []*AssignmentStatement
-	Functions       []*FunctionExpression
+	Token token.Token
+	Name  *Identifier
+	Nodes []Node
 }
 
 func (l *Library) statementNode()       {}
@@ -57,138 +50,72 @@ func (l *Library) TokenLiteral() string { return l.Token.Literal }
 func (l *Library) String() string {
 	var out bytes.Buffer
 	out.WriteString(l.TokenLiteral() + " ")
-	out.WriteString(l.Name.String())
+	out.WriteString(l.Name.TokenLiteral())
 
-	if len(l.Imports) > 0 {
+	if len(l.Nodes) > 0 {
 		out.WriteString(" ")
 	}
-	for i := 0; i < len(l.Imports); i++ {
-		out.WriteString(l.Imports[i].String())
-	}
-
-	if len(l.TypeDefinitions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.TypeDefinitions); i++ {
-		out.WriteString(l.TypeDefinitions[i].String())
-		if i != len(l.TypeDefinitions)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.TypeAliases) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.TypeAliases); i++ {
-		out.WriteString(l.TypeAliases[i].String())
-		if i != len(l.TypeAliases)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.GenericStructs) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.GenericStructs); i++ {
-		out.WriteString(l.GenericStructs[i].String())
-		if i != len(l.GenericStructs)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Structs) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Structs); i++ {
-		out.WriteString(l.Structs[i].String())
-		if i != len(l.Structs)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Enums) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Enums); i++ {
-		out.WriteString(l.Enums[i].String())
-		if i != len(l.Enums)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Unions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Unions); i++ {
-		out.WriteString(l.Unions[i].String())
-		if i != len(l.Unions)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.GlobalVariables) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.GlobalVariables); i++ {
-		out.WriteString(l.GlobalVariables[i].String())
-		if i != len(l.GlobalVariables)-1 {
-			out.WriteString(" ")
-		}
-	}
-
-	if len(l.Functions) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(l.Functions); i++ {
-		out.WriteString(l.Functions[i].String())
-		if i != len(l.Functions)-1 {
+	for i := range len(l.Nodes) {
+		out.WriteString(l.Nodes[i].String())
+		if i != len(l.Nodes)-1 {
 			out.WriteString(" ")
 		}
 	}
 	return out.String()
 }
 
-type FileFormat struct {
-	Token token.Token
-	Name  *Identifier
-	// Ordered list of pointer to statement or expression as they appear in file
-	// Required so file can be formatted properly
-	Nodes []Node
-}
+func (l *Library) Exports() map[string]types.TypeSpec {
+	export := make(map[string]types.TypeSpec)
+	for _, n := range l.Nodes {
+		switch n := n.(type) {
+		case *StructStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *UnionStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *EnumStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *FunctionExpression:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *TypeDefinitionStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *TypeAliasStatement:
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *ErrorStatement:
+			// name = n.Name.Value
 
-func (f *FileFormat) Format() string {
-	var out bytes.Buffer
-	out.WriteString(f.Token.Literal + " ")
-	out.WriteString(f.Name.String())
-
-	if len(f.Nodes) > 0 {
-		out.WriteString(" ")
-	}
-	for i := 0; i < len(f.Nodes); i++ {
-		out.WriteString(f.Nodes[i].String())
-		if i != len(f.Nodes)-1 {
-			out.WriteString(" ")
 		}
 	}
-	return out.String()
+	return export
 }
 
 // ------------//
 // Statements //
 // ------------//
 
-type ImportStatement struct {
-	Token   token.Token
-	Package token.Token
+type UseStatement struct {
+	Token token.Token
+	Name  *StringLiteral
 }
 
-func (s *ImportStatement) statementNode()       {}
-func (s *ImportStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *ImportStatement) String() string {
+func (s *UseStatement) statementNode()       {}
+func (s *UseStatement) TokenLiteral() string { return s.Token.Literal }
+func (s *UseStatement) String() string {
 	var out bytes.Buffer
-	out.WriteString(s.TokenLiteral() + " ")
 
-	out.WriteString("\"" + s.Package.Literal + "\"")
+	out.WriteString(s.TokenLiteral() + " ")
+	out.WriteString(s.Name.String())
 
 	return out.String()
 }
@@ -214,7 +141,7 @@ func (s *TypeDefinitionStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString(s.TokenLiteral() + " ")
-	out.WriteString(s.Name.String() + " ")
+	out.WriteString(s.Name.TokenLiteral() + " ")
 	out.WriteString(s.UnderlyingType.String())
 	if s.Guard != nil {
 		out.WriteString(" | " + s.Guard.String())
@@ -244,7 +171,7 @@ func (s *TypeAliasStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString(s.TokenLiteral() + " ")
-	out.WriteString(s.Name.String() + " ")
+	out.WriteString(s.Name.TokenLiteral() + " ")
 	out.WriteString(s.UnderlyingType.String())
 	return out.String()
 }
@@ -268,7 +195,7 @@ func (s *GenericStructStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString("gen " + s.TokenLiteral() + " ")
-	out.WriteString(s.Name.String() + " {")
+	out.WriteString(s.Name.TokenLiteral() + " {")
 	for i, field := range s.Fields {
 		out.WriteString(field.String())
 		if i != len(s.Fields)-1 {
@@ -299,7 +226,7 @@ func (s *StructStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString(s.TokenLiteral() + " ")
-	out.WriteString(s.Name.String() + " {")
+	out.WriteString(s.Name.TokenLiteral() + " {")
 	for i, field := range s.Fields {
 		out.WriteString(field.String())
 		if i != len(s.Fields)-1 {
@@ -327,9 +254,9 @@ func (s *EnumStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString("enum ")
-	out.WriteString(s.Name.String() + " {")
+	out.WriteString(s.Name.TokenLiteral() + " {")
 	for i, f := range s.Fields {
-		out.WriteString(f.String())
+		out.WriteString(f.TokenLiteral())
 		if i != len(s.Fields)-1 {
 			out.WriteString(", ")
 		}
@@ -357,7 +284,7 @@ func (s *UnionStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString("union ")
-	out.WriteString(s.Name.String() + " {")
+	out.WriteString(s.Name.TokenLiteral() + " {")
 	for i, f := range s.Types {
 		out.WriteString(f.String())
 		if i != len(s.Types)-1 {
@@ -377,7 +304,7 @@ func (s *ParameterStatement) statementNode()       {}
 func (s *ParameterStatement) TokenLiteral() string { return s.Name.Token.Literal }
 func (s *ParameterStatement) String() string {
 	var out bytes.Buffer
-	out.WriteString(s.Name.String())
+	out.WriteString(s.Name.TokenLiteral())
 	if s.Type == nil {
 		return out.String()
 	}
@@ -408,9 +335,8 @@ func (bs *BlockStatement) String() string {
 
 // var x
 // let y
-// z
 type DeclarationStatement struct {
-	Token    token.Token // `let`, `var` or nil
+	Token    token.Token // `let`, `var`
 	Assignee Expression
 }
 
@@ -418,31 +344,79 @@ func (s *DeclarationStatement) statementNode()       {}
 func (s *DeclarationStatement) TokenLiteral() string { return s.Token.Literal }
 func (s *DeclarationStatement) String() string {
 	var out bytes.Buffer
-	if s.TokenLiteral() != "" {
-		out.WriteString(s.TokenLiteral() + " ")
-	}
+	out.WriteString(s.TokenLiteral() + " ")
 	out.WriteString(s.Assignee.String())
-
 	if s.Assignee.Type() != nil {
 		out.WriteString(" " + s.Assignee.Type().String())
 	}
-
 	return out.String()
 }
 
 // let x, v, var z = 1, 2, 3
 type AssignmentStatement struct {
-	Declerations []*DeclarationStatement
+	// can only be:
+	// *DeclarationStatement, *Identifier,
+	// *IndexExpression, *SliceExpression, or
+	// *DotExpression
+	Declerations []Node
 	Values       []Expression
 }
 
 func (s *AssignmentStatement) statementNode()       {}
 func (s *AssignmentStatement) TokenLiteral() string { return "" }
+func (s *AssignmentStatement) VarNameAt(i int) string {
+	if i > len(s.Declerations)-1 {
+		panic("this is a compiler error. please report")
+	}
+	switch decl := s.Declerations[i].(type) {
+	case *Identifier:
+		return decl.TokenLiteral()
+	case *DeclarationStatement:
+		return decl.Assignee.TokenLiteral()
+	case *IndexExpression:
+		return decl.TokenLiteral()
+	case *SliceExpression:
+		return decl.TokenLiteral()
+	case *DotExpression:
+		return decl.TokenLiteral()
+	}
+	panic("this is a compiler error. please report")
+}
+func (s *AssignmentStatement) IsVarAt(i int) bool {
+	if i > len(s.Declerations)-1 {
+		panic("this is a compiler error. please report")
+	}
+
+	decl, ok := s.Declerations[i].(*DeclarationStatement)
+	if !ok {
+		return false
+	}
+	return decl.Token.Type == token.VAR
+}
+
+func (s *AssignmentStatement) SetTypeAt(i int, t types.TypeSpec) {
+	switch decl := s.Declerations[i].(type) {
+	case Expression:
+		decl.SetType(t)
+	case *DeclarationStatement:
+		decl.Assignee.SetType(t)
+	default:
+		panic("this is a compiler error. please report")
+	}
+}
 func (s *AssignmentStatement) String() string {
 	var out bytes.Buffer
 
 	for i, decl := range s.Declerations {
-		out.WriteString(decl.String())
+		switch decl := decl.(type) {
+		case Expression:
+			out.WriteString(decl.String())
+			if decl.Type() != nil {
+				out.WriteString(" " + decl.Type().String())
+			}
+		default:
+			out.WriteString(decl.String())
+		}
 		if i != len(s.Declerations)-1 {
 			out.WriteString(", ")
 		}
@@ -463,11 +437,18 @@ type Identifier struct {
 	T     types.TypeSpec
 }
 
-func (i *Identifier) expressionNode()          {}
-func (i *Identifier) Type() types.TypeSpec     { return i.T }
-func (i *Identifier) SetType(t types.TypeSpec) { i.T = t }
-func (i *Identifier) TokenLiteral() string     { return i.Token.Literal }
-func (i *Identifier) String() string           { return i.Value }
+func (i *Identifier) expressionNode()      {}
+func (i *Identifier) Type() types.TypeSpec { return i.T }
+func (i *Identifier) SetType(t types.TypeSpec) {
+	i.T = t
+}
+func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
+func (i *Identifier) String() string {
+	// if i.T != nil {
+	// 	return i.Value + " " + i.T.String()
+	// }
+	return i.Value
+}
 
 type ReturnStatement struct {
 	Token  token.Token // the 'return' token
@@ -496,7 +477,7 @@ func (s *ReturnStatement) String() string {
 	if len(s.Values) != 0 {
 		out.WriteString(" ")
 	}
-	for i := 0; i < len(s.Values); i++ {
+	for i := range len(s.Values) {
 		out.WriteString(s.Values[i].String())
 		if i != len(s.Values)-1 {
 			out.WriteString(", ")
@@ -563,11 +544,11 @@ func (s *ForRangeStatement) String() string {
 
 	out.WriteString(s.Token.Literal)
 	if s.Variables != nil {
-		for i := 0; i < len(s.Variables); i++ {
+		for i := range len(s.Variables) {
 			if i%2 != 0 {
 				out.WriteString(",")
 			}
-			out.WriteString(" " + s.Variables[i].String())
+			out.WriteString(" " + s.Variables[i].TokenLiteral())
 		}
 	}
 	if s.Iterable != nil {
@@ -582,29 +563,6 @@ func (s *ForRangeStatement) String() string {
 		out.WriteString(" " + s.Block.String())
 	} else {
 		out.WriteString(" { }")
-	}
-
-	return out.String()
-}
-
-type WhileStatement struct {
-	Token     token.Token
-	Condition Expression
-	Block     *BlockStatement
-}
-
-func (s *WhileStatement) statementNode()       {}
-func (s *WhileStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *WhileStatement) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(s.Token.Literal + " ")
-	out.WriteString(s.Condition.String() + " ")
-
-	if s.Block != nil {
-		out.WriteString(s.Block.String())
-	} else {
-		out.WriteString("{ }")
 	}
 
 	return out.String()
@@ -724,6 +682,57 @@ func (mc *MatchCase) String() string {
 	return out.String()
 }
 
+type ErrorStatement struct {
+	Token  token.Token // the 'error' token
+	Name   *Identifier
+	Params []*ParameterStatement
+	Public bool
+}
+
+func (es *ErrorStatement) statementNode()       {}
+func (es *ErrorStatement) TokenLiteral() string { return es.Token.Literal }
+func (es *ErrorStatement) String() string {
+	var out bytes.Buffer
+
+	if es.Public {
+		out.WriteString("pub ")
+	}
+	out.WriteString("error ")
+	out.WriteString(es.Name.TokenLiteral())
+
+	// Add parameters if they exist
+	if len(es.Params) > 0 {
+		out.WriteString("(")
+		params := []string{}
+		for _, p := range es.Params {
+			params = append(params, p.String())
+		}
+		out.WriteString(strings.Join(params, ", "))
+		out.WriteString(")")
+	}
+
+	return out.String()
+}
+
+type RaiseStatement struct {
+	Token token.Token
+	Error Expression
+}
+
+func (s *RaiseStatement) statementNode()           {}
+func (s *RaiseStatement) Type() types.TypeSpec     { return &types.Error{} }
+func (s *RaiseStatement) SetType(t types.TypeSpec) {}
+func (s *RaiseStatement) TokenLiteral() string     { return s.Token.Literal }
+func (s *RaiseStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(s.Token.Literal)
+	out.WriteString(" ")
+	if s.Error != nil {
+		out.WriteString(s.Error.String())
+	}
+	return out.String()
+}
+
 //-------------//
 // Expressions //
 //-------------//
@@ -737,6 +746,7 @@ type FunctionExpression struct {
 	Token        token.Token // The 'fn' token
 	Name         *Identifier
 	Arguments    []*ParameterStatement
+	ErrorProne   bool
 	ReturnValues []*TypeLiteral
 
 	Body *BlockStatement
@@ -773,7 +783,7 @@ func (fl *FunctionExpression) String() string {
 	out.WriteString(fl.TokenLiteral())
 	// fl.Name check required during parsing stage
 	if !fl.IsAnonymous {
-		out.WriteString(" " + fl.Name.String())
+		out.WriteString(" " + fl.Name.TokenLiteral())
 	}
 	// print arguments
 	args := make([]string, 0, len(fl.Arguments))
@@ -783,6 +793,9 @@ func (fl *FunctionExpression) String() string {
 	}
 	out.WriteString(strings.Join(args, ","))
 	out.WriteString(")")
+	if fl.ErrorProne {
+		out.WriteString("!")
+	}
 	// print return types
 	if len(fl.ReturnValues) != 0 {
 		out.WriteString(" ")
@@ -856,7 +869,6 @@ type FunctionCallExpression struct {
 	Token       token.Token // The function identifier
 	Arguments   []Expression
 	ReturnTypes []types.TypeSpec
-	Catch       Expression
 
 	// Set by semantic analysis
 	T             types.TypeSpec
@@ -878,10 +890,6 @@ func (e *FunctionCallExpression) String() string {
 	out.WriteString("(")
 	out.WriteString(strings.Join(args, ","))
 	out.WriteString(")")
-
-	if e.Catch != nil {
-		out.WriteString(" " + e.Catch.String())
-	}
 
 	return out.String()
 }
@@ -937,7 +945,7 @@ func (e *InfixExpression) String() string {
 }
 
 type PostfixExpression struct {
-	Token token.Token // The postfix token, e.g. ! Operator string
+	Token token.Token // The postfix token, e.g. ++
 	Left  Expression
 	// Set by semsis
 	T types.TypeSpec
@@ -983,8 +991,31 @@ func (e *DotExpression) String() string {
 	return out.String()
 }
 
+type TryExpression struct {
+	Token token.Token
+	Right Expression
+
+	T types.TypeSpec
+}
+
+func (s *TryExpression) expressionNode()      {}
+func (s *TryExpression) Type() types.TypeSpec { return s.Right.Type() }
+func (s *TryExpression) SetType(t types.TypeSpec) {
+	s.T = t
+}
+func (s *TryExpression) TokenLiteral() string { return s.Token.Literal }
+func (s *TryExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString(s.Token.Literal)
+	out.WriteString(" ")
+	out.WriteString(s.Right.String())
+	return out.String()
+}
+
 type CatchExpression struct {
 	Token token.Token
+	Left  Expression
+	Ident *Identifier
 	Block *BlockStatement
 }
 
@@ -994,7 +1025,9 @@ func (s *CatchExpression) SetType(t types.TypeSpec) {}
 func (s *CatchExpression) TokenLiteral() string     { return s.Token.Literal }
 func (s *CatchExpression) String() string {
 	var out bytes.Buffer
+	out.WriteString(s.Left.String() + " ")
 	out.WriteString(s.Token.Literal + " ")
+	out.WriteString(s.Ident.TokenLiteral() + " ")
 	if s.Block != nil {
 		out.WriteString(s.Block.String())
 	}
@@ -1011,25 +1044,19 @@ type IndexExpression struct {
 	Token   token.Token // [
 	Left    Expression
 	Indices []Expression
-
-	// set by semsis
-	T types.TypeSpec
 }
 
 func (e *IndexExpression) expressionNode() {}
 func (e *IndexExpression) SetType(t types.TypeSpec) {
-	e.T = t
+	panic("this method should not be used")
 }
 
 // Returns type that a variable would have when index expression executed
 // v [][]i64 = a[0][0]
 // Type() == i64
 func (e *IndexExpression) Type() types.TypeSpec {
-	if e.T == nil {
-		depth := len(e.Indices)
-		return e.GetTypeAt(depth)
-	}
-	return e.T
+	depth := len(e.Indices)
+	return e.GetTypeAt(depth)
 }
 
 // a = [[1,2], [3,4]]
@@ -1064,7 +1091,7 @@ start:
 		depth--
 		goto start
 	}
-	panic("attempted to access index expression type at an invalid index")
+	return nil
 }
 func (e *IndexExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *IndexExpression) String() string {
@@ -1187,7 +1214,7 @@ func (e *UseExpression) String() string {
 	var out bytes.Buffer
 
 	out.WriteString(e.TokenLiteral() + " ")
-	out.WriteString(e.Ident.String() + " ")
+	out.WriteString(e.Ident.TokenLiteral() + " ")
 	out.WriteString(e.Block.String())
 
 	return out.String()
@@ -1237,7 +1264,6 @@ func (l *BooleanLiteral) String() string           { return l.Token.Literal }
 
 type StringLiteral struct {
 	Token token.Token
-	Value string
 }
 
 func (l *StringLiteral) expressionNode()          {}
@@ -1337,7 +1363,7 @@ func (l *ArrayLiteral) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("[")
-	for i := 0; i < len(l.Values); i++ {
+	for i := range len(l.Values) {
 		out.WriteString(l.Values[i].String())
 		if i != len(l.Values)-1 {
 			out.WriteString(",")
@@ -1368,7 +1394,7 @@ func (s *StructLiteral) String() string {
 	var out bytes.Buffer
 
 	if s.Name != nil {
-		out.WriteString(s.Name.String())
+		out.WriteString(s.Name.TokenLiteral())
 	}
 	out.WriteString("{")
 	for i, f := range s.Fields {
@@ -1399,7 +1425,7 @@ func (s *StructFieldLiteral) TokenLiteral() string     { return s.Token.Literal 
 func (s *StructFieldLiteral) String() string {
 	var out bytes.Buffer
 	if s.Name != nil {
-		out.WriteString(s.Name.String())
+		out.WriteString(s.Name.TokenLiteral())
 		if s.T != nil {
 			out.WriteString(" " + s.T.String())
 		}
@@ -1439,6 +1465,7 @@ const (
 	InlineNever
 	InlineHint
 	InlineAlways
+	Test
 )
 
 type BasicAttribute struct {
@@ -1456,8 +1483,12 @@ func (a *BasicAttribute) String() string {
 		return "@inline(never)"
 	case InlineHint:
 		return "@inline(hint)"
-	default:
+	case InlineAlways:
 		return "@inline(always)"
+	case Test:
+		return "@test"
+	default:
+		panic("invalid attribute type")
 	}
 }
 
@@ -1474,11 +1505,7 @@ func (l *Library) Pos() token.Pos {
 	return l.Token.Position
 }
 
-func (f *FileFormat) Pos() token.Pos {
-	return f.Token.Position
-}
-
-func (s *ImportStatement) Pos() token.Pos {
+func (s *UseStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 
@@ -1544,10 +1571,6 @@ func (s *ForRangeStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 
-func (s *WhileStatement) Pos() token.Pos {
-	return s.Token.Position
-}
-
 func (s *KeywordStatement) Pos() token.Pos {
 	return s.Token.Position
 }
@@ -1559,7 +1582,15 @@ func (s *StructFieldStatement) Pos() token.Pos {
 	return token.Pos(0)
 }
 
+func (s *ErrorStatement) Pos() token.Pos {
+	return s.Token.Position
+}
+
 func (s *DeferStatement) Pos() token.Pos {
+	return s.Token.Position
+}
+
+func (s *RaiseStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 
@@ -1600,6 +1631,10 @@ func (e *PostfixExpression) Pos() token.Pos {
 }
 
 func (e *DotExpression) Pos() token.Pos {
+	return e.Token.Position
+}
+
+func (e *TryExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 

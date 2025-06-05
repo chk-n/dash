@@ -5,6 +5,7 @@ package semantic
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"dash-lang.io/src/ast"
@@ -12,11 +13,6 @@ import (
 	"dash-lang.io/src/token"
 	"dash-lang.io/src/types"
 )
-
-// TODO: fix difference build vs analyse vs infer functions
-// build => prepares symbol table
-// infer => infers type
-// analyse => perform semantic analysis
 
 type scope uint
 
@@ -42,28 +38,25 @@ type TypeInfo struct {
 }
 
 type Semantics struct {
+	// Path to file being analysed
+	path string
+	// symbol table for externally referenced types, functions, variables etc.
+	importedSt map[string]map[string]types.TypeSpec
+	// TODO: replace with varSt
 	// symbol table for functions
 	fnSt *internal.StackedSymTab[*FnInfo]
 	// symbol table for variables
 	varSt *internal.StackedSymTab[*VarInfo]
-	// used for escape analysis
-	expSt *internal.StackedSymTab[ast.Expression]
 	// tracks errors discovered in a library
 	errors []*SemanticalError
+	// TODO: remove this and replace with TODO's marked in code
 	// tracks current scope e.g. if we are in a function or for loop
 	scope *internal.Stack[scope]
-	// Should contain all functions, global variables,
-	// types, aliases, enums and errors, that this librarys
-	// accesses in other files
-	headerCache *internal.Cache[string, types.TypeSpec]
 	// current function type being analysed
 	fnScope *internal.Stack[*types.Function]
-	// when analysing a literal this field can be used
-	// to set the type the caller expects
-	expectedType *internal.Stack[types.TypeSpec]
-
 	// symbol table for custom types (type defs)
-	typeSt *internal.StackedSymTab[*TypeInfo]
+	typeSt *internal.StackedSymTab[types.TypeSpec]
+	// TODO: store this info in type e.g. as guarded type
 	// tracks whether a given type is guarded so we
 	// can mark operations as dirty e.g. for use,
 	// copy update and operations with guarded type
@@ -75,15 +68,16 @@ type SemanticalError struct {
 	Err error
 }
 
-func New( /* hc *internal.Cache[string, types.Type] */ ) *Semantics {
+func New(path string, importedSt map[string]map[string]types.TypeSpec) *Semantics {
 	return &Semantics{
+		path:        path,
 		fnSt:        internal.NewStackedSymbolTable[*FnInfo](),
 		varSt:       internal.NewStackedSymbolTable[*VarInfo](),
-		expSt:       internal.NewStackedSymbolTable[ast.Expression](),
 		scope:       internal.NewStack[scope](),
 		fnScope:     internal.NewStack[*types.Function](),
-		typeSt:      internal.NewStackedSymbolTable[*TypeInfo](),
+		typeSt:      internal.NewStackedSymbolTable[types.TypeSpec](),
 		guardedType: internal.NewCache[string, struct{}](),
+		importedSt:  importedSt,
 	}
 }
 
@@ -91,49 +85,30 @@ func (s *Semantics) Analyse(lib *ast.Library) {
 	s.scope.Push(GLOBAL)
 	defer s.scope.Pop()
 
-	s.analyseHeaders(lib)
+	s.analyseTypes(lib.Nodes)
+	s.resolveAllTypeReferences(lib.Nodes)
 
-	s.analyseStructDefinitions(lib.Structs)
-	s.analyseGenericStructDefinitions(lib.GenericStructs)
+	// Do the circular type dependency analysis across these types
+	s.analyseDuplicateIdentifiers(lib.Nodes)
+	s.analyseCircularTypeReferences(lib.Nodes)
 
-	s.analyseTypeDefinitions(lib.TypeDefinitions)
-	s.analyseTypeAliases(lib.TypeAliases)
-
-	s.analyseUnions(lib.Unions)
-
-	// s.analyseTypeHierarchy(n.TypeDefinitions, n.TypeAliases)
-
-	for _, v := range lib.GlobalVariables {
-		s.analyseAssignmentStatement(v)
-	}
-
-	for _, fn := range lib.Functions {
-		// We dont need to scope the symbol table as all function literals
-		// encountered here are global within library
-		s.analyseFunctionExpression(fn, "")
-	}
-
-	// We need to analyse type guards after type def and functions
-	// analysed as guards might call functions or other types which
-	// need to be analysed before hand
-	for _, td := range lib.TypeDefinitions {
-		if td.Guard != nil {
-			// use type def name to set variabe table so that analysis
-			// of guard works as guard uses type def name as 'variable'
-
-			// s.varSt.Set(td.Name.String(), &VarInfo{Type: &types.Definition{Name: td.Name.String(), Underlying: td.T}})
-			s.analyse(td.Guard, "")
-			s.varSt.Clear(td.Name.String())
-			s.guardedType.Set(td.Name.Value, struct{}{})
-		}
-	}
 	s.analyse(lib, "")
 }
 
 func (s *Semantics) Errors() []string {
 	errs := make([]string, len(s.errors))
-	for i, semErr := range s.errors {
-		errs[i] = semErr.Err.Error()
+	for i, e := range s.errors {
+		errs[i] = e.Err.Error()
+
+	}
+	return errs
+}
+
+func (s *Semantics) ErrorsFmt() []string {
+	errs := make([]string, len(s.errors))
+	for i, e := range s.errors {
+		pos := e.At.Pos()
+		errs[i] = fmt.Sprintf("[ERROR] Semsis failed in %s at %d:%d - %s", s.path, pos.Line(), pos.Column(), e.Err)
 
 	}
 	return errs
@@ -143,14 +118,31 @@ func (s *Semantics) Errors() []string {
 func (s *Semantics) analyse(n ast.Node, name string) {
 	switch n := n.(type) {
 	case *ast.Library:
-		for _, fn := range n.Functions {
+		for _, fn := range n.Nodes {
 			s.analyse(fn, "")
+		}
+	case *ast.TypeDefinitionStatement:
+		// We need to analyse type guards after type def and functions
+		// analysed as guards might call functions or other types which
+		// need to be analysed before hand
+		if n.Guard != nil {
+			// use type def name to set variabe table so that analysis
+			// of guard works as guard uses type def name as 'variable'
+			// s.varSt.Set(td.Name.TokenLiteral(), &VarInfo{Type: &types.Definition{Name: td.Name.TokenLiteral(), Underlying: td.T}})
+			s.analyse(n.Guard, "")
+			s.varSt.Clear(n.Name.TokenLiteral())
+			s.guardedType.Set(n.Name.Value, struct{}{})
 		}
 	case *ast.FunctionExpression:
 		// scope within function
 		s.varSt.Scope()
 		s.analyseFunctionExpression(n, name)
 		fnType := n.Type()
+		if n.ErrorProne {
+			fnType := fnType.(*types.Function)
+			fnType.IsErrorProne = true
+			n.SetType(fnType)
+		}
 		// another error must have occured
 		if fnType == nil {
 			return
@@ -183,7 +175,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 
 		if isBuiltinFunction(n.Token.Literal) {
-			argTs, retTs := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
+			builtintFn := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
+			argTs := builtintFn.T.(*types.Function).Arg
+			retTs := builtintFn.T.(*types.Function).Ret
 
 			s.analyseCallArguments(n, argTs)
 			n.ReturnTypes = retTs
@@ -194,7 +188,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// error handling we an avoid relying on developer
 			// to check bool for safety, or prove bool is checked.
 			if n.TokenLiteral() == "validate" {
-				argName := n.Arguments[0].String()
+				argName := n.Arguments[0].TokenLiteral()
 				varInfo, ok := s.varSt.Get(argName)
 				if !ok {
 					// this could occur if literal passed, so we
@@ -206,10 +200,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					}
 				}
 			}
-		} else if typeInfo, ok := s.typeSt.Get(fnName); ok {
+		} else if to, ok := s.typeSt.Get(fnName); ok {
 			// primitive type casts excluding struct type casts
 			// are handled by *ast.TypeCastExpression
-			to := typeInfo.Type
 			isFromLiteral := false
 			switch n.Arguments[0].(type) {
 			case ast.Literal:
@@ -253,7 +246,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			n.IsAnonymousFn = rts.IsAnonymousFn
 		}
 		if len(n.ReturnTypes) == 0 {
-			n.T = &types.ConstVoid
+			n.T = &types.Multi{}
 		} else if len(n.ReturnTypes) == 1 {
 			n.T = n.ReturnTypes[0]
 		} else {
@@ -274,8 +267,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 						continue
 					}
 
-					varInfo, _ := s.varSt.Get(ident.String())
-					s.varSt.Set(ident.String(), &VarInfo{
+					varInfo, _ := s.varSt.Get(ident.TokenLiteral())
+					s.varSt.Set(ident.TokenLiteral(), &VarInfo{
 						Type:         mt.T,
 						Reassignable: varInfo.Reassignable,
 					})
@@ -291,7 +284,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		switch n.Argument.(type) {
 		case ast.Literal:
 			s.analyseLiteralWithType(n.Argument, n.Typ)
-
 		}
 	case *ast.DeferStatement:
 		if s.fnScope == nil {
@@ -357,7 +349,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					s.analyseLiteralWithType(rv, expectedType)
 				case *ast.Identifier:
 					// we want to treat function values are literals
-					if _, ok := s.fnSt.Get(lit.String()); ok {
+					if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
 						if !types.CanCoalesce(rt, expectedType) {
 							s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
 							continue
@@ -443,18 +435,13 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			n.T = identType.T
 		}
 
-		s.varSt.Set(n.Ident.String(), &VarInfo{Type: n.T, Reassignable: true})
+		s.varSt.Set(n.Ident.TokenLiteral(), &VarInfo{Type: n.T, Reassignable: true})
 
 		// TODO: validate only ident modified in reference (unlike copy and update)
 
 		s.analyse(n.Block, "")
 
 	case *ast.StructLiteral:
-		// As we only need this for escape analysis we use the variable name as key
-		// If literal returned directly or free floating on a block we ignore
-		if name != "" {
-			s.expSt.Set(name, n)
-		}
 		// Infer types of anonymous structs
 		if n.Name == nil {
 			var typ types.Struct
@@ -463,7 +450,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				s.analyse(f.Value, "")
 				f.T = f.Value.Type()
 				if f.Name != nil {
-					typ.Ts = append(typ.Ts, types.StructField{Name: f.Name.String(), T: f.T})
+					typ.Ts = append(typ.Ts, types.StructField{Name: f.Name.TokenLiteral(), T: f.T})
 					isNamed++
 				} else {
 					typ.Ts = append(typ.Ts, types.StructField{T: f.T})
@@ -476,7 +463,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			n.T = &typ
 		} else {
 			// validate struct exists
-			structName := n.Name.String()
+			structName := n.Name.TokenLiteral()
 			typeDef, ok := s.varSt.Get(structName)
 			if !ok {
 				s.addError(n, errStructNotFound(structName))
@@ -519,7 +506,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// that all fields defined
 			if namedFields == 0 {
 				if len(n.Fields) != len(structType.Ts) {
-					s.addError(n, errStructMissingFields(n.Name.String()))
+					s.addError(n, errStructMissingFields(n.Name.TokenLiteral()))
 					return
 				}
 			} else {
@@ -537,7 +524,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					}
 					found := false
 					for _, f := range n.Fields {
-						if sft.Name == f.Name.String() {
+						if sft.Name == f.Name.TokenLiteral() {
 							found = true
 							break
 						}
@@ -555,7 +542,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// as Dash allows struct fields to be defined out of order.
 				// We need to handle structs with named and unnamed fields
 				if f.Name != nil {
-					_, index, err := structType.GetTypeByField(f.Name.String())
+					_, index, err := structType.GetTypeByField(f.Name.TokenLiteral())
 					internal.AssertTrue(err == nil, "no error expected")
 					f.Index = index
 				} else {
@@ -570,7 +557,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				var fieldType types.TypeSpec
 				var err error
 				if f.Name != nil {
-					fieldType, _, err = structType.GetTypeByField(f.Name.String())
+					fieldType, _, err = structType.GetTypeByField(f.Name.TokenLiteral())
 				} else {
 					fieldType, err = structType.GetTypeByIndex(i)
 				}
@@ -584,7 +571,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 						continue
 					}
 
-					err := structType.SetTypeByField(f.Name.String(), f.T)
+					err := structType.SetTypeByField(f.Name.TokenLiteral(), f.T)
 					internal.AssertTrue(err == nil, "no error expected")
 
 					f.T = t.Type
@@ -610,7 +597,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			switch t := typeDef.Type.(type) {
 			case *types.Struct:
 				typeDef.Type = structType
-				s.varSt.Set(n.Name.String(), typeDef)
+				s.varSt.Set(n.Name.TokenLiteral(), typeDef)
 				n.T = structType
 			// The reason this is split from *types.Struct case is because
 			// we want to keep the type definition type the same. The logic
@@ -618,7 +605,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// used properly by the struct literal.
 			case *types.Definition:
 				t.Underlying = structType
-				s.varSt.Set(n.Name.String(), typeDef)
+				s.varSt.Set(n.Name.TokenLiteral(), typeDef)
 				n.T = typeDef.Type
 			}
 
@@ -628,12 +615,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.ArrayLiteral:
 		if len(n.Values) == 0 {
 			return
-		}
-
-		// As we only store need this for escape analysis we use the variable name as key
-		// If literal returned directly or free floating on a block we ignore
-		if name != "" {
-			s.expSt.Set(name, n)
 		}
 
 		for _, el := range n.Values {
@@ -650,10 +631,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 	case *ast.DotExpression:
 		s.analyse(n.Left, "")
-
 		switch left := n.Left.Type().(type) {
 		case *types.Array:
 			s.analyse(n.Right, "")
+			n.SetType(n.Right.Type())
 		case *types.Enum:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
@@ -661,10 +642,17 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				panic("todo: add semsis error")
 			}
+			n.SetType(n.Right.Type())
 		case *types.Struct:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
-				typ, _, err := left.GetTypeByField(n.Right.String())
+				typ, _, err := left.GetTypeByField(n.Right.TokenLiteral())
+				if err != nil {
+					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+				}
+				t.T = typ
+			case *ast.IntegerLiteral:
+				typ, err := left.GetTypeByIndex(int(t.Value))
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
@@ -672,12 +660,13 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
 		case *types.Pointer:
 			switch left := left.T.(type) {
 			case *types.Struct:
 				switch t := n.Right.(type) {
 				case *ast.Identifier:
-					typ, _, err := left.GetTypeByField(n.Right.String())
+					typ, _, err := left.GetTypeByField(n.Right.TokenLiteral())
 					if err != nil {
 						s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 					}
@@ -687,6 +676,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				}
 
 			}
+
+			n.SetType(n.Right.Type())
 		case *types.Definition, *types.Alias:
 			u := types.GetUnderlyingType(left)
 			structType, ok := u.(*types.Struct)
@@ -696,7 +687,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
-				typ, _, err := structType.GetTypeByField(n.Right.String())
+				typ, _, err := structType.GetTypeByField(n.Right.TokenLiteral())
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
@@ -704,10 +695,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
 		case *types.AbstractStruct:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
-				typ, _, err := left.GetTypeByField(n.Right.String())
+				typ, _, err := left.GetTypeByField(n.Right.TokenLiteral())
 				if err != nil {
 					s.addError(n, errStructAliasUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
@@ -715,10 +707,30 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			case *ast.FunctionCallExpression:
 				s.analyse(n.Right, "")
 			}
+			n.SetType(n.Right.Type())
+		case *types.ImportedNamed:
+			var name string
+			if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+				name = fn.TokenLiteral()
+			} else {
+				name = n.Right.String()
+			}
+			// set type of expression
+			typ := s.importedSt[n.Left.String()][name]
+			switch typ := typ.(type) {
+			case *types.Function:
+				n.SetType(&types.Multi{Ts: typ.Ret})
+			default:
+				n.SetType(typ)
+			}
+
 		}
-		n.SetType(n.Right.Type())
 	case *ast.IndexExpression:
 		s.analyse(n.Left, "")
+		// another error occured
+		if n.Type() == nil {
+			return
+		}
 		switch typ := n.Left.Type().(type) {
 		case nil:
 			panic("this is a compiler error. please report")
@@ -741,14 +753,17 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		defer s.scope.Pop()
 
 		if n.Assignment != nil {
-			assignee := n.Assignment.Declerations[0].Assignee
-			val := n.Assignment.Values[0]
-			// TODO: validate LHS is identifier! otherwise we could have 'for 0 = i'
-			s.varSt.Set(assignee.String(), &VarInfo{Reassignable: true})
-			s.analyse(n.Assignment, "")
+			assignee, ok := n.Assignment.Declerations[0].(*ast.Identifier)
+			if !ok {
+				s.addError(n.Assignment, errInvalidAssignment())
+			} else {
+				val := n.Assignment.Values[0]
+				s.varSt.Set(assignee.TokenLiteral(), &VarInfo{Reassignable: true})
+				s.analyse(n.Assignment, "")
 
-			assignee.SetType(val.Type())
-			s.varSt.Set(assignee.String(), &VarInfo{Type: assignee.Type(), Reassignable: true})
+				n.Assignment.SetTypeAt(0, val.Type())
+				s.varSt.Set(assignee.TokenLiteral(), &VarInfo{Type: assignee.Type(), Reassignable: true})
+			}
 		}
 		if n.Condition != nil {
 			switch cond := n.Condition.(type) {
@@ -764,7 +779,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 			case *ast.PrefixExpression:
 				switch cond.Token.Type {
-				case token.NOT:
+				case token.BANG:
 					s.analyse(n.Condition, "")
 				default:
 					s.addError(n, errInvalidBooleanCondition(cond.Operator))
@@ -779,6 +794,16 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			s.analyse(n.Change, "")
 		}
 		s.analyse(n.Block, "")
+	case *ast.TryExpression:
+		// TODO: check that try used in error-prone function
+		s.analyse(n.Right, "")
+		// TODO: check if try used with error-prone function
+		n.SetType(n.Right.Type())
+	case *ast.RaiseStatement:
+		if _, ok := s.typeSt.Get(n.Error.TokenLiteral()); !ok {
+			s.addError(n, errIdentifierNotFound(n.Error.String()))
+			return
+		}
 	case *ast.MatchExpressionStatement:
 
 		// This is fine as its only used for
@@ -792,7 +817,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		} else {
 			s.analyse(n.Scrutinee, "")
 		}
-
 		sT := n.Scrutinee.Type()
 		// this means scrutinee was not defined or
 		// another error occured
@@ -800,7 +824,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			return
 		}
 
-		_, isUnion := n.Scrutinee.Type().(*types.Union)
 		for _, c := range n.Cases {
 			s.analyse(c.Predicate, "")
 			cT := c.Predicate.Type()
@@ -812,6 +835,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// As the types match, we can replace type of predicate.
 			// This is required to be able to, for example, match byte
 			// with char literals
+			_, isUnion := n.Scrutinee.Type().(*types.Union)
 			if !isUnion {
 				c.Predicate.SetType(sT)
 			}
@@ -830,15 +854,15 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					panic("todo: add semsis error")
 				}
 
-				s.varSt.Set(exp.Left.String(), &VarInfo{Type: cT})
+				s.varSt.Set(exp.Left.TokenLiteral(), &VarInfo{Type: cT})
 
 			case *ast.Identifier:
-				info, ok := s.varSt.Get(n.Scrutinee.String())
+				info, ok := s.varSt.Get(n.Scrutinee.TokenLiteral())
 				if !ok {
 					s.addError(n.Scrutinee, errIdentifierNotFound(n.Scrutinee.String()))
 					return
 				}
-				s.varSt.Set(n.Scrutinee.String(), &VarInfo{Type: cT, Reassignable: info.Reassignable})
+				s.varSt.Set(n.Scrutinee.TokenLiteral(), &VarInfo{Type: cT, Reassignable: info.Reassignable})
 			default:
 				// in case of literals and expressions we dont need
 				// to do anything else
@@ -897,7 +921,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			n.SetType(t.T)
 
-		case token.NOT:
+		case token.BANG:
 			// TODO: check only possible on value of type bool
 		}
 	case *ast.InfixExpression:
@@ -1102,7 +1126,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.CharacterLiteral:
 		n.T = &types.ConstChar
 	case *ast.Identifier:
-		info, ok := s.varSt.Get(n.String())
+		info, ok := s.varSt.Get(n.TokenLiteral())
 		if ok && info != nil {
 			if info.Type == nil {
 				// NOTE: this can also signify another error occured
@@ -1111,17 +1135,29 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			n.T = info.Type
 			return
 		}
-		fnInfo, ok := s.fnSt.Get(n.String())
+		fnInfo, ok := s.fnSt.Get(n.TokenLiteral())
 		if ok && fnInfo != nil {
 			n.T = fnInfo.Type
 			return
 		}
-		s.addError(n, errIdentifierNotFound(n.String()))
+		if _, ok := s.importedSt[n.TokenLiteral()]; ok {
+			n.T = &types.ImportedNamed{
+				Lib: n.TokenLiteral(),
+				// NOTE: we purposly dont set this
+				// field as we dont know what the
+				// unknown named value is here
+				// Typ:
+			}
+			return
+		}
+		s.addError(n, errIdentifierNotFound(n.TokenLiteral()))
 	case *ast.BlockStatement:
 		// enter new scope
 		s.varSt.Scope()
 		defer s.varSt.Unscope()
 
+		// TODO: this scope can be removed by making a new function
+		// s.analyseBlockStatement(blk, TAG) e.g. USE, FOR etc.
 		// case: 1 we are in a for loop
 		scope := s.scope.GetLast()
 		for i, st := range n.Statements {
@@ -1193,62 +1229,84 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 }
 
 func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
-	isFnCall := false
+
+	// validate declerations
+	for _, decl := range n.Declerations {
+		var ident string
+		switch decl := decl.(type) {
+		case *ast.DeclarationStatement:
+			continue
+		case *ast.Identifier:
+			ident = decl.TokenLiteral()
+		case *ast.DotExpression:
+			ident = decl.Left.TokenLiteral()
+		case *ast.IndexExpression:
+			ident = decl.Left.TokenLiteral()
+		case *ast.SliceExpression:
+			ident = decl.Left.TokenLiteral()
+		}
+		ra, ok := s.varSt.Get(ident)
+		if !ok && ra == nil {
+			s.addError(n, errIdentifierNotFound(ident))
+			continue
+		}
+		if !ra.Reassignable {
+			s.addError(n, errIllegalUpdate(ident))
+			continue
+		}
+	}
+
 	declCnt := 0
-	for i := 0; i < len(n.Values); i++ {
+	isFnCall := false
+	for i := range n.Values {
 		val := n.Values[i]
-		s.analyse(val, n.Declerations[i].Assignee.String())
+		s.analyse(val, n.VarNameAt(i))
 		// this generally means another error happened
 		if val.Type() == nil {
 			declCnt++
 			continue
 		}
 
-		switch val := val.(type) {
-		case *ast.FunctionExpression:
-			n.Declerations[i].Assignee.SetType(val.Type())
-			f := &FnInfo{
-				Type:          val.T.(*types.Function),
-				IsAnonymousFn: true,
-			}
-			s.fnSt.Set(n.Declerations[i].Assignee.String(), f)
-
-			declCnt++
-		case *ast.FunctionCallExpression:
+		underlyingT := types.GetUnderlyingType(val.Type())
+		switch t := underlyingT.(type) {
+		case *types.Multi:
 			isFnCall = true
-			// If RHS is a function call, there can be
-			// no other expressions as Dash spec doesnt
-			// allow it. This avoidd any confusion about
-			// what return value gets assigned to which
-			// decleration.
-			if len(val.ReturnTypes) == 0 {
+			if len(t.Ts) == 0 {
 				s.addError(val, errCannotAssignVoidFunction())
 				break
 			}
-			for j, rt := range val.ReturnTypes {
-				decl := n.Declerations[i+j]
 
-				decl.Assignee.SetType(rt)
+			for j, rt := range t.Ts {
+				n.SetTypeAt(i+j, rt)
 				underlying := types.GetUnderlyingType(rt)
 				if fnValType, ok := underlying.(*types.Function); ok {
 					f := &FnInfo{
 						Type: fnValType,
 					}
-					s.fnSt.Set(decl.Assignee.String(), f)
+					s.fnSt.Set(n.VarNameAt(i+j), f)
 				} else {
-					s.setDeclerationInSymTab(n.Declerations[i+j])
+					s.setDeclerationInSymTab(n.VarNameAt(i+j), rt, n.IsVarAt(i+j))
 				}
 				declCnt++
 			}
-			break
-		// case *ast.StructLiteral
-		// TODO: struct field dereference
+		case *types.Function:
+			n.SetTypeAt(i, val.Type())
+			f := &FnInfo{
+				Type:          t,
+				IsAnonymousFn: true,
+			}
+			s.fnSt.Set(n.VarNameAt(i), f)
+			declCnt++
 		default:
 			decl := n.Declerations[i]
-			switch exp := decl.Assignee.(type) {
+			switch decl := decl.(type) {
 			case *ast.IndexExpression, *ast.SliceExpression, *ast.DotExpression:
-				s.analyse(decl.Assignee, "")
-
+				exp := decl.(ast.Expression)
+				s.analyse(exp, "")
+				if exp.Type() == nil {
+					// another error occured
+					return
+				}
 				if _, ok := val.(ast.Literal); ok {
 					s.analyseLiteralWithType(val, exp.Type())
 					val.SetType(exp.Type())
@@ -1258,21 +1316,14 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 						return
 					}
 				}
+			case *ast.Identifier:
+				n.SetTypeAt(i, val.Type())
+				s.setDeclerationInSymTab(n.VarNameAt(i), val.Type(), true)
 			default:
-				decl.Assignee.SetType(val.Type())
-				underlying := types.GetUnderlyingType(val.Type())
-				if fnValType, ok := underlying.(*types.Function); ok {
-					f := &FnInfo{
-						Type: fnValType,
-					}
-					s.fnSt.Set(decl.Assignee.String(), f)
-				} else {
-					s.setDeclerationInSymTab(n.Declerations[i])
-				}
+				n.SetTypeAt(i, val.Type())
+				s.setDeclerationInSymTab(n.VarNameAt(i), val.Type(), n.IsVarAt(i))
 			}
-
 			declCnt++
-
 		}
 	}
 
@@ -1281,52 +1332,14 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 		return
 	}
 
-	//  validate declerations
-	for _, decl := range n.Declerations {
-		if decl.TokenLiteral() == "" {
-			var ident string
-			switch a := decl.Assignee.(type) {
-			case *ast.Identifier:
-				ident = a.String()
-			case *ast.DotExpression:
-				ident = a.Left.String()
-			case *ast.IndexExpression:
-				ident = a.Left.String()
-			case *ast.SliceExpression:
-				ident = a.Left.String()
-			}
-			ra, ok := s.varSt.Get(ident)
-			if !ok && ra == nil {
-				s.addError(n, errIdentifierNotFound(ident))
-				continue
-			}
-			if !ra.Reassignable {
-				s.addError(n, errIllegalUpdate(decl.Assignee.String()))
-				continue
-			}
-		}
-	}
 }
 
-func (s *Semantics) setDeclerationInSymTab(decl *ast.DeclarationStatement) {
-
-	switch decl.Token.Type {
-	case token.LET, token.VAR:
-		vi := &VarInfo{
-			Type:         decl.Assignee.Type(),
-			Reassignable: decl.Token.Type == token.VAR,
-		}
-		s.varSt.Set(decl.Assignee.String(), vi)
-	default:
-		// for reassignments we simply update
-		// symbol table to point to new value
-		vi := &VarInfo{
-			Type:         decl.Assignee.Type(),
-			Reassignable: true,
-		}
-		s.varSt.Set(decl.Assignee.String(), vi)
-
+func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isVar bool) {
+	vi := &VarInfo{
+		Type:         t,
+		Reassignable: isVar,
 	}
+	s.varSt.Set(n, vi)
 }
 
 // Checks whether an expression matches the expectedType, for literals we perform type
@@ -1479,440 +1492,260 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.TypeSpec, fnName string) type
 	}
 }
 
-// Populates symbol table with names and basic (unprocessed) types
-// for type definitions, aliases, structs, generic structs and unions.
-func (s *Semantics) analyseHeaders(lib *ast.Library) {
-	for _, enum := range lib.Enums {
-		s.varSt.Set(enum.Name.String(), &VarInfo{Type: enum.T})
+func (s *Semantics) analyseDuplicateIdentifiers(nodes []ast.Node) {
+	// check for duplicates
+	m := make(map[string]uint16, len(nodes))
+	for i, stmt := range nodes {
+		var name string
+		switch stmt := stmt.(type) {
+		case *ast.StructStatement:
+			name = stmt.Name.String()
+		case *ast.TypeDefinitionStatement:
+			name = stmt.Name.String()
+		case *ast.TypeAliasStatement:
+			name = stmt.Name.String()
+		case *ast.UnionStatement:
+			name = stmt.Name.String()
+		case *ast.EnumStatement:
+			name = stmt.Name.String()
+		case *ast.ErrorStatement:
+			name = stmt.Name.String()
+		case *ast.FunctionExpression:
+			name = stmt.Name.String()
+		default:
+			continue
+		}
+		if _, ok := m[name]; ok {
+			s.addError(stmt, errDuplicateIdentifierFound(name))
+		} else {
+			m[name] = uint16(i)
+		}
 	}
 
-	for _, def := range lib.TypeDefinitions {
-		s.varSt.Set(def.Name.String(), &VarInfo{Type: def.T})
-	}
-
-	for _, alias := range lib.TypeAliases {
-		s.varSt.Set(alias.Name.String(), &VarInfo{Type: alias.T})
-	}
-
-	for _, union := range lib.Unions {
-		s.varSt.Set(union.Name.String(), &VarInfo{Type: union.T})
-	}
-
-	for _, strct := range lib.Structs {
-		s.varSt.Set(strct.Name.String(), &VarInfo{Type: strct.T})
-	}
-
-	for _, gen := range lib.GenericStructs {
-		s.varSt.Set(gen.Name.String(), &VarInfo{Type: gen.T})
+	// check for duplicate fields in union
+	for _, stmt := range nodes {
+		switch un := stmt.(type) {
+		case *ast.UnionStatement:
+			dups := make(map[string]struct{}, len(un.Types))
+			for _, typ := range un.Types {
+				if _, ok := dups[typ.String()]; ok {
+					s.addError(typ, errDuplicateUnionField(typ.String(), un.Name.TokenLiteral()))
+				} else {
+					dups[typ.String()] = struct{}{}
+				}
+			}
+		}
 	}
 }
 
-// Performs the following validations for struct definitions:
-// - no duplicates
-// - no cycles
-// - no recursion in struct definition (except if field is of optional type)
-// - infer any missing types (e.g. unknown_named_type)
-func (s *Semantics) analyseStructDefinitions(sds []*ast.StructStatement) {
-	m := make(map[string]uint16, len(sds))
+// Sets types in symbol table
+func (s *Semantics) analyseTypes(nodes []ast.Node) {
+	for _, stmt := range nodes {
+		switch n := stmt.(type) {
+		case *ast.StructStatement:
+			strct := &types.Struct{Name: n.Name.TokenLiteral()}
+			for _, f := range n.Fields {
+				_, exists := s.varSt.Get(f.Type.Ident())
 
-	// check for duplicates
-	for i, stmt := range sds {
-		if _, ok := m[stmt.Name.String()]; ok {
-			s.addError(stmt, errDuplicateIdentifierFound(stmt.Name.String()))
-		} else {
-			m[stmt.Name.String()] = uint16(i)
+				var fieldType types.TypeSpec
+				if !exists && !types.IsTypeIdent(f.Type.Ident()) {
+					fieldType = &types.UnknownNamed{Name: f.Type.Ident()}
+				} else {
+					fieldType = f.Type
+				}
+
+				if f.Name != nil {
+					field := types.StructField{Name: f.Name.TokenLiteral(), T: fieldType}
+					strct.Ts = append(strct.Ts, field)
+				} else {
+					field := types.StructField{T: fieldType}
+					strct.Ts = append(strct.Ts, field)
+				}
+			}
+			n.T = strct
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+		case *ast.TypeDefinitionStatement:
+			// underlying type might be nil if it references
+			// a type declared later
+			typ := s.inferUnknownNamedType(n.UnderlyingType)
+			if typ != nil {
+				n.UnderlyingType = typ
+			}
+
+			// define cast function, if type has a predicate
+			// cast will cause return type to be 'dirty'
+			if n.Guard != nil {
+				// set type as dirty type def
+				n.T = &types.Dirty{T: &types.Definition{Name: n.Name.String(), Underlying: n.UnderlyingType}}
+			} else {
+				// set type as type def
+				n.T = &types.Definition{Name: n.Name.String(), Underlying: n.UnderlyingType}
+			}
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+			s.typeSt.Set(n.Name.String(), n.Type())
+		case *ast.TypeAliasStatement:
+			n.T = n.UnderlyingType
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+		case *ast.UnionStatement:
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
+		case *ast.EnumStatement:
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
+		case *ast.ErrorStatement:
+			s.typeSt.Set(n.Name.String(), &types.Error{Name: n.Name.TokenLiteral()})
+		case *ast.AssignmentStatement:
+			// TODO
 		}
 	}
+}
 
-	// infer types, note some types will remain 'unknown_named'
-	for _, sd := range sds {
-		strct := &types.Struct{Name: sd.Name.String()}
-		for _, f := range sd.Fields {
-			if f.Name != nil {
-				field := types.StructField{Name: f.Name.String(), T: f.Type}
-				strct.Ts = append(strct.Ts, field)
-			} else {
-				field := types.StructField{T: f.Type}
-				strct.Ts = append(strct.Ts, field)
-			}
+func (s *Semantics) analyseCircularTypeReferences(nodes []ast.Node) {
+	m := make(map[string]uint16, len(nodes))
+	for i, stmt := range nodes {
+		var name string
+		switch stmt := stmt.(type) {
+		case *ast.StructStatement:
+			name = stmt.Name.String()
+		case *ast.UnionStatement:
+			name = stmt.Name.String()
+		case *ast.TypeDefinitionStatement:
+			name = stmt.Name.String()
+		case *ast.TypeAliasStatement:
+			name = stmt.Name.String()
+		default:
+			continue
 		}
-		sd.T = strct
-		s.varSt.Set(sd.Name.String(), &VarInfo{Type: sd.Type()})
+		m[name] = uint16(i)
 	}
 
 	// build adjecency list
-	adj := make([][]uint16, len(sds))
-	for i, sd := range sds {
+	adj := make([][]uint16, len(nodes))
+	for i, stmt := range nodes {
 		// For each field mark if it references another struct in library
-		for _, field := range sd.Fields {
-			fieldTypeIdent := field.Type.Ident()
+		switch stmt := stmt.(type) {
+		case *ast.StructStatement:
+			for _, field := range stmt.Fields {
+				fieldTypeIdent := field.Type.Ident()
 
-			j, ok := m[fieldTypeIdent]
-			if !ok {
-				continue
-			}
-
-			// if field references self then only allowed as optional type
-			if uint16(i) == j {
-				switch field.Type.(type) {
-				case *types.Optional:
-					// empty case to capture allowed self references
-				default:
-					s.addError(field, errRecursiveStructReference(field.Name.String(), sd.Name.String()))
-				}
-			} else {
-				adj[i] = append(adj[i], j)
-			}
-
-		}
-	}
-
-	// check for cycles
-	if path, hasCycle := isCyclic(adj); hasCycle {
-		names := make([]string, len(path))
-		for i, idx := range path {
-			names[i] = sds[idx].Name.String()
-		}
-		s.addError(sds[path[0]], errCyclicalTypeDeclarations(names))
-	}
-
-	//  set type and infer any missing unknown_name types
-	for _, sd := range sds {
-		for i, fT := range sd.T.Ts {
-			typ := s.inferUnknownNamedType(fT.T)
-			if typ == nil {
-				s.addError(sd.Fields[i], errTypeNotFound(fT.T.String()))
-				continue
-			}
-			sd.T.Ts[i].T = typ
-			sd.Fields[i].Type = typ
-		}
-		// TODO: for struct type conversion we need to ensure function accepts
-		// ANY struct with the same fields named or unknown
-		s.varSt.Set(sd.Name.String(), &VarInfo{Type: sd.Type()})
-		s.typeSt.Set(sd.Name.String(), &TypeInfo{Type: sd.Type()})
-	}
-}
-
-func (s *Semantics) analyseGenericStructDefinitions(gss []*ast.GenericStructStatement) {
-	m := make(map[string]uint16, len(gss))
-
-	// check for duplicates
-	for i, stmt := range gss {
-		if _, ok := m[stmt.Name.String()]; ok {
-			s.addError(stmt, errDuplicateIdentifierFound(stmt.Name.String()))
-		} else {
-			m[stmt.Name.String()] = uint16(i)
-		}
-	}
-
-	// infer types, note some types will remain 'unknown_named'
-	for _, gs := range gss {
-		strct := &types.AbstractStruct{Name: gs.Name.String()}
-		for _, f := range gs.Fields {
-			if f.Name != nil {
-				field := types.StructField{Name: f.Name.String(), T: f.Type}
-				strct.Ts = append(strct.Ts, field)
-			} else {
-				field := types.StructField{T: f.Type}
-				strct.Ts = append(strct.Ts, field)
-			}
-		}
-		gs.T = strct
-		s.varSt.Set(gs.Name.String(), &VarInfo{Type: gs.Type()})
-	}
-
-	// build adjecency list
-	adj := make([][]uint16, len(gss))
-	for i, gs := range gss {
-		for _, field := range gs.Fields {
-			fieldTypeIdent := field.Type.Ident()
-
-			j, ok := m[fieldTypeIdent]
-			if !ok {
-				continue
-			}
-
-			// if field references self then only allowed as optional type
-			if uint16(i) == j {
-				switch field.Type.(type) {
-				case *types.Optional:
-					// empty case to capture allowed self references
-				default:
-					s.addError(field, errRecursiveStructReference(field.Name.String(), gs.Name.String()))
-				}
-			} else {
-				adj[i] = append(adj[i], j)
-			}
-		}
-	}
-
-	// check for cycles
-	if path, hasCycle := isCyclic(adj); hasCycle {
-		names := make([]string, len(path))
-		for i, idx := range path {
-			names[i] = gss[idx].Name.String()
-		}
-		s.addError(gss[path[0]], errCyclicalTypeDeclarations(names))
-	}
-
-	//  set type and infer any missing unknown_name types
-	for _, gs := range gss {
-		strct := &types.AbstractStruct{Name: gs.Name.String()}
-		for _, field := range gs.Fields {
-			typ := s.inferUnknownNamedType(field.Type)
-			if typ == nil {
-				s.addError(field, errTypeNotFound(field.Type.String()))
-				continue
-			}
-			field.Type = typ
-			if field.Name != nil {
-				strct.Ts = append(strct.Ts, types.StructField{Name: field.Name.String(), T: field.Type})
-			} else {
-				strct.Ts = append(strct.Ts, types.StructField{T: field.Type})
-			}
-		}
-		gs.T = strct
-		s.varSt.Set(gs.Name.String(), &VarInfo{Type: gs.Type()})
-	}
-}
-
-func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
-	switch t := typ.(type) {
-	case *types.Dirty:
-		typ := s.inferUnknownNamedType(t.T)
-		if typ == nil {
-			return nil
-		}
-		if typ, ok := typ.(*types.Dirty); ok {
-			t = typ
-		}
-		return t
-	case *types.Array:
-		typ := s.inferUnknownNamedType(t.T)
-		if typ == nil {
-			return nil
-		}
-		t.T = typ
-		return t
-	case *types.Memory:
-		typ := s.inferUnknownNamedType(t.T)
-		if typ == nil {
-			return nil
-		}
-		t.T = typ
-		return t
-	case *types.Optional:
-		typ := s.inferUnknownNamedType(t.T)
-		if typ == nil {
-			return nil
-		}
-		t.T = typ
-		return t
-	case *types.Pointer:
-		typ := s.inferUnknownNamedType(t.T)
-		if typ == nil {
-			return nil
-		}
-		t.T = typ
-		return t
-	case *types.Function:
-		for i, at := range t.Arg {
-			typ := s.inferUnknownNamedType(at)
-			if typ == nil {
-				return nil
-			}
-			t.Arg[i] = typ
-		}
-		for i, rt := range t.Ret {
-			typ := s.inferUnknownNamedType(rt)
-			if typ == nil {
-				return nil
-			}
-			t.Ret[i] = typ
-		}
-
-	case *types.UnknownNamed:
-		typeInfo, ok := s.varSt.Get(t.Ident())
-		if !ok {
-			return nil
-		}
-		return typeInfo.Type
-	case nil:
-		return nil
-	}
-	return typ
-}
-
-// TODO: add cycle detection
-// Performs the following validations for all type definitions:
-// - no duplicates
-func (s *Semantics) analyseTypeDefinitions(tds []*ast.TypeDefinitionStatement) {
-	m := make(map[string]uint16, len(tds))
-
-	// check for duplicates
-	for i, stmt := range tds {
-		if _, ok := m[stmt.Name.String()]; ok {
-			s.addError(stmt, errDuplicateIdentifierFound(stmt.Name.String()))
-		} else {
-			m[stmt.Name.String()] = uint16(i)
-		}
-	}
-
-	// initially set all values in symbol table
-	for _, td := range tds {
-		s.varSt.Set(td.Name.String(), &VarInfo{Type: td.Type()})
-	}
-
-	//  set type in symbol table
-	for _, td := range tds {
-		// ensure underlying type not unknown
-		td.UnderlyingType = s.inferUnknownNamedType(td.UnderlyingType)
-
-		// define cast function, if type has a predicate
-		// cast will cause return type to be 'dirty'
-		if td.Guard != nil {
-			// set type as dirty type def
-			td.T = &types.Dirty{T: &types.Definition{Name: td.Name.String(), Underlying: td.UnderlyingType}}
-		} else {
-			// set type as type def
-			td.T = &types.Definition{Name: td.Name.String(), Underlying: td.UnderlyingType}
-		}
-		s.varSt.Set(td.Name.String(), &VarInfo{Type: td.Type()})
-		s.typeSt.Set(td.Name.String(), &TypeInfo{Type: td.Type()})
-	}
-}
-
-// TODO: add cycle check
-// Performs the following validations for all type aliases:
-// - no duplicates
-func (s *Semantics) analyseTypeAliases(tas []*ast.TypeAliasStatement) {
-	m := make(map[string]uint16, len(tas))
-
-	// check for duplicates
-	for i, stmt := range tas {
-		if _, ok := m[stmt.Name.String()]; ok {
-			s.addError(stmt, errDuplicateIdentifierFound(stmt.Name.String()))
-		} else {
-			m[stmt.Name.String()] = uint16(i)
-		}
-	}
-
-	// set symbol table for type aliases
-	for _, ta := range tas {
-		ta.T = ta.UnderlyingType
-		s.varSt.Set(ta.Name.String(), &VarInfo{Type: ta.Type()})
-	}
-
-	//  set type in symbol table
-	for _, ta := range tas {
-		// in case we have a nested type def e.g. type abc xyz
-		var typ types.TypeSpec
-		if t, ok := ta.UnderlyingType.(*types.UnknownNamed); ok {
-			val, ok := s.varSt.Get(t.Ident())
-			if !ok {
-				panic("unknown type: ")
-			}
-
-			// ensure underlying type not unknown named anymore
-			ta.UnderlyingType = val.Type
-			typ = val.Type
-		} else {
-			typ = ta.UnderlyingType
-		}
-		// set type as type alias
-		ta.T = typ
-
-		s.varSt.Set(ta.Name.String(), &VarInfo{Type: ta.Type()})
-		s.typeSt.Set(ta.Name.String(), &TypeInfo{Type: ta.Type()})
-	}
-}
-
-func (s *Semantics) analyseUnions(uns []*ast.UnionStatement) {
-	m := make(map[string]uint16, len(uns))
-
-	// check for duplicate union defs
-	for i, stmt := range uns {
-		if _, ok := m[stmt.Name.String()]; ok {
-			s.addError(stmt, errDuplicateIdentifierFound(stmt.Name.String()))
-		} else {
-			m[stmt.Name.String()] = uint16(i)
-		}
-	}
-
-	// Build adjencency table
-	adj := make([][]uint16, len(uns))
-	for i, un := range uns {
-		for _, typ := range un.Types {
-			fieldTypeIdent := typ.T.Ident()
-
-			j, ok := m[fieldTypeIdent]
-			if !ok {
-				continue
-			}
-
-			// no recursion allowed in unions
-			if uint16(i) == j {
-				s.addError(typ, errCyclicalUnionField(un.Name.String()))
-			} else {
-				adj[i] = append(adj[i], j)
-			}
-		}
-	}
-
-	// check for cycles
-	if path, hasCycle := isCyclic(adj); hasCycle {
-		names := make([]string, len(path))
-		for i, idx := range path {
-			names[i] = uns[idx].Name.String()
-		}
-		s.addError(uns[path[0]], errCyclicalUnions(names))
-	}
-
-	// set symbol table for unions, as unions can be defined
-	// out of order
-	for _, un := range uns {
-		s.varSt.Set(un.Name.String(), &VarInfo{Type: un.T})
-	}
-
-	//  set type in symbol table
-	for i, un := range uns {
-		typs := make([]types.TypeSpec, len(un.Types))
-		for j, typ := range un.Types {
-			// if recursive def we already added error
-			// and skip any further checks
-			if j, ok := m[typ.T.Ident()]; ok && uint16(i) == j {
-				continue
-			}
-			if _, ok := typ.T.(*types.UnknownNamed); ok {
-				val, ok := s.varSt.Get(typ.T.Ident())
+				j, ok := m[fieldTypeIdent]
 				if !ok {
-					s.addError(typ, errIdentifierNotFound(typ.String()))
 					continue
 				}
-				internal.AssertNotNil(val.Type, "expected type to be set if stored in symbol table")
 
-				typ.T = val.Type
-				typs[j] = val.Type
+				switch field.Type.(type) {
+				case *types.Optional:
+					// empty case to capture allowed self references
+				default:
+					// if field references self then only allowed as optional type
+					if uint16(i) == j {
+						s.addError(field, errRecursiveStructReference(field.Name.TokenLiteral(), stmt.Name.TokenLiteral()))
+					} else {
+						adj[i] = append(adj[i], j)
+					}
+				}
 			}
-			typs[j] = typ.T
+		case *ast.UnionStatement:
+			for _, field := range stmt.Types {
+				ident := field.String()
+				j, ok := m[ident]
+				if !ok {
+					continue
+				}
+				if uint16(i) == j {
+					s.addError(field, errRecursiveUnionReference(stmt.Name.TokenLiteral()))
+				} else {
+					adj[i] = append(adj[i], j)
+				}
+			}
 		}
-
-		un.T = &types.Union{Name: un.Name.String(), Ts: typs}
-
-		s.varSt.Set(un.Name.String(), &VarInfo{Type: un.T})
-		s.typeSt.Set(un.Name.String(), &TypeInfo{Type: un.T})
 	}
 
-	// check for duplicates within union fields
-	for _, un := range uns {
-		dups := make(map[string]struct{}, len(un.Types))
-		for _, typ := range un.Types {
-			if _, ok := dups[typ.String()]; ok {
-				s.addError(typ, errDuplicateUnionField(typ.String(), un.Name.String()))
-			} else {
-				dups[typ.String()] = struct{}{}
+	// check for cycles
+	if path, hasCycle := isCyclic(adj); hasCycle {
+		names := make([]string, len(path))
+		for i, idx := range path {
+			names[i] = getIdentifier(nodes[idx])
+		}
+		s.addError(nodes[path[0]], errCyclicalTypeDeclarations(names))
+	}
+}
+
+func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
+	for _, n := range nodes {
+		switch n := n.(type) {
+		case *ast.StructStatement:
+			for i, field := range n.Fields {
+				typ := s.inferUnknownNamedType(field.Type)
+				if typ == nil {
+					s.addError(field, errTypeNotFound(field.Type.String()))
+					continue
+				}
+				n.T.Ts[i].T = typ
+				field.Type = typ
 			}
+
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+			s.typeSt.Set(n.Name.String(), n.Type())
+		case *ast.TypeDefinitionStatement:
+			// ensure underlying type not unknown
+			typ := s.inferUnknownNamedType(n.UnderlyingType)
+			if typ == nil {
+				s.addError(n, errTypeNotFound(n.UnderlyingType.String()))
+				continue
+			}
+			n.UnderlyingType = typ
+
+			// define cast function, if type has a predicate
+			// cast will cause return type to be 'dirty'
+			if n.Guard != nil {
+				// set type as dirty type def
+				n.T = &types.Dirty{T: &types.Definition{Name: n.Name.String(), Underlying: n.UnderlyingType}}
+			} else {
+				// set type as type def
+				n.T = &types.Definition{Name: n.Name.String(), Underlying: n.UnderlyingType}
+			}
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+			s.typeSt.Set(n.Name.String(), n.Type())
+		case *ast.TypeAliasStatement:
+			typ := s.inferUnknownNamedType(n.UnderlyingType)
+			if typ == nil {
+				s.addError(n, errTypeNotFound(n.UnderlyingType.String()))
+				continue
+			}
+			n.UnderlyingType = typ
+			n.T = typ
+
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+			s.typeSt.Set(n.Name.String(), n.Type())
+		case *ast.UnionStatement:
+			typs := make([]types.TypeSpec, len(n.Types))
+			for i, typ := range n.Types {
+				// if recursive def we already added error
+				// and skip any further checks
+				// if j, ok := m[typ.T.Ident()]; ok && uint16(i) == j {
+				// 	continue
+				// }
+				if _, ok := typ.T.(*types.UnknownNamed); ok {
+					val, ok := s.varSt.Get(typ.T.Ident())
+					if !ok {
+						s.addError(typ, errIdentifierNotFound(typ.String()))
+						continue
+					}
+					internal.AssertNotNil(val.Type, "expected type to be set if stored in symbol table")
+
+					typ.T = val.Type
+					typs[i] = val.Type
+				}
+				typs[i] = typ.T
+			}
+			n.T = &types.Union{Name: n.Name.String(), Ts: typs}
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
+			s.typeSt.Set(n.Name.String(), n.T)
+		case *ast.FunctionExpression:
+			// TODO: add any remaining handling here
+
+			// We dont need to scope the symbol table as all function literals
+			// encountered here are global within library
+			s.analyseFunctionExpression(n, "")
 		}
 	}
 }
@@ -2071,7 +1904,7 @@ func validateOperator(t types.TypeSpec, tkn token.Type) bool {
 // - sets function signature type in symbol table
 func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name string) {
 	argTypes := make([]types.TypeSpec, len(n.Arguments))
-	for i := 0; i < len(n.Arguments); i++ {
+	for i := range n.Arguments {
 		arg := n.Arguments[i]
 		if arg.Type == nil {
 			// walk forwards until not nil, if end of loop raise error
@@ -2087,20 +1920,24 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 				}
 			}
 		}
+		if importedT, ok := arg.Type.(*types.ImportedNamed); ok {
+			typ := s.importedSt[importedT.Lib][importedT.Typ.Ident()]
+			importedT.Typ = typ
+		} else {
+			typ := s.inferUnknownNamedType(arg.Type)
+			if typ == nil {
+				s.addError(arg, errTypeNotFound(arg.Type.Ident()))
+				continue
+			}
+			arg.Type = typ
 
-		typ := s.inferUnknownNamedType(arg.Type)
-		if typ == nil {
-			s.addError(arg, errTypeNotFound(arg.Type.Ident()))
-			continue
+			// ensure if argument function is also stored in
+			// function symbol table
+			if ft, ok := arg.Type.(*types.Function); ok {
+				s.fnSt.Set(arg.Name.TokenLiteral(), &FnInfo{Type: ft})
+			}
 		}
-		arg.Type = typ
-
-		// ensure if argument function is also stored in
-		// function symbol table
-		if ft, ok := arg.Type.(*types.Function); ok {
-			s.fnSt.Set(arg.Name.String(), &FnInfo{Type: ft})
-		}
-		s.varSt.Set(arg.Name.String(), &VarInfo{Type: arg.Type})
+		s.varSt.Set(arg.Name.TokenLiteral(), &VarInfo{Type: arg.Type})
 		argTypes[i] = arg.Type
 	}
 
@@ -2126,26 +1963,108 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 	}
 	fnType := &types.Function{Arg: argTypes, Ret: retTypes}
 	n.T = fnType
-	s.fnSt.Set(n.Name.String(), &FnInfo{Type: fnType})
+	s.fnSt.Set(n.Name.TokenLiteral(), &FnInfo{Type: fnType})
 
 }
 
 func (s *Semantics) addError(n ast.Node, err error) {
-	pos := n.Pos()
-	fmt.Printf("[ERROR] Semsis failed at %d:%d - %s\n", pos.Line(), pos.Column(), err)
 	s.errors = append(s.errors, &SemanticalError{At: n, Err: err})
+}
+
+func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
+	switch t := typ.(type) {
+	case *types.Dirty:
+		typ := s.inferUnknownNamedType(t.T)
+		if typ == nil {
+			return nil
+		}
+		if typ, ok := typ.(*types.Dirty); ok {
+			t = typ
+		}
+		return t
+	case *types.Array:
+		typ := s.inferUnknownNamedType(t.T)
+		if typ == nil {
+			return nil
+		}
+		t.T = typ
+		return t
+	case *types.Memory:
+		typ := s.inferUnknownNamedType(t.T)
+		if typ == nil {
+			return nil
+		}
+		t.T = typ
+		return t
+	case *types.Optional:
+		typ := s.inferUnknownNamedType(t.T)
+		if typ == nil {
+			return nil
+		}
+		t.T = typ
+		return t
+	case *types.Pointer:
+		typ := s.inferUnknownNamedType(t.T)
+		if typ == nil {
+			return nil
+		}
+		t.T = typ
+		return t
+	case *types.Function:
+		for i, at := range t.Arg {
+			typ := s.inferUnknownNamedType(at)
+			if typ == nil {
+				return nil
+			}
+			t.Arg[i] = typ
+		}
+		for i, rt := range t.Ret {
+			typ := s.inferUnknownNamedType(rt)
+			if typ == nil {
+				return nil
+			}
+			t.Ret[i] = typ
+		}
+
+	case *types.UnknownNamed:
+		typeInfo, ok := s.varSt.Get(t.Ident())
+		if !ok {
+			return nil
+		}
+		return typeInfo.Type
+	case nil:
+		return nil
+	}
+	return typ
 }
 
 // ------- //
 // Helpers //
 // ------- //
 
+func getIdentifier(n ast.Node) string {
+	var name string
+	switch n := n.(type) {
+	case *ast.StructStatement:
+		name = n.Name.String()
+	case *ast.UnionStatement:
+		name = n.Name.String()
+	case *ast.TypeDefinitionStatement:
+		name = n.Name.String()
+	case *ast.TypeAliasStatement:
+		name = n.Name.String()
+	default:
+		panic("unknown node")
+	}
+	return name
+}
+
 // Very easy cycle detection alg. Returns on first cycle
 func isCyclic(adj [][]uint16) ([]uint16, bool) {
 	vertices := len(adj)
 	paths := make([][]uint16, vertices)
 
-	for i := 0; i < vertices; i++ {
+	for i := range vertices {
 		if path, hasCycle := _isCyclic(uint16(i), adj, paths[i]); hasCycle {
 			return path, true
 		}
@@ -2157,10 +2076,8 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 	path = append(path, i)
 	for _, j := range adj[i] {
 		// early check if cycle to path
-		for _, pIdx := range path {
-			if j == pIdx {
-				return path, true
-			}
+		if slices.Contains(path, j) {
+			return path, true
 		}
 		if path, hasCycle := _isCyclic(j, adj, path); hasCycle {
 			return path, true

@@ -1,0 +1,143 @@
+lib lexer
+
+pub struct token {
+    tag   tag
+    start u32
+    end   u32
+}
+
+pub enum tag {
+    ILLEGAL
+    EOF
+    COMMENT
+
+    // Literal types
+    INT        // 123
+    FLOAT      // 0.314
+    
+    // Operators
+    PLUS       // +
+    MINUS      // -
+    ASTERISK   // *
+    SLASH      // /
+    PERCENT    // %
+    
+    // Single character tokens
+    COLON      // :
+    SEMICOLON  // ;
+    XOR        // ^
+    NOT        // ~
+    LBRACE     // {
+    RBRACE     // }
+    LPAREN     // (
+    RPAREN     // )
+    LBRACK     // [
+    RBRACK     // ]
+    COMMA      // ,
+    AT         // @
+    DOT        // .
+    
+    // String literals
+    STRING       // "..."
+    MULTI_STRING // `...`
+    
+    // Compound operators
+    ADD        // + 
+    SUB        // - 
+    MUL        // * 
+    MOD        // % 
+    OR         // |
+    LOR        // ||
+    PIPE       // |>
+    LNOT       // !
+    NEQ        // !=
+    EQ         // ==
+    ASSGN      // =
+    RSH        // >>
+    GEQ        // >=
+    GT         // >
+    LSH        // <<
+    LEQ        // <=
+    LT         // <
+    LAND       // &&
+    AND        // &
+    ANDNOT     // &^
+    DIV        // /
+    QMARK      // ?
+    QQMARK     // ??
+    
+    // keywords
+    PUB
+    LIB
+    USE
+    STRUCT
+    TYPE
+    ALIAS
+    ENUM
+    UNION
+    GEN
+    ERROR
+    FN
+    LET
+    VAR
+    IF
+    ELSE
+    FOR
+    IN
+    NEXT
+    BREAK
+    MATCH
+    CASE
+    TRY
+    CATCH
+    DEFER
+    RETURN
+    BREAK
+    
+    IDENT
+}
+
+pub fn get_literal(l *lexer, tkn token) string {
+    if len(l.buf) == 0 { 
+        return "" 
+    }
+    return string(l.buf[tkn.start:tkn.end+1])
+}
+
+let keywords = [
+    {"pub", tag.PUB},
+    {"lib", tag.LIB},
+    {"use", tag.USE},
+    {"struct", tag.STRUCT},
+    {"type", tag.TYPE},
+    {"alias", tag.ALIAS},
+    {"enum", tag.ENUM},
+    {"union", tag.UNION},
+    {"gen", tag.GEN},
+    {"error", tag.ERROR},
+    {"fn", tag.FN},
+    {"let", tag.LET},
+    {"var", tag.VAR},
+    {"if", tag.IF},
+    {"else", tag.ELSE},
+    {"for", tag.FOR},
+    {"in", tag.IN},
+    {"next", tag.NEXT},
+    {"break", tag.BREAK},
+    {"match", tag.MATCH},
+    {"case", tag.CASE},
+    {"try", tag.TRY},
+    {"catch", tag.CATCH},
+    {"defer", tag.DEFER},
+    {"return", tag.RETURN},
+    {"raise", tag.RAISE}
+]
+
+pub fn get_tag_by_keyword(k string) tag {
+    for i = 0; i < len(keywords); i++ {
+        if keywords[i].0 == k {
+            return keywords[i].1
+        }
+    }
+    return tag.IDENT
+}

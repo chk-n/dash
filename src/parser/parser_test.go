@@ -10,70 +10,92 @@ func TestType(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
+		want  string
 	}{
 		{
 			name:  "simple array",
 			input: "[]i64",
+			want:  "[]i64",
 		},
 		{
 			name:  "simple array - optional",
 			input: "?[]i64",
+			want:  "?[]i64",
 		},
 		{
 			name:  "optional array pointer",
 			input: "?*[]i64",
+			want:  "?*[]i64",
 		},
 		{
 			name:  "pointer to optional array",
 			input: "*?[]i64",
+			want:  "*?[]i64",
 		},
 		{
 			name:  "array with size",
 			input: "[5]i64",
+			want:  "[5]i64",
 		},
 		{
 			name:  "2d array",
 			input: "[][]i64",
+			want:  "[][]i64",
+		},
+		{
+			name:  "array imported type",
+			input: "[]ast.token",
+			want:  "[]ast.unknown<token>",
 		},
 		{
 			name:  "function empty",
 			input: "fn()",
+			want:  "fn()",
 		},
 		{
 			name:  "function with return",
 			input: "fn()string",
+			want:  "fn()string",
 		},
 		{
 			name:  "function with multi return",
 			input: "fn()i64,i64",
+			want:  "fn()i64,i64",
 		},
 		{
 			name:  "function with singe param",
 			input: "fn(string)",
+			want:  "fn(string)",
 		},
 		{
 			name:  "function with params",
 			input: "fn(i64,string)",
+			want:  "fn(i64,string)",
 		},
 		{
 			name:  "simple pointer type",
 			input: "*[]i64",
+			want:  "*[]i64",
 		},
 		{
 			name:  "function pointer type",
 			input: "*fn(string)i64",
+			want:  "*fn(string)i64",
 		},
 		{
 			name:  "memory",
 			input: "memory<string>",
+			want:  "memory<string>",
 		},
 		{
 			name:  "memory nested",
 			input: "memory<[]i64>",
+			want:  "memory<[]i64>",
 		},
 		{
 			name:  "char",
 			input: "char",
+			want:  "char",
 		},
 	}
 
@@ -82,7 +104,7 @@ func TestType(t *testing.T) {
 			p := getParser(tc.input)
 			typ := p.parseType()
 
-			if tc.input != typ.String() {
+			if tc.want != typ.String() {
 				t.Errorf("want %s but got %s\n%v", tc.input, typ.String(), typ)
 			}
 		})
@@ -195,8 +217,8 @@ func TestInfixExpression(t *testing.T) {
 		},
 		{
 			name:  "pipe expression",
-			input: "a + 1 * 5 |> to_map() |> to_array(1)",
-			want:  "(((a + (1 * 5)) |> to_map()) |> to_array(1))",
+			input: "a + 1 * 5 |> to_map |> to_array",
+			want:  "(((a + (1 * 5)) |> to_map) |> to_array)",
 		},
 		{
 			name:  "dot access",
@@ -266,22 +288,22 @@ func TestForStatement(t *testing.T) {
 		{
 			name:  "for statement",
 			input: "for i = 0; i < N; i++ { }",
-			want:  "for var i = 0; (i < N); i++ { }",
+			want:  "for i = 0; (i < N); i++ { }",
 		},
 		{
 			name:  "for statement - with break",
 			input: "for i = 0; i < N; i++ { break }",
-			want:  "for var i = 0; (i < N); i++ { break }",
+			want:  "for i = 0; (i < N); i++ { break }",
 		},
 		{
 			name:  "for statement - with next",
 			input: "for i = 0; i < N; i++ { next }",
-			want:  "for var i = 0; (i < N); i++ { next }",
+			want:  "for i = 0; (i < N); i++ { next }",
 		},
 		{
 			name:  "for statement - with exit condition",
 			input: "for i = 0; i < N; i++ { if i == 2 { next } else { break } }",
-			want:  "for var i = 0; (i < N); i++ { if (i == 2) { next } else { break } }",
+			want:  "for i = 0; (i < N); i++ { if (i == 2) { next } else { break } }",
 		},
 		{
 			name:  "infinite",
@@ -301,7 +323,7 @@ func TestForStatement(t *testing.T) {
 		{
 			name:  "for statement - with custom increment",
 			input: "for i = 0; i < N; i = i + 2 { }",
-			want:  "for var i = 0; (i < N); (i = (i + 2)) { }",
+			want:  "for i = 0; (i < N); (i = (i + 2)) { }",
 		},
 	}
 
@@ -508,14 +530,22 @@ func TestArrayLiteral(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
+		want  string
 	}{
 		{
 			name:  "simple",
 			input: "[1,2,3,4]",
+			want:  "[1,2,3,4]",
 		},
 		{
 			name:  "nested",
 			input: "[[1,2,3],[1,2,3]]",
+			want:  "[[1,2,3],[1,2,3]]",
+		},
+		{
+			name:  "eat training comma",
+			input: "[1,]",
+			want:  "[1]",
 		},
 	}
 
@@ -524,7 +554,7 @@ func TestArrayLiteral(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseArrayLiteralTypeOrCast()
 
-			if tc.input != stmt.String() {
+			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.input, stmt.String(), stmt)
 			}
 		})
@@ -613,6 +643,130 @@ func TestFunctionLiteral(t *testing.T) {
 		// 	input: "fn some_func(m, memory<i64>)",
 		// 	error: "",
 		// },
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseFunctionExpression()
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestErrorStatement(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "static error",
+			input: "error divide_by_zero",
+			want:  "error divide_by_zero",
+		},
+		// {
+		// 	name:  "public error",
+		// 	input: "pub error network_error",
+		// 	want:  "pub error network_error",
+		// },
+		{
+			name:  "dynamic error with single param",
+			input: "error invalid_value(val string)",
+			want:  "error invalid_value(val string)",
+		},
+		{
+			name:  "dynamic error with multiple params",
+			input: "error out_of_bounds(index i64, size i64)",
+			want:  "error out_of_bounds(index i64, size i64)",
+		},
+		{
+			name:  "error with multiple params same type",
+			input: "error invalid_range(start, end i64)",
+			want:  "error invalid_range(start, end i64)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseErrorStatement()
+
+			if stmt == nil {
+				t.Fatal("parseErrorStatement() returned nil")
+			}
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestTryCatchExpression(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "try statement",
+			input: "try some_fn()",
+			want:  "try some_fn()",
+		},
+		{
+			name:  "catch with default",
+			input: "some_fn() catch err { 0 }",
+			want:  "some_fn() catch err { 0 }",
+		},
+		{
+			name:  "catch with reraise",
+			input: "some_fn() catch err { raise err }",
+			want:  "some_fn() catch err { raise err }",
+		},
+		{
+			name:  "try within function call",
+			input: "other_fn(try risky_fn())",
+			want:  "other_fn(try risky_fn())",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseExpression(LOWEST)
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestErrorProneFunction(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "error prone function",
+			input: "fn test()! { }",
+			want:  "fn test()! { }",
+		},
+		{
+			name:  "error prone function with return",
+			input: "fn test()! i64 { return 1 }",
+			want:  "fn test()! i64 { return 1 }",
+		},
+		{
+			name:  "error prone with try",
+			input: "fn test()! { try risky() }",
+			want:  "fn test()! { try risky() }",
+		},
 	}
 
 	for _, tc := range tests {
@@ -823,8 +977,8 @@ func TestTypeDefinitionStatement(t *testing.T) {
 		},
 		{
 			name:  "function type",
-			input: "type custom_fn fn(string)error",
-			want:  "type custom_fn fn(string)error",
+			input: "type custom_fn fn(string)!",
+			want:  "type custom_fn fn(string)!",
 		},
 		{
 			name:  "nested type def",
@@ -975,22 +1129,22 @@ func TestStructDefinition(t *testing.T) {
 	}
 }
 
-func TestGenericStructStatement(t *testing.T) {
+func TestAnonymousStruct(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  string
 	}{
 		{
-			name:  "basic",
-			input: "gen struct user {}",
-			want:  "gen struct user {}",
+			name:  "anonymous struct",
+			input: `{"+", token_type.PLUS}`,
+			want:  `{"+", token_type.PLUS}`,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
-			stmt := p.parseGenericStructStatement()
+			stmt := p.parseAnonymousStructLiteral()
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
@@ -1314,6 +1468,11 @@ func TestBuiltinFunction(t *testing.T) {
 			input: "validate(abc)",
 			want:  "validate(abc)",
 		},
+		{
+			name:  "assert",
+			input: `assert(1 == 1, "uh no")`,
+			want:  `assert((1 == 1),"uh no")`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1336,108 +1495,34 @@ func TestFunctionAttributes(t *testing.T) {
 	}{
 		{
 			name:  "extern - c",
-			input: "@extern(c) fn test()",
-			want:  "lib main @extern(c) fn test() fn main() { }",
+			input: "lib main @extern(c) fn test()",
+			want:  "lib main @extern(c) fn test()",
 		},
 		{
 			name:  "inline - never",
-			input: "@inline(never) fn test() {}",
-			want:  "lib main @inline(never) fn test() { } fn main() { }",
+			input: "lib main @inline(never) fn test() {}",
+			want:  "lib main @inline(never) fn test() { }",
 		},
 		{
 			name:  "inline - hint",
-			input: "@inline(hint) fn test() {}",
-			want:  "lib main @inline(hint) fn test() { } fn main() { }",
+			input: "lib main @inline(hint) fn test() {}",
+			want:  "lib main @inline(hint) fn test() { }",
 		},
 		{
 			name:  "inline - always",
-			input: "@inline(always) fn test() {}",
-			want:  "lib main @inline(always) fn test() { } fn main() { }",
+			input: "lib main @inline(always) fn test() {}",
+			want:  "lib main @inline(always) fn test() { }",
+		},
+		{
+			name:  "test",
+			input: "lib main @test fn abc() {}",
+			want:  "lib main @test fn abc() { }",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := getParser(tt.input)
-			stmt := p.ParseREPL()
-
-			if tt.want != stmt.String() {
-				t.Errorf("want %s but got %s", tt.want, stmt.String())
-			}
-		})
-	}
-}
-
-func TestRepl(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "simple assignment",
-			input: "let v = 1 + 2",
-			want:  "lib main fn main() { let v = (1 + 2) }",
-		},
-		{
-			name:  "assignment with reassign first",
-			input: "a, let b = 1, 2",
-			want:  "lib main fn main() { a, let b = 1, 2 }",
-		},
-		{
-			name:  "function call",
-			input: "fn test() i64, i64 { return 1 + 2, 2 } let a, b = test() var c = a * 10",
-			want:  "lib main fn test() i64, i64 { return (1 + 2), 2 } fn main() { let a, b = test() var c = (a * 10) }",
-		},
-		{
-			name:  "struct assignment",
-			input: "struct user { name string, age i64 } let v = user{ name: \"John\", age: 25 }",
-			want:  "lib main struct user {name string, age i64} fn main() { let v = user{name: \"John\", age: 25} }",
-		},
-		{
-			name:  "struct assignment - unnamed fields",
-			input: `struct point {i64, i64} let a = point{1, 2}`,
-			want:  `lib main struct point {i64, i64} fn main() { let a = point{1, 2} }`,
-		},
-		{
-			name:  "struct update",
-			input: "struct abc {x i64, y i64} a' = abc{x: 0, y: a.y}",
-			want:  "lib main struct abc {x i64, y i64} fn main() { a' = abc{x: 0, y: a.y} }",
-		},
-		{
-			name:  "anonymous struct - access unnamed fields",
-			input: `let a = {1, 2} var x, y = a.0, a.1`,
-			want:  `lib main fn main() { let a = {1, 2} var x, y = a.0, a.1 }`,
-		},
-		{
-			name:  "address of struct",
-			input: "struct test{} let t = &test{}",
-			want:  "lib main struct test {} fn main() { let t = &test{} }",
-		},
-		{
-			name:  "function with struct return",
-			input: "struct abc {i i64} fn test() abc { return abc{i: 1} } let t = test()",
-			want:  "lib main struct abc {i i64} fn test() unknown<abc> { return abc{i: 1} } fn main() { let t = test() }",
-		},
-		{
-			name:  "function with enum return",
-			input: "enum status{ unknown } fn test() status { return status.unknown } test()",
-			want:  "lib main enum status {unknown} fn test() unknown<status> { return status.unknown } fn main() { test() }",
-		},
-		{
-			name:  "struct cast",
-			input: "struct a { x i64 } let v = a(x)",
-			want:  "lib main struct a {x i64} fn main() { let v = a(x) }",
-		},
-		{
-			name:  "if vs struct literal",
-			input: "if true { s = abc{x: 1} }",
-			want:  "lib main fn main() { if true { s = abc{x: 1} } }",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := getParser(tt.input)
-			stmt := p.ParseREPL()
+			stmt := p.ParseLibrary()
 
 			if tt.want != stmt.String() {
 				t.Errorf("want %s but got %s", tt.want, stmt.String())
@@ -1452,22 +1537,22 @@ func TestLibrary(t *testing.T) {
 		input string
 		want  string
 	}{
-		// {
-		// 	name: "test import",
-		// 	input: `lib test
-		// 			use "abc"
-		// 			fn main() { 1 + 1 }`,
-		// 	want: `lib test use "abc" fn main() { (1 + 1) }`,
-		// },
+		{
+			name:  "test empty library",
+			input: `lib empty`,
+			want:  `lib empty`,
+		},
+		{
+			name: "test import",
+			input: `lib test
+					use "abc"
+					fn main() { 1 + 1 }`,
+			want: `lib test use "abc" fn main() { (1 + 1) }`,
+		},
 		{
 			name:  "public struct",
 			input: "lib test pub struct user {x f64}",
 			want:  "lib test pub struct user {x f64}",
-		},
-		{
-			name:  "public generic struct",
-			input: "lib test pub gen struct user {}",
-			want:  "lib test pub gen struct user {}",
 		},
 		{
 			name: "public enum",

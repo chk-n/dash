@@ -41,7 +41,6 @@ const (
 	STRING
 	BOOL
 	BYTE
-	ERROR
 	NULL
 	CHAR
 
@@ -85,8 +84,6 @@ const (
 	STRUCTTYPE
 	// // []T or [n]T
 	// ARRAYTYPE
-	// error
-	ERRORTYPE
 	// memory
 	MEMORYTYPE
 	// dirty
@@ -119,7 +116,7 @@ const (
 	// ||
 	OR
 	// !
-	NOT
+	BANG
 	// >=
 	GTE
 	// <=
@@ -195,8 +192,6 @@ const (
 
 	// lib
 	LIBRARY
-	// import
-	IMPORT
 	// pub
 	PUBLIC
 	// struct
@@ -213,10 +208,14 @@ const (
 	IF
 	// else
 	ELSE
+	// error
+	ERROR
 	// try
 	TRY
 	// catch
 	CATCH
+	// raise
+	RAISE
 	// defer
 	DEFER
 	// return
@@ -258,7 +257,6 @@ func NewFromLiteral(t Type, lit string) Token {
 
 var keywords = map[string]Type{
 	"lib":    LIBRARY,
-	"import": IMPORT,
 	"main":   MAIN,
 	"struct": STRUCT,
 	"gen":    GENERIC,
@@ -272,17 +270,19 @@ var keywords = map[string]Type{
 	"return": RETURN,
 	"defer":  DEFER,
 	"match":  MATCH,
+	"error":  ERROR,
 	"try":    TRY,
 	"catch":  CATCH,
+	"raise":  RAISE,
 	"for":    FOR,
 	"in":     IN,
 	"break":  BREAK,
 	"next":   NEXT,
 	"let":    LET,
 	"var":    VAR,
-	"use":    USE,
 	"case":   CASE,
 	"union":  UNION,
+	"use":    USE,
 
 	//
 	"true":  BOOL,
@@ -306,7 +306,6 @@ var keywords = map[string]Type{
 	"byte":   BYTETYPE,
 	"char":   CHARTYPE,
 	"bool":   BOOLTYPE,
-	"error":  ERRORTYPE,
 	"memory": MEMORYTYPE,
 	"dirty":  DIRTYTYPE,
 

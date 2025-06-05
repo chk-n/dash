@@ -46,6 +46,10 @@ func New(filename, input string, cfg *Config) *Lexer {
 	return l
 }
 
+func (l *Lexer) Filename() string {
+	return l.fileName
+}
+
 func (l *Lexer) NextToken() token.Token {
 	pos := token.NewPos(l.lineNumber, l.columnNumber)
 	tok := token.Token{Type: token.EOF, Literal: "", Position: pos}
@@ -104,17 +108,13 @@ func (l *Lexer) NextToken() token.Token {
 			tok.Literal = "!="
 			tok.Type = token.NEQ
 		} else {
-			tok = token.New(token.NOT, l.ch)
+			tok = token.New(token.BANG, l.ch)
 		}
 	case '=':
 		if l.peekChar() == '=' {
 			l.next()
 			tok.Literal = "=="
 			tok.Type = token.EQ
-		} else if l.peekChar() == '>' {
-			l.next()
-			tok.Literal = "=>"
-			tok.Type = token.ARROW
 		} else {
 			tok = token.New(token.ASSIGN, l.ch)
 		}
@@ -332,13 +332,6 @@ func (l *Lexer) peekChar() byte {
 		return 0
 	}
 	return l.input[l.pos]
-}
-
-func (l *Lexer) peekCharN(i int) byte {
-	if l.pos >= len(l.input) {
-		return 0
-	}
-	return l.input[l.pos+i]
 }
 
 func (l *Lexer) skipWhitespace() {

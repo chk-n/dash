@@ -16,6 +16,7 @@ const (
 	_ int = iota
 	LOWEST
 	PIPE          // |>
+	CATCH         // catch
 	COLON         // :
 	ASSIGN        // =
 	OR            // ||
@@ -56,8 +57,9 @@ var precedences = map[token.Type]int{
 	token.LBRACK:        SLICE,
 	token.DOT:           DOT,
 	token.OPTIONAL:      POSTFIX,
-	token.NOT:           POSTFIX,
+	token.BANG:          POSTFIX,
 	token.NULL_COALESCE: NULL_COALESCE,
+	token.CATCH:         CATCH,
 }
 
 type (
@@ -102,7 +104,7 @@ func New(l *lexer.Lexer) *Parser {
 
 	p.prefixParseFns = make(map[token.Type]prefixParseFn)
 	p.registerPrefix(token.COMMENT, p.parseComment)
-	p.registerPrefix(token.NOT, p.parsePrefixExpression)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 	p.registerPrefix(token.AMPERSAND, p.parsePrefixExpression)
 	p.registerPrefix(token.ASTERISK, p.parsePrefixExpression)
@@ -146,6 +148,8 @@ func New(l *lexer.Lexer) *Parser {
 	// p.registerPrefix(token.FLOATTYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
+	//
+	p.registerPrefix(token.TRY, p.parseTryExpression)
 
 	p.infixParseFns = make(map[token.Type]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -174,7 +178,7 @@ func New(l *lexer.Lexer) *Parser {
 	// p.registerInfix(token.CARET, p.parseInfixExpression)
 	// p.registerInfix(token.BNOT, p.parseInfixExpression) // TODO: maybe we change token
 	// p.registerInfix(token.BANDNOT, p.parseInfixExpression)
-	// p.registerInfix(token.CATCH, p.parseCatchExpression)
+	p.registerInfix(token.CATCH, p.parseCatchExpression)
 
 	p.postfixParseFns = make(map[token.Type]postfixParseFn)
 	p.registerPostfix(token.LBRACK, p.parseIndexOrSliceExpression)
@@ -185,6 +189,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.attributeParseFns = make(map[string]attributeParseFn)
 	p.registerAttribute("extern", p.parseExternAttribute)
 	p.registerAttribute("inline", p.parseInlineAttribute)
+	p.registerAttribute("test", p.parseBasicAttribute)
 
 	return p
 }
@@ -200,7 +205,6 @@ func (p *Parser) nextToken() {
 }
 
 func (p *Parser) ParseLibrary() *ast.Library {
-
 	if !p.curTokenIs(token.LIBRARY) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -217,24 +221,26 @@ func (p *Parser) ParseLibrary() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
-			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
-			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
-		case token.GENERIC:
-			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
 		case token.STRUCT:
-			lib.Structs = append(lib.Structs, p.parseStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
-			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+			lib.Nodes = append(lib.Nodes, p.parseEnumStatement())
 		case token.UNION:
-			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
 		case token.LET:
 			assgn := p.parseAssignmentStatement().(*ast.AssignmentStatement)
-			lib.GlobalVariables = append(lib.GlobalVariables, assgn)
+			lib.Nodes = append(lib.Nodes, assgn)
 		case token.VAR:
 			// TODO: throw proper error
 			panic("var not allowed in global lib scope")
+		case token.ERROR:
+			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
 		case token.COMMENT:
 			// ignore comments for now
 			p.nextToken()
@@ -243,7 +249,7 @@ func (p *Parser) ParseLibrary() *ast.Library {
 			p.attributes.Push(attr)
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
-			lib.Functions = append(lib.Functions, exp)
+			lib.Nodes = append(lib.Nodes, exp)
 		case token.PUBLIC:
 			p.nextToken()
 		default:
@@ -254,6 +260,40 @@ func (p *Parser) ParseLibrary() *ast.Library {
 	return lib
 }
 
+// Only parses import statements of a lib, ignoring all other tokens
+func (p *Parser) ParseImports() *ast.Library {
+	if !p.curTokenIs(token.LIBRARY) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib := &ast.Library{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.MAIN) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	lib.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+
+	for !p.curTokenIs(token.EOF) {
+		switch p.curToken.Type {
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
+		case token.PUBLIC:
+			p.nextToken()
+		default:
+			p.nextToken()
+		}
+	}
+	return lib
+
+}
+
+// Parsing for REPL automatically creates a main function and adds
+// statements and expressions within the function body except for
+// structs, unions, enums, type defs, type aliases and functons,
+// which get added to global library scope
 func (p *Parser) ParseREPL() *ast.Library {
 	lib := &ast.Library{
 		Token: token.Token{Type: token.LIBRARY, Literal: "lib"},
@@ -270,28 +310,30 @@ func (p *Parser) ParseREPL() *ast.Library {
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
 		case token.TYPE:
-			lib.TypeDefinitions = append(lib.TypeDefinitions, p.parseTypeDefinitionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
-			lib.TypeAliases = append(lib.TypeAliases, p.parseTypeAliasStatement())
+			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
 		case token.GENERIC:
-			lib.GenericStructs = append(lib.GenericStructs, p.parseGenericStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseGenericStructStatement())
 		case token.STRUCT:
-			lib.Structs = append(lib.Structs, p.parseStructStatement())
+			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
-			lib.Enums = append(lib.Enums, p.parseEnumStatement())
+			lib.Nodes = append(lib.Nodes, p.parseEnumStatement())
 		case token.UNION:
-			lib.Unions = append(lib.Unions, p.parseUnionStatement())
+			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
+		case token.ERROR:
+			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
 		case token.AT:
 			attr := p.parseAttribute()
 			p.attributes.Push(attr)
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
-			lib.Functions = append(lib.Functions, exp)
+			lib.Nodes = append(lib.Nodes, exp)
 		default:
 			mainFn.Body.Statements = append(mainFn.Body.Statements, p.parseStatementInBlock())
 		}
 	}
-	lib.Functions = append(lib.Functions, mainFn)
+	lib.Nodes = append(lib.Nodes, mainFn)
 	return lib
 }
 
@@ -318,43 +360,34 @@ func (p *Parser) registerAttribute(attr string, fn attributeParseFn) {
 // Statements //
 // ---------- //
 
+// use "path/to/lib"
 // use (
 //
 //	"internal/code"
 //
 // )
-func (p *Parser) parseUseStatement() []*ast.ImportStatement {
-	stmt := ast.ImportStatement{Token: p.curToken}
+func (p *Parser) parseUseStatement() *ast.UseStatement {
+	stmt := &ast.UseStatement{Token: p.curToken}
 
 	if !p.curTokenIs(token.USE) {
+		p.nextToken()
 		return nil
 	}
 
 	p.nextToken()
 
-	// single import statement
-	if !p.curTokenIs(token.LPAREN) {
-		if p.curTokenIs(token.STRING) {
-			stmt.Package = p.curToken
-			return []*ast.ImportStatement{&stmt}
-		}
+	if !p.curTokenIs(token.STRING) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
 
-	// multiple imports under one statement
-	imports := []*ast.ImportStatement{}
-	for p.curToken.Type != token.RPAREN {
-		if p.curToken.Type == token.STRING {
-			stmt.Package = p.curToken
-			imports = append(imports, &stmt)
-		}
-		p.nextToken()
+	name, ok := p.parseStringLiteral().(*ast.StringLiteral)
+	if !ok {
+		return nil
 	}
+	stmt.Name = name
 
-	p.nextToken()
-
-	return imports
+	return stmt
 }
 
 func (p *Parser) parseTypeDefinitionStatement() *ast.TypeDefinitionStatement {
@@ -578,6 +611,10 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 	}
 
 	stmt.Type = p.parseType()
+	if stmt.Type == nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
 
 	if !allowedOptional && p.peekTokenIs(token.COLON) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -609,13 +646,15 @@ func (p *Parser) parseAssignmentStatement() ast.Statement {
 		if p.curTokenIs(token.LET) || p.curTokenIs(token.VAR) {
 			tkn = p.curToken
 			p.nextToken()
-		}
-		assignee := p.parseExpression(ASSIGN)
+			assignee := p.parseExpression(ASSIGN)
 
-		stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
-			Token:    tkn,
-			Assignee: assignee,
-		})
+			stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
+				Token:    tkn,
+				Assignee: assignee,
+			})
+		} else if p.curTokenIs(token.IDENT) {
+			stmt.Declerations = append(stmt.Declerations, p.parseExpression(ASSIGN))
+		}
 
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
@@ -638,22 +677,21 @@ func (p *Parser) parseAssignmentStatement() ast.Statement {
 func (p *Parser) parseAssignmentStatementPre(firstAssignee ast.Expression) ast.Statement {
 	stmt := &ast.AssignmentStatement{}
 
-	stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
-		Assignee: firstAssignee,
-	})
+	stmt.Declerations = append(stmt.Declerations, firstAssignee)
 
 	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
-		var tkn token.Token // let or var
 		if p.curTokenIs(token.LET) || p.curTokenIs(token.VAR) {
-			tkn = p.curToken
+			tkn := p.curToken
 			p.nextToken()
-		}
-		assignee := p.parseExpression(ASSIGN)
 
-		stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
-			Token:    tkn,
-			Assignee: assignee,
-		})
+			assignee := p.parseExpression(ASSIGN)
+			stmt.Declerations = append(stmt.Declerations, &ast.DeclarationStatement{
+				Token:    tkn,
+				Assignee: assignee,
+			})
+		} else {
+			stmt.Declerations = append(stmt.Declerations, p.parseExpression(ASSIGN))
+		}
 
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
@@ -782,7 +820,7 @@ func (p *Parser) parseIfElseStatement() ast.Expression {
 
 // return a, b
 // }
-// Note: does not "eat" } token
+// Note: does not consume } token
 func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	if !p.curTokenIs(token.RETURN) {
 		return nil
@@ -868,6 +906,8 @@ func (p *Parser) parseStatementInBlock() ast.Node {
 		return p.parseReturnStatement()
 	case token.BREAK, token.NEXT:
 		return p.parseKeywordStatement()
+	case token.RAISE:
+		return p.parseRaiseStatement()
 	default:
 		return p.parseExpression(LOWEST)
 	}
@@ -903,9 +943,7 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	case *ast.InfixExpression:
 		if a.Operator == "=" {
 			// assign = a
-			decl := []*ast.DeclarationStatement{
-				{Token: token.NewFromLiteral(token.VAR, "var"), Assignee: a.Left},
-			}
+			decl := []ast.Node{a.Left}
 			val := []ast.Expression{a.Right}
 			stmt.Assignment = &ast.AssignmentStatement{Declerations: decl, Values: val}
 		} else {
@@ -980,22 +1018,6 @@ func (p *Parser) parseForRangeStatement() *ast.ForRangeStatement {
 
 	return stmt
 
-}
-
-func (p *Parser) parseWhileStatement() *ast.WhileStatement {
-	stmt := &ast.WhileStatement{Token: p.curToken}
-	p.nextToken()
-
-	stmt.Condition = p.parseExpression(LOWEST)
-
-	if !p.curTokenIs(token.LBRACE) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-
-	stmt.Block = p.parseBlockStatement()
-
-	return stmt
 }
 
 func (p *Parser) parseMatchExpression() ast.Expression {
@@ -1106,6 +1128,58 @@ func (p *Parser) parseMatchStatement() ast.Expression {
 	p.nextToken()
 
 	return es
+}
+
+func (p *Parser) parseErrorStatement() *ast.ErrorStatement {
+	stmt := &ast.ErrorStatement{Token: p.curToken}
+
+	// Handle pub modifier if present
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
+
+	// Parse error name
+	p.nextToken()
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	stmt.Name = p.parseIdentifier()
+
+	// Parse parameters if present
+	if p.curTokenIs(token.LPAREN) {
+		p.nextToken()
+
+		// Parse parameters until we hit ')'
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			param := p.parseParameterStatement(false)
+			if param == nil {
+				return nil
+			}
+			stmt.Params = append(stmt.Params, param)
+
+			if p.curTokenIs(token.COMMA) {
+				p.nextToken()
+			}
+		}
+
+		if !p.curTokenIs(token.RPAREN) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseRaiseStatement() ast.Statement {
+	stmt := &ast.RaiseStatement{Token: p.curToken}
+	p.nextToken()
+
+	stmt.Error = p.parseExpression(LOWEST)
+
+	return stmt
 }
 
 // ----------- //
@@ -1237,23 +1311,6 @@ func (p *Parser) parseDeferExpression() ast.Expression {
 	return exp
 }
 
-func (p *Parser) parseCatchExpression() ast.Expression {
-	exp := &ast.CatchExpression{Token: p.curToken}
-	if !p.curTokenIs(token.CATCH) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	p.nextToken()
-
-	if !p.curTokenIs(token.LBRACE) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	exp.Block = p.parseBlockStatement()
-
-	return exp
-}
-
 func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	if !p.curTokenIs(token.DOT) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -1301,10 +1358,6 @@ func (p *Parser) parseFunctionCallExpression() ast.Expression {
 		exp.Arguments = append(exp.Arguments, p.parseExpression(LOWEST))
 	}
 	p.nextToken()
-
-	if p.curTokenIs(token.CATCH) {
-		exp.Catch = p.parseCatchExpression()
-	}
 
 	return exp
 }
@@ -1401,6 +1454,38 @@ func (p *Parser) parseUseExpression() ast.Expression {
 	return exp
 }
 
+func (p *Parser) parseTryExpression() ast.Expression {
+	exp := &ast.TryExpression{Token: p.curToken}
+	p.nextToken()
+
+	exp.Right = p.parseExpression(CALL)
+	return exp
+}
+
+func (p *Parser) parseCatchExpression(left ast.Expression) ast.Expression {
+	exp := &ast.CatchExpression{
+		Token: p.curToken,
+		Left:  left,
+	}
+	p.nextToken()
+
+	// Parse error identifier
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp.Ident = p.parseIdentifier()
+
+	// Parse catch block
+	if !p.curTokenIs(token.LBRACE) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	exp.Block = p.parseBlockStatement()
+
+	return exp
+}
+
 // 0..10
 // func (p *Parser) parseRangeExpression() ast.Expression {
 // 	stmt := &ast.RangeExpression{Token: p.curToken}
@@ -1455,7 +1540,6 @@ func (p *Parser) parseFloatLiteral() ast.Expression {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	lit := &ast.StringLiteral{Token: p.curToken}
-	lit.Value = p.curToken.Literal
 	p.nextToken()
 	return lit
 }
@@ -1519,7 +1603,7 @@ func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
 	p.nextToken()
 
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
-		if p.curTokenIs(token.IDENT) {
+		if p.peekTokenIs(token.COLON) {
 			// case 1: struct with named field
 			field := p.parseStructFieldLiteral()
 			exp.Fields = append(exp.Fields, field)
@@ -1616,6 +1700,14 @@ func (p *Parser) parseArrayLiteralTypeOrCast() ast.Expression {
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
 		}
+		// required for [a,]
+		if p.curTokenIs(token.RBRACK) {
+			break
+		}
+		if p.curTokenIs(token.COMMENT) {
+			p.nextToken()
+			continue
+		}
 		lit.Values = append(lit.Values, p.parseExpression(LOWEST))
 	}
 
@@ -1647,6 +1739,23 @@ func (p *Parser) parseAttribute() ast.Attribute {
 	}
 
 	return fn()
+}
+
+// Parser non parametrized attributed e.g. "test"
+func (p *Parser) parseBasicAttribute() ast.Attribute {
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+
+	switch p.curToken.Literal {
+	case "test":
+		p.nextToken()
+		return &ast.BasicAttribute{Type: ast.Test}
+	}
+
+	p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+	return nil
 }
 
 // assumes current token literal is 'extern' when function called
@@ -1749,6 +1858,11 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 
 	// TODO: parse if function is errorable
 
+	if p.curTokenIs(token.BANG) {
+		lit.ErrorProne = true
+		p.nextToken()
+	}
+
 	// parse return arguments
 	for p.curTokenIsType() && !p.curTokenIs(token.EOF) {
 		lit.ReturnValues = append(lit.ReturnValues, p.parseTypeLiteral().(*ast.TypeLiteral))
@@ -1781,7 +1895,11 @@ func (p *Parser) parseType() types.TypeSpec {
 	case token.FUNCTION:
 		typ = p.parseFunctionType()
 	case token.IDENT:
-		typ = p.parseUnknownNamedType()
+		if p.peekTokenIs(token.DOT) {
+			typ = p.parseImportedNamedType()
+		} else {
+			typ = p.parseUnknownNamedType()
+		}
 	case token.ASTERISK:
 		typ = p.parsePointerType()
 	case token.MEMORYTYPE:
@@ -1865,6 +1983,12 @@ func (p *Parser) parseFunctionType() *types.Function {
 	if p.curTokenIs(token.COMMA) || p.curTokenIs(token.RPAREN) || p.curTokenIs(token.EOF) {
 		return typ
 	}
+	// case: f fn()!
+	if p.curTokenIs(token.BANG) {
+		typ.IsErrorProne = true
+		p.nextToken()
+		return typ
+	}
 
 	for !p.curTokenIs(token.EOF) {
 		typ.Ret = append(typ.Ret, p.parseType())
@@ -1887,6 +2011,16 @@ func (p *Parser) parsePrimitiveType() types.TypeSpec {
 	defer p.nextToken()
 
 	return types.TokenToType(p.curToken)
+}
+
+func (p *Parser) parseImportedNamedType() types.TypeSpec {
+	typ := &types.ImportedNamed{Lib: p.curToken.Literal}
+	p.nextToken()
+	// wat "." token
+	p.nextToken()
+	typ.Typ = p.parseType()
+
+	return typ
 }
 
 func (p *Parser) parseUnknownNamedType() types.TypeSpec {
@@ -1948,7 +2082,7 @@ func (p *Parser) parseDirtyType() types.TypeSpec {
 
 func (p *Parser) addError(tkn token.Token, err error) {
 	pos := tkn.Position
-	fmt.Printf("[ERROR] Parser failed at %d:%d - %s\n", pos.Line(), pos.Column(), err)
+	fmt.Printf("[ERROR] Parser failed in %s at %d:%d - %s\n", p.l.Filename(), pos.Line(), pos.Column(), err)
 }
 
 // ------- //
@@ -1987,7 +2121,7 @@ func (p *Parser) curTokenIsOperator() bool {
 		p.curToken.Type == token.AMPERSAND ||
 		p.curToken.Type == token.AND ||
 		p.curToken.Type == token.OR ||
-		p.curToken.Type == token.NOT ||
+		p.curToken.Type == token.BANG ||
 		p.curToken.Type == token.GTE ||
 		p.curToken.Type == token.LTE ||
 		p.curToken.Type == token.NEQ ||
@@ -2017,10 +2151,6 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.U32TYPE ||
 		p.curToken.Type == token.I64TYPE ||
 		p.curToken.Type == token.U64TYPE ||
-		// p.curToken.Type == token.I128TYPE ||
-		// p.curToken.Type == token.U128TYPE ||
-		// p.curToken.Type == token.I256TYPE ||
-		// p.curToken.Type == token.U256TYPE ||
 		p.curToken.Type == token.F32TYPE ||
 		p.curToken.Type == token.F64TYPE ||
 		p.curToken.Type == token.STRINGTYPE ||
@@ -2028,7 +2158,6 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.CHARTYPE ||
 		p.curToken.Type == token.LBRACK ||
 		(p.curToken.Type == token.FUNCTION && p.peekToken.Type == token.LPAREN) ||
-		p.curToken.Type == token.ERRORTYPE ||
 		p.curToken.Type == token.ASTERISK ||
 		p.curToken.Type == token.MEMORYTYPE ||
 		p.curToken.Type == token.IDENT ||
