@@ -66,11 +66,11 @@ func main() {
 			buildCmd.PrintDefaults()
 			os.Exit(1)
 		}
-		sourceFileOrDir := buildCmd.Arg(0)
 		cfg := &builder.Config{
-			SrcDir: sourceFileOrDir,
+			SrcDir: buildCmd.Arg(0),
 		}
-		libs, err := builder.BuildProject(cfg)
+		b := builder.New(cfg)
+		libs, err := b.BuildProject()
 		if err != nil {
 			fmt.Println("unable to build:", err)
 			os.Exit(1)

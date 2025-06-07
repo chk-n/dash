@@ -13,27 +13,59 @@ import (
 	"dash-lang.io/src/parser"
 	"dash-lang.io/src/semantic"
 	"dash-lang.io/src/types"
+	"github.com/pelletier/go-toml/v2"
 )
 
 type Config struct {
-	// file or directory to compile
+	// Directory to evaluate
 	SrcDir string
-
-	IncludeStdLib bool
-	// Default: DASH_HOME env variable
-	DashHomeDir string
 }
 
-func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
-	filesPerDir := make(map[string][]string)
+type Builder struct {
+	srcDir string
+	// root directory of project
+	projectRoot string
+	// name of project as defined
+	// within dash.toml
+	projectName string
+}
 
-	projectRoot, err := findProjectRoot(cfg.SrcDir)
-	if err != nil {
+func New(cfg *Config) *Builder {
+	return &Builder{srcDir: cfg.SrcDir}
+}
+
+// BUG: if srcDir is "." then we cant build
+func (b *Builder) BuildProject() (_ map[string]*ast.Library, err error) {
+	if b.projectRoot, err = findProjectRoot(b.srcDir); err != nil {
 		return nil, err
 	}
 
+	filesPerDir, err := b.findAllDashFiles()
+	if err != nil {
+		return nil, fmt.Errorf("unable to find dash files: %s", err)
+	}
+
+	if b.projectName, err = getProjectName(b.projectRoot); err != nil {
+		return nil, err
+	}
+
+	root, err := buildDependencyTree(b.srcDir, filesPerDir)
+	if err != nil {
+		return nil, fmt.Errorf("unable to build dependency tree: %s", err)
+	}
+
+	libs, err := b.buildProject(root)
+	if err != nil {
+		return nil, fmt.Errorf("unable to build dependency tree: %s", err)
+	}
+
+	return libs, nil
+}
+
+func (b *Builder) findAllDashFiles() (_ map[string][]string, err error) {
 	// walk files in project
-	if err := filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+	filesPerDir := make(map[string][]string)
+	if err := filepath.Walk(b.projectRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -53,22 +85,25 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("unable to get all .ds files: %w", err)
+		return nil, err
 	}
 
+	return filesPerDir, nil
+}
+
+func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, error) {
+	libs := make(map[string]*ast.Library)
 	var pErrs []string
 	var sErrs []string
-	libs := make(map[string]*ast.Library)
 
-	// parse parses an entire library and performs
+	// parseAndMerge parses an entire library and performs
 	// semantical analysis on that library potentially
 	// using externally visible vars, types and functions
 	// from imported libs
-	parse := func(dep *dependencyTree) error {
+	parseAndMerge := func(dep *dependencyTree) error {
 		var lib *ast.Library
 
-		// TODO: keep track of parse errors for each library
-		// merge all partial libraries in same dir into one lib
+		// parse and merge all files within a directory
 		for _, path := range dep.Files {
 			file, err := os.ReadFile(path)
 			if err != nil {
@@ -79,9 +114,9 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 			p := parser.New(l)
 			libPart := p.ParseLibrary()
 
-			// TODO: if there was a problem track errors and continue
-			if libPart == nil {
-				pErrs = append(pErrs, p.Errors()...)
+			errs := p.Errors()
+			if len(errs) > 0 {
+				pErrs = append(pErrs, errs...)
 				continue
 			}
 
@@ -93,46 +128,47 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 
 		}
 
+		// NOTE: in future this will also contain the path to the lib
+		libImportName := fmt.Sprintf("%s/%s", b.projectName, lib.Name.String())
+
+		if _, ok := libs[libImportName]; ok {
+			return fmt.Errorf("duplicate library name '%s' found in directory '%s'",
+				lib.Name.String(), dep.AbsoluteDir)
+		}
+
 		// extract all global exported types from imported libs
 		// and create a map for semsis
 		typeTable := make(map[string]map[string]types.TypeSpec)
 		for _, n := range lib.Nodes {
-			switch lib := n.(type) {
+			switch n.(type) {
 			case *ast.UseStatement:
-				importName := "/Users/personal/Documents/GitHub/dash/src/" + lib.Name.TokenLiteral()
-
-				importedLib, ok := libs[importName]
-				if !ok {
-					panic("unable to find libary " + importName)
+				if _, ok := typeTable[libImportName]; ok {
+					continue
 				}
-				typeTable[importName] = importedLib.Exports()
 
+				importedLib, ok := libs[libImportName]
+				if !ok {
+					panic("unable to find libary " + dep.AbsoluteDir)
+				}
+				typeTable[libImportName] = importedLib.Exports()
 			}
 		}
 
-		s := semantic.New(dep.Path, typeTable)
+		// check for semantical errors
+		s := semantic.New(dep.AbsoluteDir, typeTable)
 		s.Analyse(lib)
-
-		//  check for semantical errors
 		if len(s.Errors()) > 0 {
 			sErrs = append(sErrs, s.Errors()...)
 		}
 
-		if _, ok := libs[lib.Name.String()]; ok {
-			return fmt.Errorf("duplicate library name '%s' found in directory '%s'",
-				lib.Name.String(), dep.Path)
-		}
-		libs[dep.Path] = lib
+		libs[libImportName] = lib
 
 		return nil
 	}
 
-	root, err := buildDependencyTree(cfg.SrcDir, filesPerDir)
-	if err != nil {
-		return nil, fmt.Errorf("unable to build dependency tree: %w", err)
+	if err := walkDependencyTree(root, parseAndMerge); err != nil {
+		return nil, fmt.Errorf("unable to walk dependency tree: %s", err)
 	}
-
-	walkDependencyTree(root, parse)
 
 	if len(pErrs) > 0 && len(sErrs) > 0 {
 		allErrs := make([]string, len(pErrs)+len(sErrs))
@@ -144,6 +180,7 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 	} else if len(sErrs) > 0 {
 		return nil, errors.New(strings.Join(sErrs, "\n"))
 	}
+
 	return libs, nil
 }
 
@@ -152,10 +189,18 @@ func BuildProject(cfg *Config) (map[string]*ast.Library, error) {
 // ------- //
 
 func findProjectRoot(startDir string) (string, error) {
+	info, err := os.Stat(startDir)
+	if err != nil {
+		return "", err
+	}
+
+	if !info.IsDir() {
+		return "", fmt.Errorf("expected directory but got file")
+	}
 	// get absolute path
 	absDir, err := filepath.Abs(startDir)
 	if err != nil {
-		return "", fmt.Errorf("unable to get absolute path for %s: %w", startDir, err)
+		return "", fmt.Errorf("unable to get absolute path: %s", err)
 	}
 
 	currentDir := absDir
@@ -169,44 +214,30 @@ func findProjectRoot(startDir string) (string, error) {
 		// climb up until root
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
-			return "", fmt.Errorf("project root not found: no dash.toml file found in directory tree from %s", startDir)
+			return "", fmt.Errorf("no dash.toml file found in directory tree from %s", startDir)
 		}
 		currentDir = parentDir
 	}
 }
 
-func getAllFiles(currentDir string) ([][]string, error) {
-	// walk directories recursively and parse
-	// all .ds files and merge into one library
-	dirs := []string{currentDir}
-	filesPerDirectory := [][]string{}
-
-	for len(dirs) > 0 {
-		dir := dirs[0]
-		dirs = dirs[1:]
-
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return nil, err
+func getProjectName(rootDir string) (string, error) {
+	var doc struct {
+		Library struct {
+			Name    string
+			Version string
 		}
-
-		files := []string{}
-		for _, entry := range entries {
-			path := dir + "/" + entry.Name()
-
-			if entry.IsDir() {
-				dirs = append(dirs, path)
-			} else if strings.HasSuffix(entry.Name(), ".ds") {
-				files = append(files, path)
-			}
-		}
-		if len(files) == 0 {
-			continue
-		}
-		filesPerDirectory = append(filesPerDirectory, files)
 	}
 
-	return filesPerDirectory, nil
+	b, err := os.ReadFile(rootDir + "/dash.toml")
+	if err != nil {
+		return "", err
+	}
+
+	if err := toml.Unmarshal(b, &doc); err != nil {
+		return "", err
+	}
+
+	return doc.Library.Name, nil
 }
 
 // extractImports parses a file to extract only the import statements
@@ -224,8 +255,8 @@ func extractImports(filePath string) (*ast.Library, error) {
 }
 
 type dependencyTree struct {
-	Visitied bool
-	Path     string
+	Visitied    bool
+	AbsoluteDir string
 	// files that make up the library
 	Files []string
 	// libraries imported by current library
@@ -238,7 +269,7 @@ func buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dep
 	// contains all imports made by a library using 'dir' as key
 	importMap := make(map[string][]string)
 	for dir, files := range filesPerDir {
-		nodes[dir] = &dependencyTree{Path: dir, Files: files}
+		nodes[dir] = &dependencyTree{AbsoluteDir: dir, Files: files}
 		if strings.Contains(dir, entryLib) {
 			entryLib = dir
 		}
@@ -253,9 +284,9 @@ func buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dep
 			}
 
 			for _, n := range lib.Nodes {
-				switch imp := n.(type) {
+				switch n.(type) {
 				case *ast.UseStatement:
-					importMap[dir] = append(importMap[dir], "/Users/personal/Documents/GitHub/dash/src/"+imp.Name.TokenLiteral())
+					importMap[dir] = append(importMap[dir], dir)
 				}
 			}
 		}
@@ -276,7 +307,7 @@ func buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dep
 	return nodes[entryLib], nil
 }
 
-func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) error) {
+func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) error) error {
 	for _, child := range parent.Imports {
 		if !child.Visitied {
 			walkDependencyTree(child, visit)
@@ -284,5 +315,5 @@ func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) 
 	}
 
 	parent.Visitied = true
-	visit(parent)
+	return visit(parent)
 }

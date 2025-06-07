@@ -3,7 +3,6 @@ package tester
 import (
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"dash-lang.io/src/ast"
@@ -36,12 +35,11 @@ func NewTestRunner(dir string) *TestRunner {
 // Run executes all tests in the current directory
 func (tr *TestRunner) RunAll() error {
 	// Build entire project from directory
-	var err error
 	cfg := &builder.Config{
-		SrcDir:      tr.testDir,
-		DashHomeDir: os.Getenv("DASH_HOME"),
+		SrcDir: tr.testDir,
 	}
-	libs, err := builder.BuildProject(cfg)
+	b := builder.New(cfg)
+	libs, err := b.BuildProject()
 	if err != nil {
 		return fmt.Errorf("error building project: %v", err)
 	}
