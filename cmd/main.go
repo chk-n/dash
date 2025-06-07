@@ -31,7 +31,7 @@ var (
 
 func main() {
 	if len(os.Args) < 2 {
-		println("Expected command: play, build, or run")
+		fmt.Println("Expected command: play, build, or run")
 		os.Exit(1)
 	}
 
@@ -107,7 +107,7 @@ func main() {
 		// 	os.Exit(1)
 		// }
 	default:
-		println("Unknown command. Use: play, build, run")
+		fmt.Println("Unknown command. Use: play, build, run")
 		os.Exit(1)
 	}
 }
