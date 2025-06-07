@@ -1375,12 +1375,19 @@ func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 }
 
 func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
-
-	if e.Eval(args[0], ctx).(bool) {
-		return nil
+	var cond bool
+	val := e.Eval(args[0], ctx)
+	if ret, ok := val.(*Return); ok {
+		cond = ret.Values[0].(bool)
+	} else {
+		cond = val.(bool)
 	}
-	msg := e.Eval(args[1], ctx).(string)
-	return &Return{Values: []any{&Error{Err: msg}}}
+
+	if !cond {
+		msg := e.Eval(args[1], ctx).(string)
+		return &Return{Values: []any{&Error{Err: msg}}}
+	}
+	return nil
 }
 
 func (e *Evaluator) addError(n ast.Node, err error) {
