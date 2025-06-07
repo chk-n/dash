@@ -22,17 +22,14 @@ type TestRunner struct {
 	results []TestResult
 	passed  int
 	failed  int
-	// Map of all project libraries
-	libraries map[string]*ast.Library
 	// Directory where tests are being run
 	testDir string
 }
 
 func NewTestRunner(dir string) *TestRunner {
 	return &TestRunner{
-		results:   make([]TestResult, 0),
-		libraries: make(map[string]*ast.Library),
-		testDir:   dir,
+		results: make([]TestResult, 0),
+		testDir: dir,
 	}
 }
 
@@ -44,16 +41,16 @@ func (tr *TestRunner) RunAll() error {
 		SrcDir:      tr.testDir,
 		DashHomeDir: os.Getenv("DASH_HOME"),
 	}
-	tr.libraries, err = builder.BuildProject(cfg)
+	libs, err := builder.BuildProject(cfg)
 	if err != nil {
 		return fmt.Errorf("error building project: %v", err)
 	}
 
 	// Create evaluator with all libraries
-	eval := evaluator.New(tr.libraries)
+	eval := evaluator.New(libs)
 
 	// run all tests for all libraries
-	for _, lib := range tr.libraries {
+	for _, lib := range libs {
 		// Create new context for test
 		ctx := evaluator.NewContext(nil)
 		eval.InitialiseLib(lib, ctx)
