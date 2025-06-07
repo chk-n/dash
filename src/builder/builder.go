@@ -56,7 +56,7 @@ func (b *Builder) BuildProject() (_ map[string]*ast.Library, err error) {
 
 	libs, err := b.buildProject(root)
 	if err != nil {
-		return nil, fmt.Errorf("unable to build dependency tree: %s", err)
+		return nil, err
 	}
 
 	return libs, nil
@@ -159,7 +159,7 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 		s := semantic.New(dep.AbsoluteDir, typeTable)
 		s.Analyse(lib)
 		if len(s.Errors()) > 0 {
-			sErrs = append(sErrs, s.Errors()...)
+			sErrs = append(sErrs, s.ErrorsFmt()...)
 		}
 
 		libs[libImportName] = lib

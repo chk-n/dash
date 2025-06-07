@@ -41,7 +41,7 @@ func (tr *TestRunner) RunAll() error {
 	b := builder.New(cfg)
 	libs, err := b.BuildProject()
 	if err != nil {
-		return fmt.Errorf("error building project: %v", err)
+		return err
 	}
 
 	// Create evaluator with all libraries
