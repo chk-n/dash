@@ -1,7 +1,7 @@
 lib lexer
 
 @test
-fn next_token()! {
+fn test_next_token()! {
     let tests = [
         {"", tag.EOF},
         // operators
@@ -180,6 +180,7 @@ fn test_whitespace()! {
     }
 }
 
+// TODO: improve this test with token type array
 @test
 fn test_sequential()! {
     let tests = [
