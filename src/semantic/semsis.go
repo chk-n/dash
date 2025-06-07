@@ -1276,6 +1276,11 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 				break
 			}
 
+			if len(t.Ts) > len(n.Declerations) {
+				s.addError(val, errAssignmentMismatch(len(t.Ts), len(n.Declerations)))
+				break
+			}
+
 			for j, rt := range t.Ts {
 				n.SetTypeAt(i+j, rt)
 				underlying := types.GetUnderlyingType(rt)

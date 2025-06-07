@@ -72,6 +72,11 @@ func TestAssignmentStatement(t *testing.T) {
 			input:  "let x = test() fn test() { return }",
 			errors: []string{"cannot assign a void function to a variable"},
 		},
+		{
+			name:   "multiple return assignments to 1 var",
+			input:  "let x = match 1 { case _: get() } fn get() i64, i64 { return 0,0 }",
+			errors: []string{"assignment mismmatch, assigned 2 values to 1 variables"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }
