@@ -102,6 +102,15 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 			e.initialiseEnumStatement(n, ctx)
 		case *ast.ErrorStatement:
 			ctx.vars.Set(n.Name.String(), n.Name.TokenLiteral())
+		case *ast.AssignmentStatement:
+			e.evalAssignmentStatement(n, ctx)
+		case *ast.FunctionExpression:
+			fn := &Function{
+				arguments: n.Arguments,
+				body:      n.Body,
+				ctx:       ctx,
+			}
+			ctx.Set(n.Name.Value, fn)
 		}
 	}
 }
