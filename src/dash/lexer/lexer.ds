@@ -12,12 +12,12 @@ pub fn new(buf []byte) *lexer {
 pub fn next_tkn(l *lexer) *lexer, token {
     var tkn = token{tag: tag.EOF, start: 0, end: 0}
     
+    var l = skip_whitespace(l)
+
     if l.idx >= len(l.buf) {
         return l, tkn
     }
 
-    var l = skip_whitespace(l)
-    
     let ch = l.buf[l.idx]
     match ch {
     case '+': tkn = token{tag: tag.ADD,       start: l.idx, end: l.idx}
