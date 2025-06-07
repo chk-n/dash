@@ -1205,6 +1205,16 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 		p.nextToken()
 		return p.parseStructLiteral(ident)
 
+	} else if p.peekTokenIs(token.DOT) {
+		p.nextToken()
+		exp := p.parseDotExpression(ident)
+		if p.context == IF_ELSE || p.context == MATCH {
+			return exp
+		}
+		if p.curTokenIs(token.LBRACE) {
+			return p.parseStructLiteral(exp)
+		}
+		return exp
 	}
 
 	p.nextToken()
@@ -1594,8 +1604,8 @@ func (p *Parser) parseAnonymousStructLiteral() ast.Expression {
 	return p.parseStructLiteral(nil)
 }
 
-func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
-	exp := &ast.StructLiteral{Token: p.curToken, Name: ident}
+func (p *Parser) parseStructLiteral(exp ast.Expression) ast.Expression {
+	lit := &ast.StructLiteral{Token: p.curToken, Name: exp}
 	if !p.curTokenIs(token.LBRACE) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -1606,11 +1616,11 @@ func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
 		if p.peekTokenIs(token.COLON) {
 			// case 1: struct with named field
 			field := p.parseStructFieldLiteral()
-			exp.Fields = append(exp.Fields, field)
+			lit.Fields = append(lit.Fields, field)
 		} else {
 			// case 2: struct with unnamed field
 			field := p.parseUnnamedStructFieldLiteral()
-			exp.Fields = append(exp.Fields, field)
+			lit.Fields = append(lit.Fields, field)
 		}
 
 		if p.curTokenIs(token.COMMA) {
@@ -1620,7 +1630,7 @@ func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
 
 	p.nextToken()
 
-	return exp
+	return lit
 }
 
 func (p *Parser) parseStructFieldLiteral() *ast.StructFieldLiteral {

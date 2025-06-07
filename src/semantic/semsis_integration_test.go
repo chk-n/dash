@@ -38,6 +38,16 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			want: "lib two fn abc() { let x u32 = one.test() }",
 		},
+		{
+			input: `
+					lib one
+					pub struct abc { x i64 }
+					--
+					lib two
+					let x = one.abc{x: 1} 
+				`,
+			want: "lib two let x abc = one.abc{x i64: 1}",
+		},
 	}
 
 	for _, tt := range tests {

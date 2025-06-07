@@ -5,6 +5,7 @@ package semantic
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -68,16 +69,23 @@ type SemanticalError struct {
 	Err error
 }
 
-func New(path string, importedSt map[string]map[string]types.TypeSpec) *Semantics {
+func New(sourcePath string, importedSt map[string]map[string]types.TypeSpec) *Semantics {
+	// convert all keys of importedSt from "../../lib_name" to "lib_name"
+	// so they can be accessed in semsis using semsis scope
+	normalizedImportedSt := make(map[string]map[string]types.TypeSpec)
+	for key, value := range importedSt {
+		normalizedKey := path.Base(key)
+		normalizedImportedSt[normalizedKey] = value
+	}
 	return &Semantics{
-		path:        path,
+		path:        sourcePath,
 		fnSt:        internal.NewStackedSymbolTable[*FnInfo](),
 		varSt:       internal.NewStackedSymbolTable[*VarInfo](),
 		scope:       internal.NewStack[scope](),
 		fnScope:     internal.NewStack[*types.Function](),
 		typeSt:      internal.NewStackedSymbolTable[types.TypeSpec](),
 		guardedType: internal.NewCache[string, struct{}](),
-		importedSt:  importedSt,
+		importedSt:  normalizedImportedSt,
 	}
 }
 
@@ -462,14 +470,26 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			n.T = &typ
 		} else {
-			// validate struct exists
-			structName := n.Name.TokenLiteral()
-			typeDef, ok := s.varSt.Get(structName)
-			if !ok {
-				s.addError(n, errStructNotFound(structName))
+
+			switch exp := n.Name.(type) {
+			case *ast.Identifier:
+				s.analyse(n.Name, "")
+			case *ast.DotExpression:
+				if lib, ok := s.importedSt[exp.Left.String()]; ok {
+					typ := lib[exp.Right.String()]
+					exp.Left.SetType(typ)
+					exp.SetType(typ)
+					n.SetType(typ)
+				} else {
+					// TODO: add error
+					panic("this is a compiler error. please report")
+				}
 			}
+			// validate struct exists
+			typ := n.Name.Type()
+
 			var structType *types.Struct
-			switch t := typeDef.Type.(type) {
+			switch t := typ.(type) {
 			case *types.Struct:
 				structType = t
 			case *types.Definition:
@@ -478,7 +498,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// underlying array to 'structType' and perform the validation
 				st, ok := t.Underlying.(*types.Struct)
 				if !ok {
-					s.addError(n, errTypeMismatch("struct", typeDef.Type.String()))
+					s.addError(n, errTypeMismatch("struct", typ.String()))
 					return
 				}
 				structType = st
@@ -487,7 +507,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				return
 			default:
 				// TODO: improve error here
-				s.addError(n, errTypeMismatch("struct", typeDef.Type.String()))
+				s.addError(n, errTypeMismatch("struct", typ.String()))
 				return
 
 			}
@@ -498,6 +518,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				}
 			}
 			if namedFields != 0 && namedFields != len(n.Fields) {
+				structName := n.Name.String()
 				s.addError(n, errMixedNamedUnnamedStruct(structName))
 				return
 			}
@@ -594,10 +615,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				}
 			}
 
-			switch t := typeDef.Type.(type) {
+			// VarInfo
+			switch t := typ.(type) {
 			case *types.Struct:
-				typeDef.Type = structType
-				s.varSt.Set(n.Name.TokenLiteral(), typeDef)
+				// typeDef.Type = structType
+				s.varSt.Set(n.Name.TokenLiteral(), &VarInfo{Type: structType})
 				n.T = structType
 			// The reason this is split from *types.Struct case is because
 			// we want to keep the type definition type the same. The logic
@@ -605,8 +627,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// used properly by the struct literal.
 			case *types.Definition:
 				t.Underlying = structType
-				s.varSt.Set(n.Name.TokenLiteral(), typeDef)
-				n.T = typeDef.Type
+				s.varSt.Set(n.Name.TokenLiteral(), &VarInfo{Type: typ})
+				n.T = typ
 			}
 
 			internal.AssertNotType[*types.UnknownNamed](structType, "expected type to not be ast.Named")
@@ -723,7 +745,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			default:
 				n.SetType(typ)
 			}
-
 		}
 	case *ast.IndexExpression:
 		s.analyse(n.Left, "")

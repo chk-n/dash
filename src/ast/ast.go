@@ -1377,7 +1377,7 @@ type StructLiteral struct {
 	Token token.Token
 	// Same name as in struct statement.
 	// Can be nil if anonymous struct.
-	Name   *Identifier
+	Name   Expression // can be Identifier or DotExpression
 	Fields []*StructFieldLiteral
 
 	// Set by semantic analysis
@@ -1394,7 +1394,7 @@ func (s *StructLiteral) String() string {
 	var out bytes.Buffer
 
 	if s.Name != nil {
-		out.WriteString(s.Name.TokenLiteral())
+		out.WriteString(s.Name.String())
 	}
 	out.WriteString("{")
 	for i, f := range s.Fields {

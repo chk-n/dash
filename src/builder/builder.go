@@ -49,7 +49,7 @@ func (b *Builder) BuildProject() (_ map[string]*ast.Library, err error) {
 		return nil, err
 	}
 
-	root, err := buildDependencyTree(b.srcDir, filesPerDir)
+	root, err := b.buildDependencyTree(b.srcDir, filesPerDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build dependency tree: %s", err)
 	}
@@ -140,17 +140,18 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 		// and create a map for semsis
 		typeTable := make(map[string]map[string]types.TypeSpec)
 		for _, n := range lib.Nodes {
-			switch n.(type) {
+			switch n := n.(type) {
 			case *ast.UseStatement:
-				if _, ok := typeTable[libImportName]; ok {
+				importName := n.Name.TokenLiteral()
+				if _, ok := typeTable[importName]; ok {
 					continue
 				}
 
-				importedLib, ok := libs[libImportName]
+				importedLib, ok := libs[importName]
 				if !ok {
-					panic("unable to find libary " + dep.AbsoluteDir)
+					panic("unable to find libary " + importName)
 				}
-				typeTable[libImportName] = importedLib.Exports()
+				typeTable[importName] = importedLib.Exports()
 			}
 		}
 
@@ -182,6 +183,58 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 	}
 
 	return libs, nil
+}
+
+func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dependencyTree, error) {
+	// maps 'dir' to a DependecyTree node
+	nodes := make(map[string]*dependencyTree, len(filesPerDir))
+	// contains all imports made by a library using 'dir' as key
+	importMap := make(map[string][]string)
+
+	for dir, files := range filesPerDir {
+
+		var libName string
+		for _, file := range files {
+			lib, err := extractImports(file)
+			if err != nil {
+				return nil, err
+			}
+
+			if libName == "" {
+				libName = fmt.Sprintf("%s/%s", b.projectName, lib.Name.String())
+			}
+			// skip if already parsed
+			if _, exists := importMap[libName]; exists {
+				continue
+			}
+
+			for _, n := range lib.Nodes {
+				switch n := n.(type) {
+				case *ast.UseStatement:
+					importName := n.Name.TokenLiteral()
+					importMap[libName] = append(importMap[libName], importName)
+				}
+			}
+		}
+		if strings.Contains(dir, entryLib) {
+			entryLib = libName
+		}
+		nodes[libName] = &dependencyTree{AbsoluteDir: dir, Files: files}
+	}
+
+	for dir, imps := range importMap {
+		imports := []*dependencyTree{}
+		for _, imp := range imps {
+			child, ok := nodes[imp]
+			if !ok {
+				panic("empty")
+			}
+			imports = append(imports, child)
+		}
+		nodes[dir].Imports = imports
+	}
+
+	return nodes[entryLib], nil
 }
 
 // ------- //
@@ -261,50 +314,6 @@ type dependencyTree struct {
 	Files []string
 	// libraries imported by current library
 	Imports []*dependencyTree
-}
-
-func buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dependencyTree, error) {
-	// maps 'dir' to a DependecyTree node
-	nodes := make(map[string]*dependencyTree, len(filesPerDir))
-	// contains all imports made by a library using 'dir' as key
-	importMap := make(map[string][]string)
-	for dir, files := range filesPerDir {
-		nodes[dir] = &dependencyTree{AbsoluteDir: dir, Files: files}
-		if strings.Contains(dir, entryLib) {
-			entryLib = dir
-		}
-		for _, file := range files {
-			// skip if already parsed
-			if _, exists := importMap[file]; exists {
-				continue
-			}
-			lib, err := extractImports(file)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, n := range lib.Nodes {
-				switch n.(type) {
-				case *ast.UseStatement:
-					importMap[dir] = append(importMap[dir], dir)
-				}
-			}
-		}
-	}
-
-	for dir, imps := range importMap {
-		imports := []*dependencyTree{}
-		for _, imp := range imps {
-			child, ok := nodes[imp]
-			if !ok {
-				panic("empty")
-			}
-			imports = append(imports, child)
-		}
-		nodes[dir].Imports = imports
-	}
-
-	return nodes[entryLib], nil
 }
 
 func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) error) error {

@@ -484,6 +484,11 @@ func TestIfElseExpression(t *testing.T) {
 			input: "if x { } else { } if z { }",
 			want:  "if x { } else { }",
 		},
+		{
+			name:  "dot expression in if else",
+			input: "if x.a { } else { }",
+			want:  "if x.a { } else { }",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1121,6 +1126,31 @@ func TestStructDefinition(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseStructStatement()
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestStructLiteral(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "imported struct literal",
+			input: `some_lib.strct{a: 1}`,
+			want:  `some_lib.strct{a: 1}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseExpression(LOWEST)
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
