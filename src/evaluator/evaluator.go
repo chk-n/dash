@@ -262,8 +262,11 @@ func (e *Evaluator) evalMainFunction(n *ast.FunctionExpression, stk *Context) {
 
 // returns list of function call results
 func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context) any {
-	_fn, _ := stk.Get(n.TokenLiteral())
-	fn := _fn.(*Function)
+	_fn, ok := stk.Get(n.TokenLiteral())
+	fn, ok := _fn.(*Function)
+	if !ok {
+		panic("not a function: " + n.TokenLiteral())
+	}
 
 	newCtx := NewContext(fn.ctx)
 
@@ -756,7 +759,7 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) an
 		val := e.Eval(idx, stk)
 		idx, err := castTo[int64](val)
 		if err != nil {
-			panic("this is a compiler error. plese report")
+			panic("this is a compiler error. please report")
 		}
 		indices[i] = int(idx)
 	}
@@ -766,7 +769,8 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) an
 	for _, idx := range indices {
 		slice, ok := curr.([]any)
 		if !ok {
-			panic("this is a compiler error. plese report")
+			fmt.Println(n)
+			panic("this is a compiler error. please report")
 		}
 
 		if idx < 0 || idx >= len(slice) {
