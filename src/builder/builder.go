@@ -308,7 +308,7 @@ func extractImports(filePath string) (*ast.Library, error) {
 }
 
 type dependencyTree struct {
-	Visitied    bool
+	Visited     bool
 	AbsoluteDir string
 	// files that make up the library
 	Files []string
@@ -318,11 +318,11 @@ type dependencyTree struct {
 
 func walkDependencyTree(parent *dependencyTree, visit func(dep *dependencyTree) error) error {
 	for _, child := range parent.Imports {
-		if !child.Visitied {
+		if !child.Visited {
 			walkDependencyTree(child, visit)
 		}
 	}
 
-	parent.Visitied = true
+	parent.Visited = true
 	return visit(parent)
 }
