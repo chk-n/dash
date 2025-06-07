@@ -372,6 +372,8 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 			arr[i] = byte(el.(int32))
 		}
 		return string(arr)
+	case []uint8:
+		return string(v)
 	}
 	panic("invalid cast to string")
 }
@@ -744,19 +746,43 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 }
 
 func (e *Evaluator) evalSliceExpression(n *ast.SliceExpression, ctx *Context) any {
-
-	arr, ok := e.Eval(n.Left, ctx).([]any)
-	if !ok {
-		panic("this is a compiler error. plese report")
-	}
+	arr := e.Eval(n.Left, ctx)
 
 	rng := n.Indices[0].(*ast.InfixExpression)
 
 	start := e.Eval(rng.Left, ctx).(int64)
 	end := e.Eval(rng.Right, ctx).(int64)
 
-	return arr[start:end]
+	return sliceArray(arr, start, end)
+}
 
+func sliceArray(arr any, s, e int64) any {
+	if s > e {
+		panic("start index greater than end index")
+	}
+	switch arr := arr.(type) {
+	case []any:
+		if s < 0 || e > int64(len(arr)) {
+			// TODO: add dash error handling
+			panic("end index out of bounds")
+		}
+		return arr[s:e]
+	case []uint8:
+		if s < 0 || e > int64(len(arr)) {
+			// TODO: add dash error handling
+			panic("end index out of bounds")
+		}
+		return arr[s:e]
+	case string:
+		if s < 0 || e > int64(len(arr)) {
+			// TODO: add dash error handling
+			panic("end index out of bounds")
+		}
+		return arr[s:e]
+	default:
+		panic("this is a compiler error. please report")
+
+	}
 }
 
 func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) any {
@@ -776,20 +802,31 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) an
 	// perform indexing and handle multiple dimensions
 	curr := arr
 	for _, idx := range indices {
-		slice, ok := curr.([]any)
-		if !ok {
-			fmt.Println(n)
-			panic("this is a compiler error. please report")
-		}
+		curr = indexArray(curr, idx)
+	}
+	return curr
+}
 
-		if idx < 0 || idx >= len(slice) {
+func indexArray(arr any, idx int) any {
+	switch arr := arr.(type) {
+	case []any:
+		if idx < 0 || idx >= len(arr) {
 			// TODO: add dash error handling
 			panic("index out of bounds")
 		}
+		return arr[idx]
+	case []uint8:
+		if idx < 0 || idx >= len(arr) {
+			// TODO: add dash error handling
+			panic("index out of bounds")
+		}
+		return arr[idx]
+	case string:
+		return arr[idx]
+	default:
+		panic("this is a compiler error. please report")
 
-		curr = slice[idx]
 	}
-	return curr
 }
 
 // ----------------- //
