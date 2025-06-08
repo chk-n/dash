@@ -44,9 +44,21 @@ func TestImportLibrary(t *testing.T) {
 					pub struct abc { x i64 }
 					--
 					lib two
-					let x = one.abc{x: 1} 
+					let x = one.abc{x: 1}
 				`,
 			want: "lib two let x abc = one.abc{x i64: 1}",
+		},
+		{
+			name: "imported type in struct field",
+			input: `
+					lib one
+					pub type a i64
+					--
+					lib two
+					fn test() one.a { return one.a(1) }
+					let x = test() + 1
+				`,
+			want: "lib two fn test() one.a { return one.a(1) } let x one.a = (test() + 1)",
 		},
 		{
 			name: "imported type in struct field",

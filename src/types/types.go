@@ -885,6 +885,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -904,6 +906,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -923,6 +927,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -942,6 +948,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -965,6 +973,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -986,6 +996,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -1005,6 +1017,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -1031,17 +1045,23 @@ func CanCoalesce(from, to TypeSpec) bool {
 			return CanCoalesce(from, to.T)
 		case *Definition:
 			return CanCoalesce(from, to.Underlying)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 	case *Dirty:
 		switch to := to.(type) {
 		case *Dirty:
 			return CanCoalesce(from.T, to.T)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return CanCoalesce(from.T, to)
 	case *Definition:
 		switch to := to.(type) {
 		case *Definition:
 			return CanCoalesce(from.Underlying, to.Underlying)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return CanCoalesce(from.Underlying, to)
 	case *Struct:
@@ -1087,11 +1107,15 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 	case *Null:
-		switch to.(type) {
+		switch to := to.(type) {
 		case *Optional:
 			return true
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return false
 	}

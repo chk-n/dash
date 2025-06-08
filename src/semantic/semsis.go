@@ -738,12 +738,12 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				name = n.Right.String()
 			}
 			// set type of expression
-			typ := s.importedSt[n.Left.String()][name]
-			switch typ := typ.(type) {
+			left.Typ = s.importedSt[n.Left.String()][name]
+			switch typ := left.Typ.(type) {
 			case *types.Function:
 				n.SetType(&types.Multi{Ts: typ.Ret})
 			default:
-				n.SetType(typ)
+				n.SetType(left)
 			}
 		}
 	case *ast.IndexExpression:
@@ -1915,6 +1915,8 @@ func validateOperator(t types.TypeSpec, tkn token.Type) bool {
 		return validateOperator(t.T, tkn)
 	case *types.Definition:
 		return validateOperator(t.Underlying, tkn)
+	case *types.ImportedNamed:
+		return validateOperator(t.Typ, tkn)
 	case *types.Array:
 		return false
 	case *types.Struct:
