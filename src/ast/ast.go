@@ -94,6 +94,18 @@ func (l *Library) Exports() map[string]types.TypeSpec {
 			}
 		case *ErrorStatement:
 			// name = n.Name.Value
+		case *AssignmentStatement:
+			if n.Public {
+				// for now only assignments in the form
+				// pub let x, let y = 1, 2
+				// allowed meaning no function calls
+				for i, v := range n.Declerations {
+					switch v := v.(type) {
+					case *DeclarationStatement:
+						export[v.Assignee.String()] = n.Values[i].Type()
+					}
+				}
+			}
 
 		}
 	}
