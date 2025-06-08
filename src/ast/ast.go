@@ -354,6 +354,7 @@ func (s *DeclarationStatement) String() string {
 
 // let x, v, var z = 1, 2, 3
 type AssignmentStatement struct {
+	Public bool
 	// can only be:
 	// *DeclarationStatement, *Identifier,
 	// *IndexExpression, *SliceExpression, or
@@ -407,6 +408,9 @@ func (s *AssignmentStatement) SetTypeAt(i int, t types.TypeSpec) {
 func (s *AssignmentStatement) String() string {
 	var out bytes.Buffer
 
+	if s.Public {
+		out.WriteString("pub ")
+	}
 	for i, decl := range s.Declerations {
 		switch decl := decl.(type) {
 		case Expression:

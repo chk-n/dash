@@ -640,6 +640,9 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 // x, let y = 1, 2
 func (p *Parser) parseAssignmentStatement() ast.Statement {
 	stmt := &ast.AssignmentStatement{}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
 
 	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
 		var tkn token.Token // let or var
