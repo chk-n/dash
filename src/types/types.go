@@ -855,6 +855,8 @@ func GetUnderlyingTypeIfLiteral(t TypeSpec) TypeSpec {
 		return GetUnderlyingTypeIfLiteral(t.T)
 	case *Optional:
 		return GetUnderlyingTypeIfLiteral(t.T)
+	case *ImportedNamed:
+		return GetUnderlyingTypeIfLiteral(t.Typ)
 	}
 	return t
 }

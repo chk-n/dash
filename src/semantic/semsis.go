@@ -2058,6 +2058,9 @@ func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
 			return nil
 		}
 		return typeInfo.Type
+	case *types.ImportedNamed:
+		t.Typ = s.importedSt[t.Lib][t.Typ.Ident()]
+		return t
 	case nil:
 		return nil
 	}

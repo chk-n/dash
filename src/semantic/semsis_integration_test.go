@@ -1,7 +1,6 @@
 package semantic
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -39,6 +38,7 @@ func TestImportLibrary(t *testing.T) {
 			want: "lib two fn abc() { let x u32 = one.test() }",
 		},
 		{
+			name: "struct literal from imported type",
 			input: `
 					lib one
 					pub struct abc { x i64 }
@@ -47,6 +47,20 @@ func TestImportLibrary(t *testing.T) {
 					let x = one.abc{x: 1} 
 				`,
 			want: "lib two let x abc = one.abc{x i64: 1}",
+		},
+		{
+			name: "imported type in struct field",
+			input: `
+					lib one
+					pub type a i64
+					--
+					lib two
+					struct abc {
+						f one.a
+					}
+					let x = abc{f: 1}
+				`,
+			want: "lib two struct abc {f one.a} let x abc = abc{f one.a: 1}",
 		},
 	}
 
@@ -69,9 +83,12 @@ func TestImportLibrary(t *testing.T) {
 			p := GetParser(progs[1])
 			ast := p.ParseLibrary()
 
-			fmt.Printf("%+v\n", imports)
 			semsis := New("", imports)
 			semsis.Analyse(ast)
+
+			if len(semsis.Errors()) > 0 {
+				t.Errorf("%s", strings.Join(semsis.Errors(), "\n"))
+			}
 
 			got := ast.String()
 
