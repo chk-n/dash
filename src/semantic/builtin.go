@@ -10,7 +10,7 @@ import (
 
 func isBuiltinFunction(lit string) bool {
 	switch lit {
-	case "len", "cap", "size", "make", "validate", "println", "assert":
+	case "append", "len", "cap", "size", "make", "validate", "println", "assert":
 		return true
 	}
 	return false
@@ -28,6 +28,9 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 	var errorProne bool
 
 	switch lit {
+	case "append":
+		args = []types.TypeSpec{argsTypes[0], argsTypes[1]}
+		rets = []types.TypeSpec{argsTypes[0]}
 	case "len":
 		args = []types.TypeSpec{
 			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
