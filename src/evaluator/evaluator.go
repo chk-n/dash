@@ -159,6 +159,8 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 			return e.evalMake(n.Arguments, ctx)
 		} else if n.TokenLiteral() == "assert" {
 			return e.evalAssert(n.Arguments, ctx)
+		} else if n.TokenLiteral() == "append" {
+			return e.evalAppend(n.Arguments, ctx)
 		}
 		// If ok is true then it is a custom type cast
 		if _, ok := ctx.typs.Get(n.TokenLiteral()); ok {
@@ -1439,6 +1441,23 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 		return &Return{Values: []any{&Error{Err: msg}}}
 	}
 	return nil
+}
+
+func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
+	arr := e.Eval(args[0], ctx)
+
+	var newArr any
+	switch arr := arr.(type) {
+	case []any:
+		val := e.Eval(args[1], ctx)
+		newArr = append(arr, val)
+	case []uint8:
+		val := e.Eval(args[1], ctx).(uint8)
+		newArr = append(arr, val)
+	default:
+		panic("this is a compiler error. please report")
+	}
+	return &Return{Values: []any{newArr}}
 }
 
 func (e *Evaluator) addError(n ast.Node, err error) {
