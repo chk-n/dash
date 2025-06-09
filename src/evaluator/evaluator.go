@@ -129,9 +129,9 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		var last any
 		for _, n := range n.Nodes {
 			switch n := n.(type) {
-			case *ast.UnionStatement, *ast.TypeDefinitionStatement,
-				*ast.StructStatement, *ast.EnumStatement,
-				*ast.ErrorStatement:
+			case *ast.UseStatement, *ast.UnionStatement,
+				*ast.TypeDefinitionStatement, *ast.StructStatement,
+				*ast.EnumStatement, *ast.ErrorStatement:
 				// skip as already initialised
 			default:
 				last = e.Eval(n, ctx)
