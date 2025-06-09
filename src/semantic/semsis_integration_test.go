@@ -31,11 +31,9 @@ func TestImportLibrary(t *testing.T) {
 					pub fn test() u32 { return 0 }
 					--
 					lib two
-					fn abc() {
-						let x = one.test()
-					}
+					let x = one.test()
 				`,
-			want: "lib two fn abc() { let x u32 = one.test() }",
+			want: "lib two let x u32 = one.test()",
 		},
 		{
 			name: "struct literal from imported type",
