@@ -421,7 +421,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.CopyUpdateExpression:
 		// validate identifier defined
 		s.analyse(n.Ident, "")
-
 		s.varSt.Set(name, &VarInfo{Type: n.Type(), Reassignable: true})
 
 		s.analyse(n.Block, "")
@@ -696,9 +695,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				default:
 					s.analyse(n.Right, "")
 				}
-
 			}
-
 			n.SetType(n.Right.Type())
 		case *types.Definition, *types.Alias:
 			u := types.GetUnderlyingType(left)
@@ -965,9 +962,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		// a problem analysing LHS and/or RHS.
 		// The branch can also execute if there
 		// is a bug in the semantic analysis
-		if left.Type() == nil {
-			return
-		} else if right.Type() == nil {
+		if left.Type() == nil || right.Type() == nil {
 			return
 		}
 
