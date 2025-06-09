@@ -1221,7 +1221,8 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 
 		typ := s.inferUnknownNamedType(arg.Type())
 		if typ == nil {
-			panic("type is nil")
+			// another error occured
+			return
 		}
 		arg.SetType(typ)
 
