@@ -814,6 +814,26 @@ func IsTypeIdent(ident string) bool {
 	}
 }
 
+func IsBuiltinType(t TypeSpec) bool {
+	switch t := t.(type) {
+	case *Dirty:
+		return IsBuiltinType(t.T)
+	case *Optional:
+		return IsBuiltinType(t.T)
+	case *Pointer:
+		return IsBuiltinType(t.T)
+	case *Memory:
+		return IsBuiltinType(t.T)
+	case *ImportedNamed:
+		return IsBuiltinType(t.Typ)
+	case *Struct, *Definition, *Alias,
+		*Union, *Enum:
+		return false
+	default:
+		return true
+	}
+}
+
 func GetUnderlyingMemory(t TypeSpec) *Memory {
 	switch t := t.(type) {
 	case *Memory:
