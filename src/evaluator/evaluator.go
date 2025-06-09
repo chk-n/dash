@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
+	"path"
 	"strconv"
 	"strings"
 
@@ -78,12 +79,14 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 		if !ok {
 			panic("")
 		}
-		ctx.imps.Set(libName, lib)
 
-		if _, ok := e.ctxs[libName]; !ok {
+		normalisedLibName := path.Base(libName)
+		ctx.imps.Set(normalisedLibName, lib)
+
+		if _, ok := e.ctxs[normalisedLibName]; !ok {
 			ctxLib := NewContext(nil)
 			e.Eval(lib, ctxLib)
-			e.ctxs[libName] = ctxLib
+			e.ctxs[normalisedLibName] = ctxLib
 		}
 	}
 
