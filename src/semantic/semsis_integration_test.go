@@ -72,6 +72,31 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			want: "lib two struct abc {f one.a} let x abc = abc{f one.a: 1}",
 		},
+		{
+			name: "import enum",
+			input: `
+					lib one
+					pub enum abc { a }
+					--
+					lib two
+					let x = one.abc.a
+				`,
+			want: "lib two let x one.abc = one.abc.a",
+		},
+		{
+			name: "import global var of type struct",
+			input: `
+					lib one
+					pub struct abc {
+						a i64
+					}
+					pub let c = abc{a: 1}
+					--
+					lib two
+					let x = one.c.a
+				`,
+			want: "lib two let x i64 = one.c.a",
+		},
 	}
 
 	for _, tt := range tests {
