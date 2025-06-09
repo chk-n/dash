@@ -1311,7 +1311,9 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 					}
 					s.fnSt.Set(n.VarNameAt(i+j), f)
 				} else {
-					s.setDeclerationInSymTab(n.VarNameAt(i+j), rt, n.IsVarAt(i+j))
+					ident := n.VarNameAt(i + j)
+					isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j)
+					s.setDeclerationInSymTab(ident, rt, isReassignable)
 				}
 				declCnt++
 			}
@@ -1360,10 +1362,10 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 
 }
 
-func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isVar bool) {
+func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isReassignable bool) {
 	vi := &VarInfo{
 		Type:         t,
-		Reassignable: isVar,
+		Reassignable: isReassignable,
 	}
 	s.varSt.Set(n, vi)
 }
@@ -1993,6 +1995,14 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 	n.T = fnType
 	s.fnSt.Set(n.Name.TokenLiteral(), &FnInfo{Type: fnType})
 
+}
+
+func (s *Semantics) isReassignable(ident string) bool {
+	info, ok := s.varSt.Get(ident)
+	if !ok {
+		return false
+	}
+	return info.Reassignable
 }
 
 func (s *Semantics) addError(n ast.Node, err error) {
