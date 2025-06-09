@@ -1344,16 +1344,18 @@ func (e *Evaluator) evalLen(args []ast.Expression, stk *Context) any {
 		val = e.Eval(args[0], stk)
 	}
 
+	var n int64
 	switch v := val.(type) {
 	case []any:
-		return int64(len(v))
+		n = int64(len(v))
 	case []uint8:
-		return int64(len(v))
+		n = int64(len(v))
 	case string:
-		return int64(len(v))
+		n = int64(len(v))
 	default:
 		panic("this is a compiler error. please report")
 	}
+	return &Return{Values: []any{n}}
 }
 
 func (e *Evaluator) evalPrintln(args []ast.Expression, stk *Context) any {

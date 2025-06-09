@@ -768,7 +768,7 @@ func TestLenFunction(t *testing.T) {
 		{
 			name: "literal array",
 			prog: "len([1, 2, 3])",
-			want: int64(3),
+			want: &Return{Values: []any{int64(3)}},
 		},
 		// BUG: panic: type is nil in semsis
 		//
@@ -782,14 +782,14 @@ func TestLenFunction(t *testing.T) {
 			prog: `
 			let arr = [1, 2, 3, 4]
 			len(arr)`,
-			want: int64(4),
+			want: &Return{Values: []any{int64(4)}},
 		},
 		{
 			name: "nested arrays",
 			prog: `
 			let arr = [[1, 2], [3, 4], [5, 6]]
 			len(arr)`,
-			want: int64(3),
+			want: &Return{Values: []any{int64(3)}},
 		},
 		{
 			name: "len in expression",
@@ -805,7 +805,7 @@ func TestLenFunction(t *testing.T) {
 			    return [1, 2, 3, 4, 5]
 			}
 			len(get_arr())`,
-			want: int64(5),
+			want: &Return{Values: []any{int64(5)}},
 		},
 		{
 			name: "len with array argument",
