@@ -94,6 +94,9 @@ func TestImportLibrary(t *testing.T) {
 
 			p := GetParser(progs[1])
 			ast := p.ParseLibrary()
+			if len(p.Errors()) > 0 {
+				t.Errorf("%s", strings.Join(p.Errors(), "\n"))
+			}
 
 			semsis := New("", imports)
 			semsis.Analyse(ast)
