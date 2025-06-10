@@ -729,26 +729,85 @@ func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExp
 }
 
 func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
-	obj := e.Eval(n.Left, stk)
+	// case 1: library access
+	if leftIdent, ok := n.Left.(*ast.Identifier); ok {
+		if libCtx, isLibrary := e.ctxs[leftIdent.Value]; isLibrary {
+			return e.evalLibraryAccess(libCtx, n.Right, stk)
+		}
+	}
 
-	switch right := n.Right.(type) {
-	// handles named structs and enums
+	// case 2: local access
+	leftValue := e.Eval(n.Left, stk)
+	if leftValue == nil {
+		panic("this is a compiler error. please report")
+	}
+
+	if ret, ok := leftValue.(*Return); ok {
+		leftValue = unwrapFunctionResult(ret, 0)
+	}
+
+	return e.evalLocalAccess(leftValue, n.Right, stk)
+}
+
+func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, stk *Context) any {
+	switch right := right.(type) {
 	case *ast.Identifier:
-		if fields, ok := obj.(map[string]any); ok {
+		// lib.variable or lib.enum access
+		if val, ok := libCtx.Get(right.Value); ok {
+			return val
+		}
+
+	case *ast.FunctionCallExpression:
+		name := right.TokenLiteral()
+
+		// Check if it's a type cast: lib.Type(value)
+		if _, ok := libCtx.typs.Get(name); ok {
+			// For type casts, evaluate the argument and return it
+			return e.Eval(right.Arguments[0], stk)
+		}
+
+		// Otherwise it's a function call: lib.function(args...)
+		if fnVal, ok := libCtx.Get(name); ok {
+			fn := fnVal.(*Function)
+			return e.evalFunction(fn, right.Arguments, stk)
+		}
+	}
+	panic("this is a compiler error. please report")
+}
+
+func (e *Evaluator) evalLocalAccess(leftValue any, right ast.Expression, stk *Context) any {
+	switch right := right.(type) {
+	case *ast.Identifier:
+		// named field access: struct.field, enum.field
+		if fields, ok := leftValue.(map[string]any); ok {
 			if val, exists := fields[right.Value]; exists {
 				return val
 			}
 		}
-	// handles unnamed structs
+		return nil
+
 	case *ast.IntegerLiteral:
-		if fields, ok := obj.(map[string]any); ok {
+		// unnamed struct field access by index: struct.0
+		if fields, ok := leftValue.(map[string]any); ok {
 			key := fmt.Sprintf("%d", right.Value)
 			if val, exists := fields[key]; exists {
 				return val
 			}
 		}
-	}
+		return nil
 
+	case *ast.FunctionCallExpression:
+		// This assumes the left side evaluated to a function directly
+		if fn, ok := leftValue.(*Function); ok {
+			return e.evalFunction(fn, right.Arguments, stk)
+		}
+		panic("this is a compiler error. please report")
+		// case *ast.TryExpression:
+		// 	call := right.Right.(*ast.FunctionCallExpression)
+		// 	if fn, ok := leftValue.(*Function); ok {
+		// 		return e.somefun(fn, call.Arguments, stk)
+		// 	}
+	}
 	return nil
 }
 
@@ -1460,6 +1519,21 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 		panic("this is a compiler error. please report")
 	}
 	return &Return{Values: []any{newArr}}
+}
+
+func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Context) any {
+	newCtx := NewContext(fn.ctx)
+
+	// evaluate arguments and set values in fresh symbol table
+	for i, arg := range args {
+		fnArgName := fn.arguments[i].Name.Value
+		newCtx.Set(fnArgName, e.Eval(arg, ctx))
+	}
+	res := e.Eval(fn.body, newCtx)
+	if _, ok := res.(*Return); ok {
+		return res
+	}
+	return &Return{Values: []any{res}}
 }
 
 func (e *Evaluator) addError(n ast.Node, err error) {
