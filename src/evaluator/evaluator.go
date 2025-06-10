@@ -720,8 +720,7 @@ func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExp
 		cpy = newMap
 
 	default:
-		e.addError(n, fmt.Errorf("copy-update only works on arrays and structs"))
-		return nil
+		panic("this is a compiler error. please report")
 	}
 
 	stk.Set(newVar, cpy)
