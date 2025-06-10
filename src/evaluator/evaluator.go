@@ -339,6 +339,8 @@ func (e *Evaluator) toInt64(v any) any {
 		return int64(v)
 	case rune:
 		return int64(v)
+	case int64:
+		return v
 		// TODO i8 to i32
 		// TODO u8 to u64
 	}
