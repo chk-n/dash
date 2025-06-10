@@ -407,35 +407,42 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 	// g. if in use expression
 
 	for i, val := range n.Values {
-		switch val := val.(type) {
-		case *ast.TryExpression:
-			fn := val.Right.(*ast.FunctionCallExpression)
+		switch val.Type().(type) {
+		case *types.Multi:
 			res := e.Eval(val, ctx).(*Return)
-			for j := range fn.ReturnTypes {
-				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[i+j], ctx)
+			for j := range len(res.Values) {
+				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
 			}
-		case *ast.FunctionCallExpression:
-			res := e.Eval(val, ctx).(*Return)
-			for j := range val.ReturnTypes {
-				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[i+j], ctx)
+		case *types.ImportedNamed:
+			res := e.Eval(val, ctx)
+			if res, ok := res.(*Return); ok {
+				for j := range len(res.Values) {
+					setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
+				}
+			} else {
+				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
 			}
-		case *ast.CopyUpdateExpression:
-			res := e.evalCopyUpdateExpression(n.VarNameAt(i), val, ctx)
-			setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
 		default:
+			// special case for copy update as it requires to set
+			// the copied value to context before executing body
+			if val, ok := val.(*ast.CopyUpdateExpression); ok {
+				res := e.evalCopyUpdateExpression(n.VarNameAt(i), val, ctx)
+				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
+				return
+			}
+			res := e.Eval(val, ctx)
+			res = unwrapFunctionResult(res, 0)
 			switch decl := n.Declerations[i].(type) {
 			case *ast.Identifier:
-				res := e.Eval(val, ctx)
 				ctx.SetAll(n.VarNameAt(i), res)
 			case *ast.DeclarationStatement:
-				res := e.Eval(val, ctx)
 				ctx.Set(n.VarNameAt(i), res)
 			case *ast.IndexExpression:
-				e.evalAssignmentToArrayIndex(decl, val, ctx)
+				e.evalAssignmentToArrayIndex(decl, res, ctx)
 			case *ast.SliceExpression:
-				e.evalAssignmentToArraySlice(decl, val, ctx)
+				e.evalAssignmentToArraySlice(decl, res, ctx)
 			case *ast.DotExpression:
-				e.evalAssignmentToStructField(decl, val, ctx)
+				e.evalAssignmentToStructField(decl, res, ctx)
 			}
 		}
 	}
@@ -450,8 +457,7 @@ func setOrUpdateForAssignment(assgn ast.Node, name string, res any, ctx *Context
 	}
 }
 
-func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast.Expression, stk *Context) {
-	res := e.Eval(val, stk)
+func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, res any, stk *Context) {
 	// we know that LHS has to be an identifier as
 	// assigning to index of array is only possible
 	// within an use expression
@@ -465,10 +471,9 @@ func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, val ast
 	arr.([]any)[idx] = res
 }
 
-func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast.Expression, stk *Context) {
-	res := e.Eval(val, stk)
+func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, res any, stk *Context) {
 	// we know that LHS has to be an identifier as
-	// assigning to index of array is only possible
+	// assigning to slice of array is only possible
 	// within an use expression
 	ident := exp.Left.(*ast.Identifier)
 
@@ -482,9 +487,7 @@ func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, val ast
 	copy(arr.([]any)[start:end], res.([]any))
 }
 
-func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, val ast.Expression, stk *Context) {
-	res := e.Eval(val, stk)
-
+func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, res any, stk *Context) {
 	strct := e.Eval(exp.Left, stk).(map[string]any)
 
 	// we know exp.Right must be an identifier or integer literal for struct fields
