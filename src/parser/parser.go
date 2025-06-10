@@ -309,6 +309,8 @@ func (p *Parser) ParseREPL() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
 			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
