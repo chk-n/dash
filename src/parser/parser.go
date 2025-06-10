@@ -2095,7 +2095,8 @@ func (p *Parser) parseDirtyType() types.TypeSpec {
 
 func (p *Parser) addError(tkn token.Token, err error) {
 	pos := tkn.Position
-	fmt.Printf("[ERROR] Parser failed in %s at %d:%d - %s\n", p.l.Filename(), pos.Line(), pos.Column(), err)
+	msg := fmt.Sprintf("[ERROR] Parser failed in %s at %d:%d - %s", p.l.Filename(), pos.Line(), pos.Column(), err)
+	p.errors = append(p.errors, msg)
 }
 
 // ------- //
