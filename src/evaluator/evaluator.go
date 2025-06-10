@@ -674,15 +674,13 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) an
 	var vals []any
 	for i := range n.Values {
 		res := e.Eval(n.Values[i], stk)
-		switch val := n.Values[i].(type) {
-		case *ast.FunctionCallExpression:
-			if len(val.ReturnTypes) == 1 {
-				vals = append(vals, unwrapFunctionResult(res, 0))
-			} else {
-				for j := range val.ReturnTypes {
-					vals = append(vals, unwrapFunctionResult(res, j))
-				}
+		switch n.Values[i].(type) {
+		case *ast.FunctionCallExpression, *ast.TryExpression:
+			res := res.(*Return)
+			for j := range res.Values {
+				vals = append(vals, unwrapFunctionResult(res, j))
 			}
+
 		default:
 			vals = append(vals, res)
 		}
