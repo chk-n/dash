@@ -1132,6 +1132,11 @@ func CanCoalesce(from, to TypeSpec) bool {
 		}
 	case *ImportedNamed:
 		return CanCoalesce(from.Typ, to)
+	case *Pointer:
+		if to, ok := to.(*Pointer); ok {
+			return CanCoalesce(from.T, to.T)
+		}
+		return false
 	case *Null:
 		switch to := to.(type) {
 		case *Optional:
