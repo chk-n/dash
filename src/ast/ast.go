@@ -1508,6 +1508,18 @@ func (a *BasicAttribute) String() string {
 	}
 }
 
+// IsLiteral recursively checks if a node is a literal
+func IsLiteral(n Node) bool {
+	switch n := n.(type) {
+	case Literal:
+		return true
+	case *PrefixExpression:
+		return IsLiteral(n.Right)
+	default:
+		return false
+	}
+}
+
 // ------- //
 // Sepcial //
 // ------- //
