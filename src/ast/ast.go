@@ -1316,12 +1316,14 @@ type FloatLiteral struct {
 	T types.TypeSpec
 }
 
-func (l *FloatLiteral) expressionNode()          {}
-func (l *FloatLiteral) literalNode()             {}
-func (l *FloatLiteral) Type() types.TypeSpec     { return l.T }
-func (l *FloatLiteral) SetType(t types.TypeSpec) {}
-func (l *FloatLiteral) TokenLiteral() string     { return l.Token.Literal }
-func (l *FloatLiteral) String() string           { return l.Token.Literal }
+func (l *FloatLiteral) expressionNode()      {}
+func (l *FloatLiteral) literalNode()         {}
+func (l *FloatLiteral) Type() types.TypeSpec { return l.T }
+func (l *FloatLiteral) SetType(t types.TypeSpec) {
+	l.T = t
+}
+func (l *FloatLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *FloatLiteral) String() string       { return l.Token.Literal }
 
 type ByteLiteral struct {
 	Token token.Token
