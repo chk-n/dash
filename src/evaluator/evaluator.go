@@ -422,12 +422,30 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 			}
 		case *types.ImportedNamed:
 			res := e.Eval(val, ctx)
-			if res, ok := res.(*Return); ok {
-				for j := range len(res.Values) {
-					setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
+			if ret, ok := res.(*Return); ok {
+				for j := range len(ret.Values) {
+					switch decl := n.Declerations[i+j].(type) {
+					case *ast.IndexExpression:
+						e.evalAssignmentToArrayIndex(decl, ret.Values[j], ctx)
+					case *ast.SliceExpression:
+						e.evalAssignmentToArraySlice(decl, ret.Values[j], ctx)
+					case *ast.DotExpression:
+						e.evalAssignmentToStructField(decl, ret.Values[j], ctx)
+					default:
+						setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), ret.Values[j], ctx)
+					}
 				}
 			} else {
-				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
+				switch decl := n.Declerations[i].(type) {
+				case *ast.IndexExpression:
+					e.evalAssignmentToArrayIndex(decl, res, ctx)
+				case *ast.SliceExpression:
+					e.evalAssignmentToArraySlice(decl, res, ctx)
+				case *ast.DotExpression:
+					e.evalAssignmentToStructField(decl, res, ctx)
+				default:
+					setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
+				}
 			}
 		default:
 			res := e.Eval(val, ctx)
