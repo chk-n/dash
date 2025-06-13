@@ -1778,19 +1778,20 @@ func TestPointers(t *testing.T) {
 // Helper //
 // ------ //
 
-func parseExpression(input string) ast.Node {
+func getParser(input string) *parser.Parser {
 	lcfg := &lexer.Config{SkipComments: true}
 	l := lexer.New("", input, lcfg)
-	p := parser.New(l)
+	return parser.New(l)
+}
+
+func parseExpression(input string) ast.Node {
+	p := getParser(input)
 
 	return p.ParseExpression()
 }
 
-func parseExpressions(input string) (ast.Node, error) {
-	lcfg := &lexer.Config{SkipComments: true}
-	l := lexer.New("", input, lcfg)
-
-	p := parser.New(l)
+func parseExpressions(input string) (*ast.Library, error) {
+	p := getParser(input)
 	lib := p.ParseREPL()
 
 	// sanity check
@@ -1801,23 +1802,27 @@ func parseExpressions(input string) (ast.Node, error) {
 	}
 
 	// remove main fn
-	lib1 := &ast.Library{Token: lib.Token, Name: lib.Name}
-	for _, n := range lib.Nodes {
+	lib = removeMainFn(lib)
+	return lib, nil
+}
+
+func removeMainFn(old *ast.Library) *ast.Library {
+	new := &ast.Library{Token: old.Token, Name: old.Name}
+	for _, n := range old.Nodes {
 		switch n := n.(type) {
 		case *ast.FunctionExpression:
 			if n.Name.Value != "main" {
-				lib1.Nodes = append(lib1.Nodes, n)
+				new.Nodes = append(new.Nodes, n)
 				continue
 			}
 			for _, stmt := range n.Body.Statements {
-				lib1.Nodes = append(lib1.Nodes, stmt)
+				new.Nodes = append(new.Nodes, stmt)
 			}
 		default:
-			lib1.Nodes = append(lib1.Nodes, n)
+			new.Nodes = append(new.Nodes, n)
 		}
 	}
-
-	return lib1, nil
+	return new
 }
 
 func NewEvaluator() *Evaluator {
