@@ -967,6 +967,14 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *Array:
+			switch to.T.(type) {
+			case *Byte:
+				return true
+				// case *Int:
+				// inner.Width
+
+			}
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
 		default:
@@ -1141,6 +1149,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 			return true
 		case *Definition:
 			return CanCoalesce(from, to.Underlying)
+		case *Optional:
+			return CanCoalesce(from, to.T)
 		case *Union:
 			for _, t := range to.Ts {
 				if CanCoalesce(from, t) {
