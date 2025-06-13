@@ -1398,6 +1398,11 @@ func TestFunction(t *testing.T) {
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() ?xyz { return test1 } pub fn main() { }",
 		},
 		{
+			name:  "call public function",
+			input: "pub fn test() {} test()",
+			want:  "lib main pub fn test() { } pub fn main() { test() }",
+		},
+		{
 			name:  "call function value",
 			input: "type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } let func = test2() let v = func()",
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } pub fn main() { let func xyz = test2() let v i64 = func() }",
