@@ -1915,13 +1915,12 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 	// For array literal we need to check all underlying values are of the same type
 	// if any are a literal we coalesce the type otherwise we perform strict type check
 	case *ast.ArrayLiteral:
-		arrayType, ok := types.GetUnderlyingTypeIfLiteral(targetType).(*types.Array)
-		if !ok {
-			s.addError(lit, errTypeMismatch(targetType.String(), lit.T.String()))
-			return false
+		arrayType := types.GetUnderlyingTypeIfLiteral(targetType)
+		if mutType, ok := arrayType.(*types.Mutable); ok {
+			arrayType = mutType.T
 		}
 		// lit.T = expectedT
-		s.analyseArrayLiteral(lit, arrayType)
+		s.analyseArrayLiteral(lit, arrayType.(*types.Array))
 
 		// TODO:
 		return true

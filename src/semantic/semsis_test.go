@@ -1218,7 +1218,7 @@ func TestMutable(t *testing.T) {
 		{
 			name:  "assign slice to mutable from make",
 			input: "union abc { i64 } let arr = make([]abc,10) arr[0:3] = [1,2,3]",
-			want:  "lib main union abc {i64} pub fn main() { let arr mut<[]abc> = make([]abc,10) let arr' []abc = use arr { } }",
+			want:  "lib main union abc {i64} pub fn main() { let arr mut<[]abc> = make([]abc,10) arr[(0 : 3)] mut<[]abc> = [1,2,3] }",
 		},
 	}
 	runAnalysisTests(t, tests)
