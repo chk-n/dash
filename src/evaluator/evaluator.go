@@ -214,7 +214,7 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 	case *ast.Identifier:
 		val, ok := ctx.Get(n.Value)
 		if !ok {
-			panic("this is a compiler bug. please report: " + n.Value)
+			panic("this is a compiler bug. please report")
 		}
 		return val
 
