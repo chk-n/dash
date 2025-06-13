@@ -5,8 +5,8 @@ pub struct lexer {
     idx i64
 }
 
-pub fn new(buf []byte) *lexer {
-     return &lexer{buf: buf, idx: 0}   
+pub fn new(buf []byte, idx i64) *lexer {
+     return &lexer{buf: buf, idx: idx}   
 }
 
 pub fn next_tkn(l *lexer) *lexer, token {

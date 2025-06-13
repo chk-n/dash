@@ -78,7 +78,7 @@ fn test_next_token()! {
 
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
@@ -99,7 +99,7 @@ fn test_string()! {
     
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
@@ -125,7 +125,7 @@ fn test_number()! {
     
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
@@ -152,7 +152,7 @@ fn test_comment()! {
     
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
@@ -170,7 +170,7 @@ fn test_whitespace()! {
     
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
        
         try assert(tkn.tag == tc.1, "token type mismatch")
@@ -192,7 +192,7 @@ fn test_sequential()! {
     
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let l = new([]byte(tc.0), 0)
         
         var count = 0
         for {
