@@ -377,6 +377,21 @@ type AssignmentStatement struct {
 
 func (s *AssignmentStatement) statementNode()       {}
 func (s *AssignmentStatement) TokenLiteral() string { return "" }
+func (s *AssignmentStatement) TypeAt(i int) types.TypeSpec {
+	var typ types.TypeSpec
+	for j := 0; j < i; j++ {
+		switch t := s.Values[j].Type().(type) {
+		case *types.Multi:
+			for _, t := range t.Ts {
+				typ = t
+				j++
+			}
+		default:
+			typ = t
+		}
+	}
+	return typ
+}
 func (s *AssignmentStatement) VarNameAt(i int) string {
 	if i > len(s.Declerations)-1 {
 		panic("this is a compiler error. please report")
@@ -1060,54 +1075,20 @@ type IndexExpression struct {
 	Token   token.Token // [
 	Left    Expression
 	Indices []Expression
+
+	T types.TypeSpec
 }
 
 func (e *IndexExpression) expressionNode() {}
 func (e *IndexExpression) SetType(t types.TypeSpec) {
-	panic("this method should not be used")
+	e.T = t
 }
 
 // Returns type that a variable would have when index expression executed
 // v [][]i64 = a[0][0]
 // Type() == i64
 func (e *IndexExpression) Type() types.TypeSpec {
-	depth := len(e.Indices)
-	return e.GetTypeAt(depth)
-}
-
-// a = [[1,2], [3,4]]
-// GetTypeAt(0) == [][]i64
-// GetTypeAt(1) == []i64
-// GetTypeAt(2) == i64
-// GetTypeAt(3) == panic!
-func (e *IndexExpression) GetTypeAt(depth int) types.TypeSpec {
-	typ := e.Left.Type()
-	if typ == nil {
-		return nil
-	}
-start:
-	if depth == 0 {
-		return typ
-	}
-	switch t := typ.(type) {
-	// array type definitions are indexable like arrays
-	case *types.Definition:
-		typ = t.Underlying
-		goto start
-	case *types.Dirty:
-		typ = t.T
-		goto start
-	// strings are also indexable like arrays
-	case *types.String:
-		depth--
-		typ = &types.ConstByte
-		goto start
-	case *types.Array:
-		typ = t.T
-		depth--
-		goto start
-	}
-	return nil
+	return e.T
 }
 func (e *IndexExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *IndexExpression) String() string {
@@ -1209,29 +1190,6 @@ func (e *TypeCastExpression) String() string {
 
 	out.WriteString(e.Typ.String())
 	out.WriteString("(" + e.Argument.String() + ")")
-
-	return out.String()
-}
-
-type UseExpression struct {
-	Token token.Token
-	Ident *Identifier
-	Block *BlockStatement
-
-	// Set by semsis
-	T types.TypeSpec
-}
-
-func (e *UseExpression) expressionNode()          {}
-func (e *UseExpression) Type() types.TypeSpec     { return e.T }
-func (e *UseExpression) SetType(t types.TypeSpec) { e.T = t }
-func (e *UseExpression) TokenLiteral() string     { return e.Token.Literal }
-func (e *UseExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.TokenLiteral() + " ")
-	out.WriteString(e.Ident.TokenLiteral() + " ")
-	out.WriteString(e.Block.String())
 
 	return out.String()
 }
@@ -1693,10 +1651,6 @@ func (e *TypeLiteral) Pos() token.Pos {
 }
 
 func (e *TypeCastExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *UseExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 

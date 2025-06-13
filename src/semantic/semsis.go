@@ -20,7 +20,6 @@ type scope uint
 const (
 	GLOBAL scope = iota
 	FOR
-	USE
 	ASSIGNMENT
 )
 
@@ -265,14 +264,14 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		// built in functions such as 'len' do not consume memory
 		if !isBuiltinFunction(n.Token.Literal) {
-			// mark memory<> as consumed
+			// mark mut<> as consumed
 			// if identifier of type memory make sure to consume
 			// memory type and store underlying type in symbol
 			// table so that it cant be used later on in the
 			// same scope
 			for _, arg := range n.Arguments {
 				if ident := s.getIdentFromPrefix(arg); ident != nil {
-					mt := types.GetUnderlyingMemory(arg.Type())
+					mt := types.GetUnderlyingMutable(arg.Type())
 					if mt == nil {
 						continue
 					}
@@ -432,30 +431,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.varSt.Set(name, &VarInfo{Type: n.Type(), Reassignable: true})
 
 		s.analyse(n.Block, "")
-	case *ast.UseExpression:
-		s.scope.Push(USE)
-		defer s.scope.Pop()
-
-		s.analyse(n.Ident, "")
-
-		identType, ok := n.Ident.Type().(*types.Memory)
-
-		if !ok {
-			s.addError(n, errTypeMismatch("memory", n.Ident.T.String()))
-			return
-		}
-		if _, ok := s.guardedType.Get(identType.Ident()); ok {
-			n.T = &types.Dirty{T: identType.T}
-		} else {
-			n.T = identType.T
-		}
-
-		s.varSt.Set(n.Ident.TokenLiteral(), &VarInfo{Type: n.T, Reassignable: true})
-
-		// TODO: validate only ident modified in reference (unlike copy and update)
-
-		s.analyse(n.Block, "")
-
 	case *ast.StructLiteral:
 		// Infer types of anonymous structs
 		if n.Name == nil {
@@ -799,14 +774,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		if n.Type() == nil {
 			return
 		}
-		switch typ := n.Left.Type().(type) {
-		case nil:
-			panic("this is a compiler error. please report")
-		case *types.Definition:
-			s.varSt.Set(n.String(), &VarInfo{Type: typ.Underlying})
-		default:
-			s.varSt.Set(n.String(), &VarInfo{Type: n.Type()})
-		}
+		arrTyp := types.GetUnderlyingIndexable(n.Left.Type())
+		typ := types.ArrayTypeAt(arrTyp, len(n.Indices))
+		n.SetType(typ)
+
+		s.varSt.Set(n.String(), &VarInfo{Type: n.Type()})
 
 		for _, idx := range n.Indices {
 			s.analyse(idx, "")
@@ -1149,12 +1121,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		for i, st := range n.Statements {
 			switch st := st.(type) {
 			case *ast.KeywordStatement:
-				if scope == USE {
-					if st.Token.Type != token.BREAK {
-						s.addError(st, errIllegalUseOfKeyword(st.TokenLiteral()))
-						continue
-					}
-				} else if scope == FOR {
+				if scope == FOR {
 					if i != len(n.Statements)-1 {
 						s.addError(st, errKeywordNotLastInstruction(st.TokenLiteral()))
 					}
@@ -1278,7 +1245,8 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 					s.fnSt.Set(n.VarNameAt(i+j), f)
 				} else {
 					ident := n.VarNameAt(i + j)
-					isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j)
+					_, isMutable := n.TypeAt(i + j).(*types.Mutable)
+					isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j) || isMutable
 					s.setDeclerationInSymTab(ident, rt, isReassignable)
 				}
 				declCnt++
@@ -1329,9 +1297,10 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 }
 
 func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isReassignable bool) {
+	_, isMutable := t.(*types.Mutable)
 	vi := &VarInfo{
 		Type:         t,
-		Reassignable: isReassignable,
+		Reassignable: isReassignable || isMutable,
 	}
 	s.varSt.Set(n, vi)
 }
@@ -1789,7 +1758,8 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 				s.fnSt.Set(arg.Name.TokenLiteral(), &FnInfo{Type: ft})
 			}
 		}
-		s.varSt.Set(arg.Name.TokenLiteral(), &VarInfo{Type: arg.Type})
+		_, isMutable := arg.Type.(*types.Mutable)
+		s.varSt.Set(arg.Name.TokenLiteral(), &VarInfo{Type: arg.Type, Reassignable: isMutable})
 		argTypes[i] = arg.Type
 	}
 
@@ -1830,7 +1800,6 @@ func (s *Semantics) isReassignable(ident string) bool {
 // Validates whether expr can be coerced into the targetType in the case
 // of literals or if there is an exact match for the remaining expressions
 func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.TypeSpec) bool {
-
 	switch lit := expr.(type) {
 	case *ast.PrefixExpression:
 		if ast.IsLiteral(lit.Right) {
@@ -2067,7 +2036,7 @@ func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
 		}
 		t.T = typ
 		return t
-	case *types.Memory:
+	case *types.Mutable:
 		typ := s.inferUnknownNamedType(t.T)
 		if typ == nil {
 			return nil

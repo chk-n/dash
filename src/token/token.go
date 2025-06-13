@@ -85,7 +85,7 @@ const (
 	// // []T or [n]T
 	// ARRAYTYPE
 	// memory
-	MEMORYTYPE
+	MUTABLETYPE
 	// dirty
 	DIRTYTYPE
 
@@ -306,7 +306,7 @@ var keywords = map[string]Type{
 	"byte":   BYTETYPE,
 	"char":   CHARTYPE,
 	"bool":   BOOLTYPE,
-	"memory": MEMORYTYPE,
+	"mut":    MUTABLETYPE,
 	"dirty":  DIRTYTYPE,
 
 	//

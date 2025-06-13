@@ -37,7 +37,7 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 				&types.Struct{Ts: []types.StructField{{Name: "len", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
 				&types.String{},
-				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
@@ -47,7 +47,7 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
 				&types.Struct{Ts: []types.StructField{{Name: "cap", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
-				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
@@ -62,7 +62,7 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 		} else {
 			args = []types.TypeSpec{&types.Type{T: argsTypes[0]}, &types.ConstI64, argsTypes[2]}
 		}
-		rets = []types.TypeSpec{&types.Memory{T: argsTypes[0]}}
+		rets = []types.TypeSpec{&types.Mutable{T: argsTypes[0]}}
 	case "validate":
 		args = []types.TypeSpec{&types.Dirty{T: &types.Generic{Name: "T"}}}
 		rets = []types.TypeSpec{&types.ConstBool}

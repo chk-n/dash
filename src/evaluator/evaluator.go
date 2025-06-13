@@ -197,8 +197,6 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		return e.evalKeywordStatement(n)
 	case *ast.ReturnStatement:
 		return e.evalReturnStatement(n, ctx)
-	case *ast.UseExpression:
-		return e.evalUseExpression(n, ctx)
 	case *ast.DotExpression:
 		return e.evalDotExpression(n, ctx)
 	case *ast.SliceExpression:
@@ -706,19 +704,6 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) an
 		}
 	}
 	return &Return{Values: vals}
-}
-
-func (e *Evaluator) evalUseExpression(n *ast.UseExpression, stk *Context) any {
-	arr := e.Eval(n.Ident, stk)
-
-	stk.Scope()
-	defer stk.Unscope()
-
-	stk.Set(n.Ident.Value, arr)
-
-	e.Eval(n.Block, stk)
-	arr, _ = stk.Get(n.Ident.Value)
-	return arr
 }
 
 func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression, stk *Context) any {

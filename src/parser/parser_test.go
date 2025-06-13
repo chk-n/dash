@@ -84,13 +84,13 @@ func TestType(t *testing.T) {
 		},
 		{
 			name:  "memory",
-			input: "memory<string>",
-			want:  "memory<string>",
+			input: "mut<string>",
+			want:  "mut<string>",
 		},
 		{
 			name:  "memory nested",
-			input: "memory<[]i64>",
-			want:  "memory<[]i64>",
+			input: "mut<[]i64>",
+			want:  "mut<[]i64>",
 		},
 		{
 			name:  "char",
@@ -645,7 +645,7 @@ func TestFunctionLiteral(t *testing.T) {
 		},
 		// {
 		// 	name:  "ensure no infinite recursion",
-		// 	input: "fn some_func(m, memory<i64>)",
+		// 	input: "fn some_func(m, mut<i64>)",
 		// 	error: "",
 		// },
 	}
@@ -1242,46 +1242,6 @@ func TestSliceExpression(t *testing.T) {
 			name:  "slice of dot expression",
 			input: "a.s[0:2]",
 			want:  "a.s[(0 : 2)]",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := getParser(tc.input)
-			stmt := p.parseExpression(LOWEST)
-
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
-			}
-		})
-	}
-}
-
-func TestUseExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "reassignment",
-			input: "use xyz { xyz = 2 }",
-			want:  "use xyz { xyz = 2 }",
-		},
-		{
-			name:  "reassignment of struct field",
-			input: "use xyz { xyz.field = 2 }",
-			want:  "use xyz { xyz.field = 2 }",
-		},
-		{
-			name:  "reassignment of array element",
-			input: "use xyz { xyz[0] = 2 }",
-			want:  "use xyz { xyz[0] = 2 }",
-		},
-		{
-			name:  "empty body",
-			input: "use xyz {}",
-			want:  "use xyz { }",
 		},
 	}
 

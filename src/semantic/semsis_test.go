@@ -578,17 +578,17 @@ func TestArray(t *testing.T) {
 		},
 		{
 			name:  "assign casted char to byte array",
-			input: "let arr = make([]byte, 1) let arr' = use arr { arr[0] = byte(0 + '0') }",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,1) let arr' []byte = use arr { arr[0] byte = byte((0 + '0')) } }",
+			input: "let arr = make([]byte, 1) arr[0] = byte(0 + '0')",
+			want:  "lib main pub fn main() { let arr mut<[]byte> = make([]byte,1) arr[0] byte = byte((0 + '0')) }",
 		},
 		{
 			name:  "assign char literal to byte array",
-			input: "let arr = make([]byte, 1) let arr' = use arr { arr[0] = '0' }",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,1) let arr' []byte = use arr { arr[0] byte = '0' } }",
+			input: "let arr = make([]byte, 1) arr[0] = '0'",
+			want:  "lib main pub fn main() { let arr mut<[]byte> = make([]byte,1) arr[0] byte = '0' }",
 		},
 		{
 			name:   "assign char to byte array",
-			input:  "let arr = make([]byte, 1) let arr' = use arr { arr[0] = 0 + '0' }",
+			input:  "let arr = make([]byte, 1) arr[0] = 0 + '0' }",
 			errors: []string{"type mistmatch, expected type 'byte' but got 'char'"},
 		},
 	}
@@ -815,8 +815,8 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "aggregate type - used in memory",
-			input: "type custom []byte fn test(mem memory<custom>) { }",
-			want:  "lib main type custom []byte fn test(mem memory<custom>) { } pub fn main() { }",
+			input: "type custom []byte fn test(mem mut<custom>) { }",
+			want:  "lib main type custom []byte fn test(mem mut<custom>) { } pub fn main() { }",
 		},
 		{
 			name:  "aggregate type - struct",
@@ -1193,37 +1193,32 @@ func TestCopyExpression(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
-func TestUseExpression(t *testing.T) {
+func TestMutable(t *testing.T) {
 	tests := []testCase{
 		{
-			name:  "use from make",
-			input: "let arr = make([]i64,10) let arr' = use arr { arr[0] = 1 }",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10) let arr' []i64 = use arr { arr[0] i64 = 1 } }",
+			name:  "assign value to element from make",
+			input: "let arr = make([]i64,10) arr[0] = 1",
+			want:  "lib main pub fn main() { let arr mut<[]i64> = make([]i64,10) arr[0] i64 = 1 }",
 		},
 		{
-			name:  "use array from arg",
-			input: `fn test(arr memory<[]i64>) []i64 { let arr' = use arr { arr[0] = 1 } return arr' }`,
-			want:  `lib main fn test(arr memory<[]i64>) []i64 { let arr' []i64 = use arr { arr[0] i64 = 1 } return arr' } pub fn main() { }`,
+			name:  "assign value from argument",
+			input: `fn test(arr mut<[]i64>) []i64 { arr[0] = 1 return arr }`,
+			want:  `lib main fn test(arr mut<[]i64>) []i64 { arr[0] i64 = 1 return arr } pub fn main() { }`,
 		},
 		{
-			name:  "use guarded type",
-			input: "type abc []i64 | len(abc) == 10 fn test(arr memory<abc>) { let arr' = use arr { arr[0] = 1} }",
-			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr memory<dirty<abc>>) { let arr' dirty<abc> = use arr { arr[0] i64 = 1 } } pub fn main() { }",
+			name:  "assign value for mutable guarded type",
+			input: "type abc []i64 | len(abc) == 10 fn test(arr mut<abc>) { arr[0] = 1}",
+			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr mut<dirty<abc>>) { arr[0] i64 = 1 } pub fn main() { }",
 		},
 		{
-			name:  "use union from make",
-			input: "union abc { i64 } let arr = make([]abc,10) let arr' = use arr {  }",
-			want:  "lib main union abc {i64} pub fn main() { let arr memory<[]abc> = make([]abc,10) let arr' []abc = use arr { } }",
+			name:  "get element from mutable",
+			input: "union abc { i64 } fn test(m mut<[]abc>) { let v = m[0] }",
+			want:  "lib main union abc {i64} fn test(m mut<[]abc>) { let v abc = m[0] } pub fn main() { }",
 		},
 		{
-			name:  "using passed memory of union array",
-			input: "union abc { i64 } fn test(m memory<[]abc>) { let m' = use m {} let v = m'[0] }",
-			want:  "lib main union abc {i64} fn test(m memory<[]abc>) { let m' []abc = use m { } let v abc = m'[0] } pub fn main() { }",
-		},
-		{
-			name:  "break out of use",
-			input: "fn test(arr memory<[]i64>) { use arr { break } }",
-			want:  "lib main fn test(arr memory<[]i64>) { use arr { break } } pub fn main() { }",
+			name:  "assign slice to mutable from make",
+			input: "union abc { i64 } let arr = make([]abc,10) arr[0:3] = [1,2,3]",
+			want:  "lib main union abc {i64} pub fn main() { let arr mut<[]abc> = make([]abc,10) let arr' []abc = use arr { } }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1233,8 +1228,8 @@ func TestMemorySemantics(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "passing memory to fn makes it unusable",
-			input: "let a = make([]u8, 1) test(&a) let b = a fn test(m *memory<[]u8>) {}",
-			want:  "lib main fn test(m *memory<[]u8>) { } pub fn main() { let a memory<[]u8> = make([]u8,1) test(&a) let b []u8 = a }",
+			input: "let a = make([]u8, 1) test(&a) let b = a fn test(m *mut<[]u8>) {}",
+			want:  "lib main fn test(m *mut<[]u8>) { } pub fn main() { let a mut<[]u8> = make([]u8,1) test(&a) let b []u8 = a }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1472,17 +1467,17 @@ func TestBuiltInFunction(t *testing.T) {
 		{
 			name:   "built-in fns - wrong variable argument type",
 			input:  `let a = 1 let l = len(a) let c = cap(a)`,
-			errors: []string{"type mistmatch, expected type 'T | struct<len i64>, []T, string, memory<[]T>' but got 'i64'", "type mistmatch, expected type 'T | struct<cap i64>, []T, memory<[]T>' but got 'i64'"},
+			errors: []string{"type mistmatch, expected type 'T | struct<len i64>, []T, string, mut<[]T>' but got 'i64'", "type mistmatch, expected type 'T | struct<cap i64>, []T, mut<[]T>' but got 'i64'"},
 		},
 		{
 			name:  "make",
 			input: "let arr = make([]i64, 10)",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10) }",
+			want:  "lib main pub fn main() { let arr mut<[]i64> = make([]i64,10) }",
 		},
 		{
 			name:  "make with initial value",
 			input: "let arr = make([]i64, 10, 0)",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10,0) }",
+			want:  "lib main pub fn main() { let arr mut<[]i64> = make([]i64,10,0) }",
 		},
 		{
 			name:  "validate",
@@ -1492,12 +1487,12 @@ func TestBuiltInFunction(t *testing.T) {
 		{
 			name:  "length of memory",
 			input: "let arr = make([]byte, 256) len(arr)",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,256) len(arr) }",
+			want:  "lib main pub fn main() { let arr mut<[]byte> = make([]byte,256) len(arr) }",
 		},
 		{
 			name:  "capacity of memory",
 			input: "let arr = make([]byte, 256) cap(arr)",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,256) cap(arr) }",
+			want:  "lib main pub fn main() { let arr mut<[]byte> = make([]byte,256) cap(arr) }",
 		},
 		{
 			name:  "assert",

@@ -181,7 +181,7 @@ func TestNextToken(t *testing.T) {
 				bool
 				byte
 				char
-				memory
+				mut
 			`,
 			tokens: []wantToken{
 				{"int", token.INTTYPE},
@@ -200,7 +200,7 @@ func TestNextToken(t *testing.T) {
 				{"bool", token.BOOLTYPE},
 				{"byte", token.BYTETYPE},
 				{"char", token.CHARTYPE},
-				{"memory", token.MEMORYTYPE},
+				{"mut", token.MUTABLETYPE},
 			},
 		},
 		{

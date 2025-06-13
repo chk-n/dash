@@ -8,6 +8,7 @@ import (
 
 	"strings"
 
+	"dash-lang.io/src/internal"
 	"dash-lang.io/src/token"
 )
 
@@ -591,21 +592,24 @@ func (t *Optional) Equal(other TypeSpec) bool {
 	return t.T.Equal(other)
 }
 
-type Memory struct {
+type Mutable struct {
 	T TypeSpec
 }
 
-func (t *Memory) Type() TypeSpec { return t.T }
-func (t *Memory) Ident() string {
+func (t *Mutable) Type() TypeSpec { return t.T }
+func (t *Mutable) Ident() string {
 	return t.String()
 }
-func (t *Memory) String() string {
-	return "memory<" + t.T.String() + ">"
+func (t *Mutable) String() string {
+	return "mut<" + t.T.String() + ">"
 }
-func (t *Memory) Equal(other TypeSpec) bool {
-	otherMem, ok := other.(*Memory)
+func (t *Mutable) Equal(other TypeSpec) bool {
+	otherMem, ok := other.(*Mutable)
 	if !ok {
-		return ok
+		// mutable type comparison falls through
+		// to underlying type if comparison cant
+		// be made
+		return t.T.Equal(other)
 	}
 
 	return t.T.Equal(otherMem.Type())
@@ -822,7 +826,7 @@ func IsBuiltinType(t TypeSpec) bool {
 		return IsBuiltinType(t.T)
 	case *Pointer:
 		return IsBuiltinType(t.T)
-	case *Memory:
+	case *Mutable:
 		return IsBuiltinType(t.T)
 	case *ImportedNamed:
 		return IsBuiltinType(t.Typ)
@@ -834,20 +838,20 @@ func IsBuiltinType(t TypeSpec) bool {
 	}
 }
 
-func GetUnderlyingMemory(t TypeSpec) *Memory {
+func GetUnderlyingMutable(t TypeSpec) *Mutable {
 	switch t := t.(type) {
-	case *Memory:
+	case *Mutable:
 		return t
 	case *Definition:
-		return GetUnderlyingMemory(t.Underlying)
+		return GetUnderlyingMutable(t.Underlying)
 	case *Dirty:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Pointer:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Optional:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Alias:
-		return GetUnderlyingMemory(t.Underlying)
+		return GetUnderlyingMutable(t.Underlying)
 	}
 	return nil
 }
@@ -891,7 +895,7 @@ func GetUnderlyingStructType(t TypeSpec) (*Struct, bool) {
 		return GetUnderlyingStructType(t.T)
 	case *Optional:
 		return GetUnderlyingStructType(t.T)
-	case *Memory:
+	case *Mutable:
 		return GetUnderlyingStructType(t.T)
 	case *Pointer:
 		return GetUnderlyingStructType(t.T)
@@ -1065,6 +1069,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *Mutable:
+			return CanCoalesce(from, to.T)
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
 		default:
@@ -1160,6 +1166,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
 		}
+	case *Mutable:
+		return CanCoalesce(from.T, to)
 	case *ImportedNamed:
 		return CanCoalesce(from.Typ, to)
 	case *Pointer:
@@ -1269,8 +1277,8 @@ func TokenToType(tk token.Token) TypeSpec {
 		return &ConstChar
 	case token.ASTERISK:
 		return &Pointer{}
-	case token.MEMORYTYPE:
-		return &Memory{}
+	case token.MUTABLETYPE:
+		return &Mutable{}
 	case token.DIRTYTYPE:
 		return &Dirty{}
 	}
@@ -1369,4 +1377,45 @@ func IsFloatRepresentableAs(v float64, t *Float) bool {
 		return float64(f32) == v
 	}
 	return true
+}
+
+// GetUnderlyingIndexable returns the underlying type
+// that is indexable e.g. string or array
+func GetUnderlyingIndexable(t TypeSpec) TypeSpec {
+	switch t := t.(type) {
+	case *Dirty:
+		return GetUnderlyingIndexable(t.T)
+	case *Optional:
+		return GetUnderlyingIndexable(t.T)
+	case *Mutable:
+		return GetUnderlyingIndexable(t.T)
+	case *Definition:
+		return GetUnderlyingIndexable(t.Underlying)
+	case *Pointer:
+		return GetUnderlyingIndexable(t.T)
+	case *String:
+		return t
+	case *Array:
+		return t
+	default:
+		panic("this is a compiler error. please report")
+	}
+}
+
+func ArrayTypeAt(t TypeSpec, pos int) TypeSpec {
+	if pos == 0 {
+		return t
+	}
+
+	typ := t
+	for i := range pos {
+		switch t := typ.(type) {
+		case *String:
+			internal.AssertTrue(i == 0, "")
+			return &ConstByte
+		case *Array:
+			typ = t.T
+		}
+	}
+	return typ
 }

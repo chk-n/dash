@@ -126,7 +126,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.MATCH, p.parseMatchExpression)
 	p.registerPrefix(token.LBRACE, p.parseAnonymousStructLiteral)
 	// p.registerPrefix(token.TRY, p.parseTryExpression)
-	p.registerPrefix(token.USE, p.parseUseExpression)
 	p.registerPrefix(token.LBRACK, p.parseArrayLiteralTypeOrCast)
 	// Types
 	p.registerPrefix(token.STRINGTYPE, p.parseTypeLiteral)
@@ -1452,25 +1451,6 @@ func (p *Parser) parseTypeLiteral() ast.Expression {
 	}
 }
 
-func (p *Parser) parseUseExpression() ast.Expression {
-	exp := &ast.UseExpression{Token: p.curToken}
-	p.nextToken()
-	if !p.curTokenIs(token.IDENT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	exp.Ident = p.parseIdentifier()
-
-	if !p.curTokenIs(token.LBRACE) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-
-	exp.Block = p.parseBlockStatement()
-
-	return exp
-}
-
 func (p *Parser) parseTryExpression() ast.Expression {
 	exp := &ast.TryExpression{Token: p.curToken}
 	p.nextToken()
@@ -1920,8 +1900,8 @@ func (p *Parser) parseType() types.TypeSpec {
 		}
 	case token.ASTERISK:
 		typ = p.parsePointerType()
-	case token.MEMORYTYPE:
-		typ = p.parseMemoryType()
+	case token.MUTABLETYPE:
+		typ = p.parseMutableType()
 	case token.DIRTYTYPE:
 		typ = p.parseDirtyType()
 	default:
@@ -2060,8 +2040,8 @@ func (p *Parser) parsePointerType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseMemoryType() types.TypeSpec {
-	typ, _ := types.TokenToType(p.curToken).(*types.Memory)
+func (p *Parser) parseMutableType() types.TypeSpec {
+	typ, _ := types.TokenToType(p.curToken).(*types.Mutable)
 	p.nextToken()
 
 	if !p.curTokenIs(token.LT) {
@@ -2178,7 +2158,7 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.LBRACK ||
 		(p.curToken.Type == token.FUNCTION && p.peekToken.Type == token.LPAREN) ||
 		p.curToken.Type == token.ASTERISK ||
-		p.curToken.Type == token.MEMORYTYPE ||
+		p.curToken.Type == token.MUTABLETYPE ||
 		p.curToken.Type == token.IDENT ||
 		p.curToken.Type == token.OPTIONAL ||
 		p.curToken.Type == token.DIRTYTYPE

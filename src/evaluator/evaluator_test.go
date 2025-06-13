@@ -1133,7 +1133,7 @@ func TestTypeDefinition(t *testing.T) {
 	}
 }
 
-func TestUseExpression(t *testing.T) {
+func TestMutable(t *testing.T) {
 	tests := []struct {
 		name string
 		prog string
@@ -1143,21 +1143,17 @@ func TestUseExpression(t *testing.T) {
 			name: "modify array using index expression",
 			prog: `
 			let buf = make([]i64, 3)
-			let buf' = use buf {
-			  buf[0] = 1
-			  buf[1] = 2
-			}
-			buf'`,
+			buf[0] = 1
+			buf[1] = 2
+			buf`,
 			want: []any{int64(1), int64(2), int64(0)},
 		},
 		{
 			name: "modify array using slice expression",
 			prog: `
 			let buf = make([]i64, 3)
-			let buf' = use buf {
-			    buf[0:3] = [3,2,1]
-			}
-			buf'`,
+		    buf[0:3] = [3,2,1]
+			buf`,
 			want: []any{int64(3), int64(2), int64(1)},
 		},
 	}
@@ -1653,18 +1649,6 @@ func TestVariableScoping(t *testing.T) {
 			}
 			x`,
 			want: int64(1),
-		},
-		{
-			name: "use expression scope",
-			prog: `
-			let arr = make([]i64, 3)
-			let x = 5
-			let arr' = use arr {
-				let x = 10
-				arr[0] = x
-			}
-			x`,
-			want: int64(5),
 		},
 		// NOTE: blocks not supported yet
 		// {
