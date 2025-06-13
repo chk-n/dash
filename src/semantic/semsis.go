@@ -357,29 +357,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					// s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
 					continue
 				}
-				// rv.SetType(coercedType)
-				// switch lit := rv.(type) {
-				// case ast.Literal:
-				// 	s.analyseLiteralWithType(rv, expectedType)
-				// case *ast.Identifier:
-				// 	// we want to treat function values are literals
-				// 	if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
-				// 		if !types.CanCoalesce(rt, expectedType) {
-				// 			s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-				// 			continue
-				// 		}
-				// 	} else {
-				// 		if !expectedType.Equal(rt) {
-				// 			s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-				// 			continue
-				// 		}
-				// 	}
-				// default:
-				// 	if !expectedType.Equal(rt) {
-				// 		s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-				// 		continue
-				// 	}
-				// }
 			}
 		}
 	case *ast.IfElseExpression:
@@ -770,8 +747,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 	case *ast.IndexExpression:
 		s.analyse(n.Left, "")
-		// another error occured
-		if n.Type() == nil {
+		if n.Left.Type() == nil {
+			// another error occured
 			return
 		}
 		arrTyp := types.GetUnderlyingIndexable(n.Left.Type())

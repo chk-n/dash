@@ -1171,7 +1171,7 @@ func TestCopyExpression(t *testing.T) {
 		// TODO: improve semantic analysis
 		// {
 		// 	name:   "copy and update - copy passed to function",
-		// 	input:  "a = [0,1,2,3] b = a^ { test(b) } fn test(a []i64) { }",
+		// 	input:  "let a = [0,1,2,3] let b = a^ { test(b) } fn test(a []i64) { }",
 		// 	errors: []string{""},
 		// },
 		// {
@@ -1277,8 +1277,8 @@ func TestTryExpression(t *testing.T) {
 		// NOTE: error-prone divide not implemented
 		// {
 		// 	name:  "try with division operation",
-		// 	input: "fn test()! { let x = 10 / 0 }",
-		// 	want:  "lib main fn test()! { let x i64 = (10 / 0) } pub fn main() { }",
+		// 	input: "fn test(y i64)! { let x = 10 / y }",
+		// 	want:  "lib main fn test(y i64)! { let x i64 = (10 / y) } pub fn main() { }",
 		// },
 		// NOTE: error-prone index op not implemented yet
 		// {
