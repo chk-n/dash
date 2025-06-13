@@ -881,6 +881,26 @@ func GetUnderlyingTypeIfLiteral(t TypeSpec) TypeSpec {
 	return t
 }
 
+func GetUnderlyingStructType(t TypeSpec) (*Struct, bool) {
+	switch t := t.(type) {
+	case *Struct:
+		return t, true
+	case *Definition:
+		return GetUnderlyingStructType(t.Underlying)
+	case *Dirty:
+		return GetUnderlyingStructType(t.T)
+	case *Optional:
+		return GetUnderlyingStructType(t.T)
+	case *Memory:
+		return GetUnderlyingStructType(t.T)
+	case *Pointer:
+		return GetUnderlyingStructType(t.T)
+	case *ImportedNamed:
+		return GetUnderlyingStructType(t.Typ)
+	}
+	return nil, false
+}
+
 // Checks whether 'from' type can be coalsced to 'to'
 // type. For example if 'from' is type of a literal
 func CanCoalesce(from, to TypeSpec) bool {

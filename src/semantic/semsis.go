@@ -26,7 +26,7 @@ const (
 
 type FnInfo struct {
 	Type          *types.Function
-	IsAnonymousFn bool
+	IsAnonymousFn bool // TODO: remove
 }
 
 type VarInfo struct {
@@ -183,6 +183,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 
 		if isBuiltinFunction(n.Token.Literal) {
+			// TODO: validate append() receives an array and element
 			builtintFn := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
 			argTs := builtintFn.T.(*types.Function).Arg
 			retTs := builtintFn.T.(*types.Function).Ret
@@ -226,7 +227,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				case *types.Union:
 					// we handle to union cast below
 				default:
-					s.analyseLiteralWithType(n.Arguments[0], to)
+					arg := n.Arguments[0]
+					s.analyseExpressionType(arg, arg.Type(), to)
 				}
 			}
 			from := n.Arguments[0].Type()
@@ -291,7 +293,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.analyse(n.Argument, "")
 		switch n.Argument.(type) {
 		case ast.Literal:
-			s.analyseLiteralWithType(n.Argument, n.Typ)
+			s.analyseExpressionType(n.Argument, n.Argument.Type(), n.Typ)
 		}
 	case *ast.DeferStatement:
 		if s.fnScope == nil {
@@ -350,30 +352,35 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			} else {
 				typs = append(typs, retT)
 			}
-			for j, rt := range typs {
+			for j := range typs {
 				expectedType := fnType.GetReturnTypeAt(i + j)
-				switch lit := rv.(type) {
-				case ast.Literal:
-					s.analyseLiteralWithType(rv, expectedType)
-				case *ast.Identifier:
-					// we want to treat function values are literals
-					if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
-						if !types.CanCoalesce(rt, expectedType) {
-							s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-							continue
-						}
-					} else {
-						if !expectedType.Equal(rt) {
-							s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-							continue
-						}
-					}
-				default:
-					if !expectedType.Equal(rt) {
-						s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
-						continue
-					}
+				if !s.analyseExpressionType(rv, typs[j], expectedType) {
+					// s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
+					continue
 				}
+				// rv.SetType(coercedType)
+				// switch lit := rv.(type) {
+				// case ast.Literal:
+				// 	s.analyseLiteralWithType(rv, expectedType)
+				// case *ast.Identifier:
+				// 	// we want to treat function values are literals
+				// 	if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
+				// 		if !types.CanCoalesce(rt, expectedType) {
+				// 			s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
+				// 			continue
+				// 		}
+				// 	} else {
+				// 		if !expectedType.Equal(rt) {
+				// 			s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
+				// 			continue
+				// 		}
+				// 	}
+				// default:
+				// 	if !expectedType.Equal(rt) {
+				// 		s.addError(n, errTypeMismatch(expectedType.String(), rt.String()))
+				// 		continue
+				// 	}
+				// }
 			}
 		}
 	case *ast.IfElseExpression:
@@ -381,6 +388,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			s.analyse(cond, "")
 		}
 
+		// TODO: can we remove this?
 		// If assignment we want to validate two things:
 		// - last value in block is an expreesion
 		// - type of last expression in each block is equal
@@ -604,7 +612,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 				switch f.Value.(type) {
 				case ast.Literal:
-					s.analyseLiteralWithType(f.Value, fieldType)
+					s.analyseExpressionType(f.Value, f.Value.Type(), fieldType)
 				default:
 					// verify type of field matches type in struct definition
 					if fieldType.String() != f.Type().String() {
@@ -735,11 +743,50 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				name = n.Right.String()
 			}
 			// set type of expression
-			left.Typ = s.importedSt[n.Left.String()][name]
-			switch typ := left.Typ.(type) {
+			typ := s.importedSt[n.Left.String()][name]
+			if _, ok := left.Typ.(*types.Enum); ok && typ == nil {
+				// special case where enum accessed from lib e.g.
+				// lib_x.enum_y.field_z. When typ is nil it means
+				// we are checking enum_y.field_z in map but that
+				// doesnt exist as its defined under scope lib_x.
+				n.SetType(left)
+				return
+			} else if t, ok := left.Typ.(*types.Struct); ok && typ == nil {
+				// special case where struct accessed from lib. If it is
+				// already an ImportedNamed type we leave as is and if its
+				// not a builtin type we create a new ImportedNamed type
+				resolvedType, _, _ := t.GetTypeByField(n.Right.String())
+				_, ok := resolvedType.(*types.ImportedNamed)
+				if !ok && !types.IsBuiltinType(resolvedType) {
+					resolvedType = &types.ImportedNamed{
+						Lib: left.Lib,
+						Typ: resolvedType,
+					}
+				}
+				n.SetType(resolvedType)
+				return
+			} else if typ == nil {
+				s.addError(n, errTypeNotFound(n.String()))
+				return
+			}
+
+			switch typ := typ.(type) {
 			case *types.Function:
-				n.SetType(&types.Multi{Ts: typ.Ret})
+				// convert non builtin types to be
+				// ImportedNamed
+				retTs := typ.Ret
+				for i, retT := range typ.Ret {
+					_, ok := retT.(*types.ImportedNamed)
+					if !ok && !types.IsBuiltinType(retT) {
+						retTs[i] = &types.ImportedNamed{
+							Lib: left.Lib,
+							Typ: retT,
+						}
+					}
+				}
+				n.SetType(&types.Multi{Ts: retTs})
 			default:
+				left.Typ = typ
 				n.SetType(left)
 			}
 		}
@@ -845,7 +892,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		for _, c := range n.Cases {
 			s.analyse(c.Predicate, "")
 			cT := c.Predicate.Type()
-			isLiteral := isLiteral(c.Predicate)
+			isLiteral := ast.IsLiteral(c.Predicate)
 			if !validateMatchCaseType(sT, cT, isLiteral) {
 				s.addError(c, errTypeMismatch(sT.String(), cT.String()))
 				continue
@@ -981,93 +1028,13 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 		}
 
-		leftT := left.Type()
-		rightT := right.Type()
-
-		// Validate both types are equal. If one side is a
-		// literal we use a slightly more relaxed type checker
-		switch left := left.(type) {
-		case *ast.IntegerLiteral:
-			rhsSign := types.GetSign(rightT)
-			if rhsSign < 0 {
-				s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-				return
-			}
-			intType := types.LowestFittingInt(left.Value, rhsSign == 1)
-			if !types.CanCoalesce(intType, rightT) {
-				s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-				return
-			}
-			leftT = types.GetUnderlyingTypeIfLiteral(rightT)
-			left.SetType(leftT)
-		case *ast.FloatLiteral:
-			floatType := types.LowestFittingFloat(left.Value)
-			if !types.CanCoalesce(floatType, rightT) {
-				s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-				return
-			}
-			leftT = types.GetUnderlyingTypeIfLiteral(rightT)
-			left.SetType(leftT)
-		case *ast.CharacterLiteral:
-			intType := types.LowestFittingInt(int64(left.Value), false)
-			if !types.CanCoalesce(intType, rightT) {
-				s.addError(n, errTypeMismatch(rightT.String(), intType.String()))
-				return
-			}
-			leftT = types.GetUnderlyingTypeIfLiteral(rightT)
-			left.SetType(leftT)
-		case *ast.ArrayLiteral, *ast.StructLiteral, *ast.BooleanLiteral,
-			*ast.ByteLiteral, *ast.StringLiteral, *ast.NullLiteral:
-			if !types.CanCoalesce(leftT, rightT) {
-				s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-				return
-			}
-		// This means LHS was not literal
-		default:
-			switch right := right.(type) {
-			case *ast.IntegerLiteral:
-				lhsSign := types.GetSign(leftT)
-				if lhsSign < 0 {
-					s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-					return
-				}
-				intType := types.LowestFittingInt(right.Value, lhsSign == 1)
-				if !types.CanCoalesce(intType, leftT) {
-					s.addError(n, errTypeMismatch(leftT.String(), intType.String()))
-					return
-				}
-				rightT = types.GetUnderlyingTypeIfLiteral(leftT)
-				right.SetType(rightT)
-			case *ast.FloatLiteral:
-				floatType := types.LowestFittingFloat(right.Value)
-				if !types.CanCoalesce(floatType, leftT) {
-					s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-					return
-				}
-				rightT = types.GetUnderlyingTypeIfLiteral(leftT)
-				right.SetType(rightT)
-			case *ast.CharacterLiteral:
-				intType := types.LowestFittingInt(int64(right.Value), false)
-				if !types.CanCoalesce(intType, leftT) {
-					s.addError(n, errTypeMismatch(leftT.String(), intType.String()))
-					return
-				}
-				rightT = types.GetUnderlyingTypeIfLiteral(leftT)
-				right.SetType(rightT)
-			case *ast.ArrayLiteral, *ast.StructLiteral, *ast.BooleanLiteral,
-				*ast.ByteLiteral, *ast.StringLiteral, *ast.NullLiteral:
-				if !types.CanCoalesce(rightT, leftT) {
-					s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-					return
-				}
-				// This means neither side were a literal
-			default:
-				if !leftT.Equal(rightT) {
-					s.addError(n, errTypeMismatch(leftT.String(), rightT.String()))
-					return
-				}
-			}
+		// if error occured then return. no need to set type
+		// as n is InfixExpression where we compare LHS with RHS
+		if !s.analyseExpressionType(n, n.Type(), nil) {
+			return
 		}
+
+		leftT, rightT := left.Type(), right.Type()
 
 		// As we know types match already we can validate infix operator
 		// used correctly without rechecking RHS
@@ -1233,7 +1200,7 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 		} else {
 			switch arg.(type) {
 			case ast.Literal:
-				s.analyseLiteralWithType(arg, expectedType)
+				s.analyseExpressionType(arg, arg.Type(), expectedType)
 			default:
 				if !expectedType.Equal(arg.Type()) {
 					s.addError(arg, errTypeMismatch(expectedType.String(), arg.Type().String()))
@@ -1332,7 +1299,7 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 					return
 				}
 				if _, ok := val.(ast.Literal); ok {
-					s.analyseLiteralWithType(val, exp.Type())
+					s.analyseExpressionType(val, val.Type(), exp.Type())
 					val.SetType(exp.Type())
 				} else {
 					if !types.CanCoalesce(val.Type(), exp.Type()) {
@@ -1364,140 +1331,6 @@ func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isReassig
 		Reassignable: isReassignable,
 	}
 	s.varSt.Set(n, vi)
-}
-
-// Checks whether an expression matches the expectedType, for literals we perform type
-// coercion before checking
-func (s *Semantics) analyseLiteralWithType(arg ast.Expression, expectedType types.TypeSpec) {
-	switch lit := arg.(type) {
-	case *ast.NullLiteral:
-		switch et := expectedType.(type) {
-		case *types.Optional:
-			lit.SetType(et)
-		case *types.Pointer:
-			s.analyseLiteralWithType(arg, et.T)
-		default:
-			panic("semsis error, passing null to non optional type")
-		}
-
-	// For array literal we need to check all underlying values are of the same type
-	// if any are a literal we coalesce the type otherwise we perform strict type check
-	case *ast.ArrayLiteral:
-		arrayType, ok := types.GetUnderlyingTypeIfLiteral(expectedType).(*types.Array)
-		if !ok {
-			s.addError(lit, errTypeMismatch(expectedType.String(), lit.T.String()))
-			return
-		}
-		// lit.T = expectedT
-		s.analyseArrayLiteral(lit, arrayType)
-
-	// TODO: do the same for float
-	// If we have integer literal we adapt type of literal so it fits
-	// argument type, but only if it doesnt overflow
-	case *ast.IntegerLiteral:
-		expIntType := types.GetUnderlyingTypeIfLiteral(expectedType)
-		switch t := expIntType.(type) {
-		case *types.Byte:
-			if !types.IntValueFitsIn(lit.Value, &types.ConstU8) {
-				s.addError(arg, errIntLiteralOverflows(lit.Value, expIntType.String()))
-				return
-			}
-		case *types.Int:
-			if !types.IntValueFitsIn(lit.Value, t) {
-				s.addError(arg, errIntLiteralOverflows(lit.Value, expIntType.String()))
-				return
-			}
-		default:
-			s.addError(arg, errTypeMismatch(expectedType.String(), lit.T.String()))
-			return
-		}
-		lit.T = expIntType
-		arg.SetType(expIntType)
-	case *ast.FloatLiteral:
-		expFloatType, ok := types.GetUnderlyingTypeIfLiteral(expectedType).(*types.Float)
-		if !ok {
-			s.addError(arg, errTypeMismatch(expectedType.String(), lit.T.String()))
-			return
-		}
-		if !types.IsFloatRepresentableAs(lit.Value, expFloatType) {
-			s.addError(arg, errFloatLiteralNotRepresentable(lit.Value, expFloatType.String()))
-			return
-		}
-		lit.T = expFloatType
-		arg.SetType(expFloatType)
-		// case *ast.BooleanLiteral:
-	case *ast.StructLiteral:
-		structType, ok := types.GetUnderlyingTypeIfLiteral(expectedType).(*types.Struct)
-		if !ok {
-			s.addError(lit, errTypeMismatch(expectedType.String(), lit.T.String()))
-			return
-		}
-		for i, field := range lit.Fields {
-			var expectedFieldType types.TypeSpec
-			var err error
-			if field.Name.Value == "" {
-				expectedFieldType, err = structType.GetTypeByIndex(i)
-			} else {
-				expectedFieldType, _, err = structType.GetTypeByField(field.Name.Value)
-			}
-			if err != nil {
-				s.addError(lit, errTypeMismatch(expectedFieldType.String(), field.T.String()))
-				return
-			}
-			s.analyseLiteralWithType(field, expectedFieldType)
-		}
-	}
-	return
-}
-
-// Recursively analyses a given array literal matches the expected type
-func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array) {
-	switch eleT := typ.T.(type) {
-	case *types.Int:
-		for _, el := range lit.Values {
-			elInt, ok := el.(*ast.IntegerLiteral)
-			if ok {
-				if !types.IntValueFitsIn(elInt.Value, eleT) {
-					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
-					continue
-				}
-				elInt.T = eleT
-			} else {
-				if !typ.T.Equal(el.Type()) {
-					s.addError(lit, errTypeMismatch(typ.T.String(), el.Type().String()))
-					continue
-				}
-			}
-		}
-	case *types.Float:
-		panic("add semsis for array of floats")
-	case *types.Byte:
-		for _, el := range lit.Values {
-			elInt, ok := el.(*ast.IntegerLiteral)
-			if ok {
-				if !types.IntValueFitsIn(elInt.Value, &types.ConstU8) {
-					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
-					continue
-				}
-				elInt.T = eleT
-			} else {
-				if !typ.T.Equal(el.Type()) {
-					s.addError(lit, errTypeMismatch(typ.T.String(), el.Type().String()))
-					continue
-				}
-			}
-		}
-	case *types.Array:
-		for _, ele := range lit.Values {
-			arrayLit, ok := ele.(*ast.ArrayLiteral)
-			if !ok {
-				s.addError(ele, errTypeMismatch(eleT.String(), ele.Type().String()))
-				continue
-			}
-			s.analyseArrayLiteral(arrayLit, eleT)
-		}
-	}
-	lit.SetType(typ)
 }
 
 // Recursively removes types.Definition and *types.Dirty (where applicable e.g. not for 'validate')
@@ -1803,16 +1636,6 @@ func validateMatchCaseType(sT, cT types.TypeSpec, isCtLiteral bool) bool {
 	}
 }
 
-func isLiteral(exp ast.Expression) bool {
-	if _, ok := exp.(ast.Literal); ok {
-		return ok
-	}
-	if pExp, ok := exp.(*ast.PrefixExpression); ok {
-		return isLiteral(pExp.Right)
-	}
-	return false
-}
-
 // NOTE: does not validate assignment!!
 // int: +, -, *, /, %, <, <=, >=, >, ==, !=
 // float: +, -, *, /, <, <=, >=, >, ==, !=
@@ -1999,6 +1822,224 @@ func (s *Semantics) isReassignable(ident string) bool {
 		return false
 	}
 	return info.Reassignable
+}
+
+// Validates whether expr can be coerced into the targetType in the case
+// of literals or if there is an exact match for the remaining expressions
+func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.TypeSpec) bool {
+
+	switch lit := expr.(type) {
+	case *ast.PrefixExpression:
+		if ast.IsLiteral(lit.Right) {
+			return s.analyseExpressionType(lit.Right, lit.Right.Type(), targetType)
+		}
+		// not a literal, so we do exact checking
+		if !exprType.Equal(targetType) {
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
+		}
+		return true
+
+	case *ast.InfixExpression:
+		leftT := lit.Left.Type()
+		rightT := lit.Right.Type()
+		// try to coerce left to right if left is a literal
+		if ast.IsLiteral(lit.Left) {
+			if !s.analyseExpressionType(lit.Left, leftT, rightT) {
+				return false
+			}
+			return true
+		}
+
+		// try to coerce right to left if right is a literal
+		if ast.IsLiteral(lit.Right) {
+			if !s.analyseExpressionType(lit.Right, rightT, leftT) {
+				return false
+			}
+			return true
+		}
+		if !leftT.Equal(rightT) {
+			s.addError(expr, errTypeMismatch(leftT.String(), rightT.String()))
+			return false
+		}
+
+		return true
+
+	case *ast.Identifier:
+		// we want to treat function values are literals
+		if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
+			if !types.CanCoalesce(exprType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+		} else {
+			if !exprType.Equal(targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+		}
+		return true
+
+	case *ast.IntegerLiteral:
+		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
+		switch t := coercedType.(type) {
+		case *types.Byte:
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU8) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+		case *types.Int:
+			if !types.IntValueFitsIn(lit.Value, t) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+		case *types.Char:
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU32) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+
+		default:
+			targetSign := types.GetSign(targetType)
+			intType := types.LowestFittingInt(lit.Value, targetSign == 1)
+			if !types.CanCoalesce(intType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), expr.Type().String()))
+				return false
+			}
+			lit.SetType(intType)
+			return true
+		}
+		lit.SetType(coercedType)
+		return true
+
+	case *ast.FloatLiteral:
+		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
+		floatType := types.LowestFittingFloat(lit.Value)
+		switch t := coercedType.(type) {
+		case *types.Float:
+			if !types.IsFloatRepresentableAs(lit.Value, t) {
+				s.addError(expr, errFloatLiteralNotRepresentable(lit.Value, coercedType.String()))
+				return false
+			}
+		default:
+			if !types.CanCoalesce(floatType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), expr.Type().String()))
+				return false
+			}
+		}
+		lit.SetType(floatType)
+		return true
+
+	case *ast.CharacterLiteral:
+		intType := types.LowestFittingInt(int64(lit.Value), false)
+		if !types.CanCoalesce(intType, targetType) {
+			s.addError(expr, errTypeMismatch(targetType.String(), intType.String()))
+			return false
+		}
+		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
+		lit.SetType(coercedType)
+		return true
+
+	// For array literal we need to check all underlying values are of the same type
+	// if any are a literal we coalesce the type otherwise we perform strict type check
+	case *ast.ArrayLiteral:
+		arrayType, ok := types.GetUnderlyingTypeIfLiteral(targetType).(*types.Array)
+		if !ok {
+			s.addError(lit, errTypeMismatch(targetType.String(), lit.T.String()))
+			return false
+		}
+		// lit.T = expectedT
+		s.analyseArrayLiteral(lit, arrayType)
+
+		// TODO:
+		return true
+
+	case *ast.StructLiteral:
+		// check if coalescing possible
+		structType := types.GetUnderlyingTypeIfLiteral(targetType)
+		if !types.CanCoalesce(structType, targetType) {
+			s.addError(lit, errTypeMismatch(targetType.String(), structType.String()))
+			return false
+		}
+		return true
+	case *ast.NullLiteral:
+		switch et := targetType.(type) {
+		case *types.Optional:
+			if !types.CanCoalesce(exprType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+			lit.SetType(et)
+			return true
+		case *types.Pointer:
+			return s.analyseExpressionType(expr, expr.Type(), et.T)
+		}
+		return false
+	case *ast.BooleanLiteral,
+		*ast.ByteLiteral, *ast.StringLiteral:
+		if !types.CanCoalesce(exprType, targetType) {
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
+		}
+		return true
+
+	default:
+		if !exprType.Equal(targetType) {
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
+		}
+		return true
+	}
+}
+
+// Recursively analyses a given array literal matches the expected type
+func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array) {
+	switch eleT := typ.T.(type) {
+	case *types.Int:
+		for _, el := range lit.Values {
+			elInt, ok := el.(*ast.IntegerLiteral)
+			if ok {
+				if !types.IntValueFitsIn(elInt.Value, eleT) {
+					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
+					continue
+				}
+				elInt.T = eleT
+			} else {
+				if !typ.T.Equal(el.Type()) {
+					s.addError(lit, errTypeMismatch(typ.T.String(), el.Type().String()))
+					continue
+				}
+			}
+		}
+	case *types.Float:
+		panic("add semsis for array of floats")
+	case *types.Byte:
+		for _, el := range lit.Values {
+			elInt, ok := el.(*ast.IntegerLiteral)
+			if ok {
+				if !types.IntValueFitsIn(elInt.Value, &types.ConstU8) {
+					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
+					continue
+				}
+				elInt.T = eleT
+			} else {
+				if !typ.T.Equal(el.Type()) {
+					s.addError(lit, errTypeMismatch(typ.T.String(), el.Type().String()))
+					continue
+				}
+			}
+		}
+	case *types.Array:
+		for _, ele := range lit.Values {
+			arrayLit, ok := ele.(*ast.ArrayLiteral)
+			if !ok {
+				s.addError(ele, errTypeMismatch(eleT.String(), ele.Type().String()))
+				continue
+			}
+			s.analyseArrayLiteral(arrayLit, eleT)
+		}
+	}
+	lit.SetType(typ)
 }
 
 func (s *Semantics) addError(n ast.Node, err error) {

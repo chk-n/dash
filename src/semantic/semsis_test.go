@@ -842,6 +842,11 @@ func TestTypeDefinition(t *testing.T) {
 			want:  "lib main type custom i64 pub fn main() { let x bool = (custom(1) == 0) }",
 		},
 		{
+			name:  "comparison type def and literal expression",
+			input: "type custom i64 let x = custom(1) == -1",
+			want:  "lib main type custom i64 pub fn main() { let x bool = (custom(1) == -1) }",
+		},
+		{
 			name:  "comparison type def and literal, flipped",
 			input: "type custom i64 let x = 0 == custom(1)",
 			want:  "lib main type custom i64 pub fn main() { let x bool = (0 == custom(1)) }",
