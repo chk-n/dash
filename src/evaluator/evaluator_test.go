@@ -156,7 +156,7 @@ func TestCharOperations(t *testing.T) {
 			struct letter { val byte }
 			let l = letter{val: 'a'}
 			l.val`,
-			want: 'a',
+			want: byte('a'),
 		},
 		{
 			name: "char comparison with byte",
