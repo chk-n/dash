@@ -407,6 +407,13 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 	// g. if in use expression
 
 	for i, val := range n.Values {
+		// special case for copy update as it requires to set
+		// the copied value to context before executing body
+		if val, ok := val.(*ast.CopyUpdateExpression); ok {
+			res := e.evalCopyUpdateExpression(n.VarNameAt(i), val, ctx)
+			setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
+			continue
+		}
 		switch val.Type().(type) {
 		case *types.Multi:
 			res := e.Eval(val, ctx).(*Return)
@@ -423,13 +430,6 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
 			}
 		default:
-			// special case for copy update as it requires to set
-			// the copied value to context before executing body
-			if val, ok := val.(*ast.CopyUpdateExpression); ok {
-				res := e.evalCopyUpdateExpression(n.VarNameAt(i), val, ctx)
-				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
-				return
-			}
 			res := e.Eval(val, ctx)
 			res = unwrapFunctionResult(res, 0)
 			switch decl := n.Declerations[i].(type) {
