@@ -1536,7 +1536,8 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	intValue, err := strconv.ParseInt(i, 10, 64)
 	if err != nil {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
+		p.nextToken()
+		return lit
 	}
 	lit.Value = intValue
 	p.nextToken()
