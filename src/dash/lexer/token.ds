@@ -14,14 +14,7 @@ pub enum tag {
     // Literal types
     INT        // 123
     FLOAT      // 0.314
-    
-    // Operators
-    PLUS       // +
-    MINUS      // -
-    ASTERISK   // *
-    SLASH      // /
-    PERCENT    // %
-    
+       
     // Single character tokens
     COLON      // :
     SEMICOLON  // ;
@@ -64,7 +57,6 @@ pub enum tag {
     ANDNOT     // &^
     DIV        // /
     QMARK      // ?
-    QQMARK     // ??
     
     // keywords
     PUB
