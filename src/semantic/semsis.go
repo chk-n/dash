@@ -571,7 +571,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// We need to handle structs with named and unnamed fields
 				if f.Name != nil {
 					_, index, err := structType.GetTypeByField(f.Name.TokenLiteral())
-					internal.AssertTrue(err == nil, "no error expected")
+					if err != nil {
+						s.addError(n, errStructUnknownField(n.Name.String(), f.Name.String()))
+						continue
+					}
 					f.Index = index
 				} else {
 					f.Index = i
