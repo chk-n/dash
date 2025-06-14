@@ -96,14 +96,16 @@ func (tr *TestRunner) runTest(fn *ast.FunctionExpression, eval *evaluator.Evalua
 	// Check for errors
 	ret, ok := res.(*evaluator.Return)
 	if !ok {
+		// special case as evaluating function
+		// body will not always yield Return{}
+		result.Passed = true
+	} else if len(ret.Values) == 0 {
 		result.Passed = true
 	} else {
-		err, ok := ret.Values[len(ret.Values)-1].(*evaluator.Error)
-		if !ok {
-			// this is an implementation error
-			panic("incorrect return type when running test")
-		}
-		if err != nil {
+		err := ret.Values[len(ret.Values)-1]
+		if err == nil {
+			result.Passed = true
+		} else if err, ok := err.(*evaluator.Error); ok {
 			result.Error = errors.New(err.Err)
 			result.Passed = false
 		}
