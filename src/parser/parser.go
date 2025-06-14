@@ -880,8 +880,7 @@ func (p *Parser) parseStatementInBlock() ast.Node {
 		// for dot, slice and index expression we need to partially parse
 		// tokens before we can derermine whther it is an assignment or not
 		if p.peekTokenIs(token.DOT) {
-			ident := p.parseIdentifier()
-			exp := p.parseDotExpression(ident)
+			exp := p.parseExpression(ASSIGN)
 			if p.curTokenIs(token.ASSIGN) || p.curTokenIs(token.COMMA) {
 				return p.parseAssignmentStatementPre(exp)
 			}
@@ -1046,7 +1045,6 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 			p.nextToken()
 			// only parse until ':'
 			mc.Predicate = p.parseExpression(COLON)
-
 		} else {
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 			return nil

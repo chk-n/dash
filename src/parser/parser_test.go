@@ -1408,6 +1408,11 @@ func TestMatchStatement(t *testing.T) {
 			input: "match x' = x {}",
 			want:  "match (x' = x) { }",
 		},
+		{
+			name:  "match with library identifier in case",
+			input: "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
+			want:  "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
