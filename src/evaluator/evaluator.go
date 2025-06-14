@@ -667,8 +667,25 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 	var exp any
 	for _, stmt := range n.Statements {
 		exp = e.Eval(stmt, stk)
+
+		// We stop execution only in 3 circumstances
+		// because of a return statement, break/next
+		// statement or because of an error due to "try"
 		if _, ok := exp.(*Return); ok {
-			return exp
+			switch stmt.(type) {
+			case *ast.TryExpression:
+				ret := exp.(*Return)
+				// if !ok {
+				// 	continue
+				// }
+				if len(ret.Values) > 0 {
+					if _, isError := ret.Values[len(ret.Values)-1].(*Error); isError {
+						return exp
+					}
+				}
+			default:
+				return exp
+			}
 		} else if exp == BREAK || exp == NEXT {
 			return exp
 		}

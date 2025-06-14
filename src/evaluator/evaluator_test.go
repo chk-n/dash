@@ -754,6 +754,19 @@ func TestTryExpression(t *testing.T) {
 		    `,
 			want: &Return{Values: []any{int64(3), int64(1)}},
 		},
+		{
+			name: "try function in function returning value",
+			prog: `
+			error divide_by_zero
+	        fn no_err()! { return }
+	        fn test2()! i64 {
+	        	try no_err()
+	        	return 1
+	        }
+		    let res = try test2()
+		    res`,
+			want: int64(1),
+		},
 	}
 
 	for _, tt := range tests {
