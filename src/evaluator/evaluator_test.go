@@ -454,6 +454,18 @@ func TestStructLiteral(t *testing.T) {
 			prog: "struct point {i64,i64} let p = point{1, 2} p.0",
 			want: int64(1),
 		},
+		{
+			name: "function returning value used in struct field",
+			prog: `
+			fn get_tag() i64 { return 1 }
+			struct node {
+				tag i64
+				data i64
+			}
+			let n = node{tag: get_tag(), data: 2}
+			n.tag`,
+			want: int64(1),
+		},
 		// NOTE: multiple dot expression not supported yet
 		// {
 		// 	name: "nested struct",

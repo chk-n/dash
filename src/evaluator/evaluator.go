@@ -1353,7 +1353,10 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) map[st
 		} else {
 			name = fmt.Sprintf("%d", field.Index)
 		}
-		strct[name] = e.Eval(field.Value, stk)
+		val := e.Eval(field.Value, stk)
+		// Unwrap Return structs to get the actual value
+		val = unwrapFunctionResult(val, 0)
+		strct[name] = val
 	}
 	return strct
 }
