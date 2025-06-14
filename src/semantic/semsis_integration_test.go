@@ -9,9 +9,10 @@ import (
 
 func TestImportLibrary(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name   string
+		input  string
+		want   string
+		errors []string
 	}{
 		{
 			name: "import type definition",
@@ -97,6 +98,17 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			want: "lib two let x i64 = one.c.a",
 		},
+		{
+			name: "imported function, wrong argument count",
+			input: `
+					lib one
+					pub fn test(a, b i64) i64 { return a }
+					--
+					lib two
+					let x = one.test(1)
+				`,
+			errors: []string{"too little arguments passed to function 'test'"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -124,14 +136,28 @@ func TestImportLibrary(t *testing.T) {
 			semsis := New("", imports)
 			semsis.Analyse(ast)
 
-			if len(semsis.Errors()) > 0 {
-				t.Errorf("%s", strings.Join(semsis.Errors(), "\n"))
-			}
+			// if we want errors compare error output
+			// otherwise compare AST
+			if len(tt.errors) > 0 {
+				gotErrs := semsis.Errors()
+				if len(gotErrs) != len(tt.errors) {
+					t.Errorf("want %d errors but got %d errors. %s", len(gotErrs), len(tt.errors), gotErrs)
+				}
+				for i, err := range semsis.Errors() {
+					if err != tt.errors[i] {
+						t.Errorf("want error %s but got %s", tt.errors[i], err)
+					}
+				}
+			} else {
+				if len(semsis.Errors()) > 0 {
+					t.Errorf("%s", strings.Join(semsis.Errors(), "\n"))
+				}
 
-			got := ast.String()
+				got := ast.String()
 
-			if tt.want != got {
-				t.Errorf("wanted:\n%s\nbut got:\n%s", tt.want, got)
+				if tt.want != got {
+					t.Errorf("wanted:\n%s\nbut got:\n%s", tt.want, got)
+				}
 			}
 		})
 	}

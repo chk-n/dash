@@ -694,6 +694,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			var name string
 			if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
 				name = fn.TokenLiteral()
+				// analyze function arguments
+				for _, arg := range fn.Arguments {
+					s.analyse(arg, "")
+				}
 			} else {
 				name = n.Right.String()
 			}
@@ -727,6 +731,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 			switch typ := typ.(type) {
 			case *types.Function:
+				// validate function call arguments for imported functions
+				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+					s.analyseCallArguments(fn, typ.Arg)
+				}
+
 				// convert non builtin types to be
 				// ImportedNamed
 				retTs := typ.Ret
