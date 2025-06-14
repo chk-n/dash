@@ -989,11 +989,11 @@ func (e *Evaluator) evalPrefixOptional(v any) any {
 
 func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) any {
 	l := e.Eval(n.Left, ctx)
-	if _, ok := n.Left.(*ast.FunctionCallExpression); ok {
+	if _, ok := l.(*Return); ok {
 		l = unwrapFunctionResult(l, 0)
 	}
 	r := e.Eval(n.Right, ctx)
-	if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
+	if _, ok := r.(*Return); ok {
 		r = unwrapFunctionResult(r, 0)
 	}
 
