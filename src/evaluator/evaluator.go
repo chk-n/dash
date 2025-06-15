@@ -217,15 +217,17 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		}
 		return val
 
-	case *ast.TypeLiteral:
-		switch t := n.T.(type) {
-		case *types.Int:
-			return int64(0)
-		case *types.Float:
-			return float64(0)
-		case *types.Struct:
-			return "strct." + t.Name
-		}
+	// case *ast.TypeLiteral:
+	// switch t := n.T.(type) {
+	// case *types.Int:
+	// 	return int64(0)
+	// case *types.Float:
+	// 	return float64(0)
+	// case *types.Struct:
+	// 	return "strct." + t.Name
+	// case *types.Error:
+	// 	return errors.New(t.Name)
+	// }
 	case *ast.StructLiteral:
 		return e.evalStructLiteral(n, ctx)
 	case *ast.ArrayLiteral:
