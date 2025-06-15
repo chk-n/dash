@@ -1169,7 +1169,7 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 			case ast.Literal:
 				s.analyseExpressionType(arg, arg.Type(), expectedType)
 			default:
-				if !expectedType.Equal(arg.Type()) {
+				if !s.typesEqual(expectedType, arg.Type()) {
 					s.addError(arg, errTypeMismatch(expectedType.String(), arg.Type().String()))
 					return
 				}
@@ -2076,6 +2076,7 @@ func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
 		}
 		return typeInfo.Type
 	case *types.ImportedNamed:
+		// resolve imported type
 		t.Typ = s.importedSt[t.Lib][t.Typ.Ident()]
 		return t
 	case nil:
@@ -2132,6 +2133,28 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 
 	return nil, false
 
+}
+
+// typesEqual compares two types for equality, handling mutable types properly
+func (s *Semantics) typesEqual(expected, actual types.TypeSpec) bool {
+	if expected.Equal(actual) {
+		return true
+	}
+
+	// as mutable types can be considered equal as their
+	// underlying type we need to unwrap first
+	expectedUnwrapped := s.unwrapMutable(expected)
+	actualUnwrapped := s.unwrapMutable(actual)
+
+	return expectedUnwrapped.Equal(actualUnwrapped)
+}
+
+// unwrapMutable unwraps Mutable types to their underlying types
+func (s *Semantics) unwrapMutable(t types.TypeSpec) types.TypeSpec {
+	if mutable, ok := t.(*types.Mutable); ok {
+		return mutable.T
+	}
+	return t
 }
 
 func getTypesFromExpressions(exps []ast.Expression) []types.TypeSpec {
