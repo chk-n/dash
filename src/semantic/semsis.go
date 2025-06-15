@@ -837,7 +837,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		// TODO: check if try used with error-prone function
 		n.SetType(n.Right.Type())
 	case *ast.RaiseStatement:
-		if _, ok := s.typeSt.Get(n.Error.TokenLiteral()); !ok {
+		if _, ok := s.fnSt.Get(n.Error.TokenLiteral()); !ok {
 			s.addError(n, errIdentifierNotFound(n.Error.String()))
 			return
 		}
