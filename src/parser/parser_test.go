@@ -1468,6 +1468,26 @@ func TestMatchStatement(t *testing.T) {
 			input: "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
 			want:  "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
 		},
+		{
+			name:  "match with multiple predicates in single case",
+			input: `match x { case 1, 2, 3: return "small" }`,
+			want:  `match x { case 1, 2, 3: return "small" }`,
+		},
+		{
+			name:  "match with multiple predicates in multiple cases",
+			input: `match x { case 1, 2: return "low" case 3, 4: return "high" }`,
+			want:  `match x { case 1, 2: return "low" case 3, 4: return "high" }`,
+		},
+		{
+			name:  "match with complex expressions as multiple predicates",
+			input: `match x { case a + b, c * d: return "complex" }`,
+			want:  `match x { case (a + b), (c * d): return "complex" }`,
+		},
+		{
+			name:  "match with mixed single and multiple predicates",
+			input: `match x { case 1: return "one" case 2, 3, 4: return "multiple" case _: return "default" }`,
+			want:  `match x { case 1: return "one" case 2, 3, 4: return "multiple" case _: return "default" }`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

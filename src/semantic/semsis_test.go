@@ -1572,6 +1572,37 @@ func TestErrorStatement(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestAppendFunction(t *testing.T) {
+	tests := []testCase{
+		{
+			name:   "append string to []byte",
+			input:  `let buf = make([]byte, 1) let result = append(buf, "hello")`,
+			errors: []string{"append() second argument must be 'byte' or '[]byte', got 'string'"},
+		},
+		{
+			name:  "append byte to []byte",
+			input: `let buf = make([]byte, 1) let result = append(buf, byte(65))`,
+			want:  "lib main pub fn main() { let buf mut<[]byte> = make([]byte,1) let result mut<[]byte> = append(buf,byte(65)) }",
+		},
+		{
+			name:  "append []byte to []byte",
+			input: `let buf = make([]byte, 1) let more = []byte([1,2,3]) let result = append(buf, more)`,
+			want:  "lib main pub fn main() { let buf mut<[]byte> = make([]byte,1) let more []byte = []byte([1,2,3]) let result mut<[]byte> = append(buf,more) }",
+		},
+		{
+			name:   "append int to []string",
+			input:  `let arr = make([]string, 1) let result = append(arr, 42)`,
+			errors: []string{"append() second argument must be 'string' or '[]string', got 'i64'"},
+		},
+		{
+			name:   "append to non-slice",
+			input:  `let x = 42 let result = append(x, 1)`,
+			errors: []string{"append() first argument must be a slice, got 'i64'"},
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

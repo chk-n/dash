@@ -862,47 +862,58 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 
 		for _, c := range n.Cases {
-			s.analyse(c.Predicate, "")
-			cT := c.Predicate.Type()
-			isLiteral := ast.IsLiteral(c.Predicate)
-			if !validateMatchCaseType(sT, cT, isLiteral) {
-				s.addError(c, errTypeMismatch(sT.String(), cT.String()))
-				continue
-			}
-			// As the types match, we can replace type of predicate.
-			// This is required to be able to, for example, match byte
-			// with char literals
-			_, isUnion := n.Scrutinee.Type().(*types.Union)
-			if !isUnion {
-				c.Predicate.SetType(sT)
+			// Analyze each predicate in the case
+			var firstMatchingType types.TypeSpec
+			for _, pred := range c.Predicates {
+				s.analyse(pred, "")
+				cT := pred.Type()
+				isLiteral := ast.IsLiteral(pred)
+				if !validateMatchCaseType(sT, cT, isLiteral) {
+					s.addError(c, errTypeMismatch(sT.String(), cT.String()))
+					continue
+				}
+				// As the types match, we can replace type of predicate.
+				// This is required to be able to, for example, match byte
+				// with char literals
+				_, isUnion := n.Scrutinee.Type().(*types.Union)
+				if !isUnion {
+					pred.SetType(sT)
+				}
+				// Keep track of the first matching type for scrutinee type assignment
+				if firstMatchingType == nil {
+					firstMatchingType = cT
+				}
 			}
 
 			s.varSt.Scope()
 			// check required as literals not stored in symbol table
 			// BUG: improve check here. only store if in symbol table if
 			// identifier, dot expression, index or slice expression.
-			switch exp := n.Scrutinee.(type) {
-			case *ast.InfixExpression:
-				if exp.Operator != "=" {
-					break
-				}
-				_, ok := exp.Left.(*ast.Identifier)
-				if !ok {
-					panic("todo: add semsis error")
-				}
+			// Use the first matching predicate type for scrutinee type assignment
+			if firstMatchingType != nil {
+				switch exp := n.Scrutinee.(type) {
+				case *ast.InfixExpression:
+					if exp.Operator != "=" {
+						break
+					}
+					_, ok := exp.Left.(*ast.Identifier)
+					if !ok {
+						panic("todo: add semsis error")
+					}
 
-				s.varSt.Set(exp.Left.TokenLiteral(), &VarInfo{Type: cT})
+					s.varSt.Set(exp.Left.TokenLiteral(), &VarInfo{Type: firstMatchingType})
 
-			case *ast.Identifier:
-				info, ok := s.varSt.Get(n.Scrutinee.TokenLiteral())
-				if !ok {
-					s.addError(n.Scrutinee, errIdentifierNotFound(n.Scrutinee.String()))
-					return
+				case *ast.Identifier:
+					info, ok := s.varSt.Get(n.Scrutinee.TokenLiteral())
+					if !ok {
+						s.addError(n.Scrutinee, errIdentifierNotFound(n.Scrutinee.String()))
+						return
+					}
+					s.varSt.Set(n.Scrutinee.TokenLiteral(), &VarInfo{Type: firstMatchingType, Reassignable: info.Reassignable})
+				default:
+					// in case of literals and expressions we dont need
+					// to do anything else
 				}
-				s.varSt.Set(n.Scrutinee.TokenLiteral(), &VarInfo{Type: cT, Reassignable: info.Reassignable})
-			default:
-				// in case of literals and expressions we dont need
-				// to do anything else
 			}
 
 			for _, stmt := range c.Body {

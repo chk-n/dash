@@ -682,9 +682,9 @@ func (s *MatchExpressionStatement) String() string {
 }
 
 type MatchCase struct {
-	Token     token.Token // case or else token
-	Predicate Expression
-	Body      []Node
+	Token      token.Token // case or else token
+	Predicates []Expression
+	Body       []Node
 
 	// Set by semsis only if used as
 	// expression.
@@ -699,8 +699,14 @@ func (mc *MatchCase) String() string {
 	var out bytes.Buffer
 
 	out.WriteString(mc.Token.Literal)
-	if mc.Predicate != nil {
-		out.WriteString(" " + mc.Predicate.String())
+	if len(mc.Predicates) > 0 {
+		out.WriteString(" ")
+		for i, pred := range mc.Predicates {
+			out.WriteString(pred.String())
+			if i != len(mc.Predicates)-1 {
+				out.WriteString(", ")
+			}
+		}
 	}
 	out.WriteString(": ")
 	for i, r := range mc.Body {

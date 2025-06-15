@@ -1051,8 +1051,17 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		mc := &ast.MatchCase{Token: p.curToken}
 		if p.curTokenIs(token.CASE) {
 			p.nextToken()
-			// only parse until ':'
-			mc.Predicate = p.parseExpression(COLON)
+			// parse comma-separated predicates until ':'
+			for {
+				pred := p.parseExpression(COLON)
+				mc.Predicates = append(mc.Predicates, pred)
+				
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+					continue
+				}
+				break
+			}
 		} else {
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 			return nil
@@ -1071,7 +1080,7 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		}
 
 		// ensure default case is saved to proper field
-		if mc.Predicate.TokenLiteral() == "_" {
+		if len(mc.Predicates) == 1 && mc.Predicates[0].TokenLiteral() == "_" {
 			es.Default = mc
 		} else {
 			es.Cases = append(es.Cases, mc)
@@ -1105,8 +1114,17 @@ func (p *Parser) parseMatchStatement() ast.Expression {
 		mc := &ast.MatchCase{Token: p.curToken}
 		if p.curTokenIs(token.CASE) {
 			p.nextToken()
-			// only parse until ':'
-			mc.Predicate = p.parseExpression(COLON)
+			// parse comma-separated predicates until ':'
+			for {
+				pred := p.parseExpression(COLON)
+				mc.Predicates = append(mc.Predicates, pred)
+
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+					continue
+				}
+				break
+			}
 
 		} else {
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -1126,7 +1144,7 @@ func (p *Parser) parseMatchStatement() ast.Expression {
 		}
 
 		// ensure default case is saved to proper field
-		if mc.Predicate.TokenLiteral() == "_" {
+		if len(mc.Predicates) == 1 && mc.Predicates[0].TokenLiteral() == "_" {
 			es.Default = mc
 		} else {
 			es.Cases = append(es.Cases, mc)

@@ -645,21 +645,27 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 		}
 
 		for _, c := range n.Cases {
-			// Get type name from predicate
-			typeName := c.Predicate.String()
-			// Hash it for comparison
-			caseDescriptor := generateTypeDescriptor(typeName)
+			// Check each predicate in the case
+			for _, pred := range c.Predicates {
+				// Get type name from predicate
+				typeName := pred.String()
+				// Hash it for comparison
+				caseDescriptor := generateTypeDescriptor(typeName)
 
-			// Match descriptors
-			if caseDescriptor == unionVal.descriptor {
-				return e.evalMatchCase(c, stk)
+				// Match descriptors
+				if caseDescriptor == unionVal.descriptor {
+					return e.evalMatchCase(c, stk)
+				}
 			}
 		}
 	} else {
 		for _, c := range n.Cases {
-			predValue := e.Eval(c.Predicate, stk)
-			if predValue == scrutinee {
-				return e.evalMatchCase(c, stk)
+			// Check each predicate in the case
+			for _, pred := range c.Predicates {
+				predValue := e.Eval(pred, stk)
+				if predValue == scrutinee {
+					return e.evalMatchCase(c, stk)
+				}
 			}
 		}
 	}
