@@ -97,6 +97,11 @@ func TestType(t *testing.T) {
 			input: "char",
 			want:  "char",
 		},
+		{
+			name:  "error type",
+			input: "error",
+			want:  "error",
+		},
 	}
 
 	for _, tc := range tests {
@@ -846,6 +851,11 @@ func TestTypeCast(t *testing.T) {
 			name:  "aggregate, struct",
 			input: "abc(v)",
 			want:  "abc(v)",
+		},
+		{
+			name:  "error type cast",
+			input: `error("test message")`,
+			want:  `error("test message")`,
 		},
 	}
 

@@ -988,6 +988,11 @@ func TestTypeCast(t *testing.T) {
 			input: `let s = "12" let n = i64(s[0] - '0')`,
 			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64((s[0] - '0')) }`,
 		},
+		{
+			name:  "error type cast",
+			input: `let e = error("test message")`,
+			want:  `lib main pub fn main() { let e error = error("test message") }`,
+		},
 		// {
 		// 	name:   "int literal array to string, overflow",
 		// 	input:  "let s = string([1,0,256])",
@@ -1296,6 +1301,11 @@ func TestFunction(t *testing.T) {
 			name:  "function definition",
 			input: "fn test(a i64, b i64) i64 { let c = a + 1 return a / b }",
 			want:  "lib main fn test(a i64,b i64) i64 { let c i64 = (a + 1) return (a / b) } pub fn main() { }",
+		},
+		{
+			name:  "function with error parameter",
+			input: "fn test(err error) { }",
+			want:  "lib main fn test(err error) { } pub fn main() { }",
 		},
 		{
 			name:  "function definition with infered field",

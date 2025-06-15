@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -309,6 +310,8 @@ func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Conte
 		return e.evalStringCast(t, val)
 	case *types.Array:
 		return e.evalArrayCast(t, val)
+	case *types.Error:
+		return e.evalErrorCast(t, val)
 
 	}
 	return val
@@ -398,6 +401,18 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 		return newArr
 	}
 	panic("invalid array cast")
+}
+
+// Error casting
+
+func (e *Evaluator) evalErrorCast(t *types.Error, v any) any {
+	switch val := v.(type) {
+	case string:
+		return errors.New(val)
+	case *Error:
+		return errors.New(val.Err)
+	}
+	panic("this is a compiler error. please report")
 }
 
 // always returns nil

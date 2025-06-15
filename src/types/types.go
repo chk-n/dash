@@ -59,6 +59,7 @@ var (
 	ConstChar   = Char{}
 	ConstString = String{}
 	ConstNull   = Null{}
+	ConstError  = Error{Name: "error"}
 )
 
 // ------------ //
@@ -811,6 +812,7 @@ func IsTypeIdent(ident string) bool {
 		"string",
 		"bool",
 		"byte",
+		"error",
 		"array":
 		return true
 	default:
@@ -979,6 +981,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 				// inner.Width
 
 			}
+		case *Error:
+			return true
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
 		default:
@@ -1281,6 +1285,8 @@ func TokenToType(tk token.Token) TypeSpec {
 		return &Mutable{}
 	case token.DIRTYTYPE:
 		return &Dirty{}
+	case token.ERROR:
+		return &ConstError
 	}
 	panic("invalid token " + tk.Literal)
 }

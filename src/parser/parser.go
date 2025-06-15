@@ -147,6 +147,7 @@ func New(l *lexer.Lexer) *Parser {
 	// p.registerPrefix(token.FLOATTYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.ERROR, p.parseTypeLiteral)
 	//
 	p.registerPrefix(token.TRY, p.parseTryExpression)
 
@@ -325,7 +326,11 @@ func (p *Parser) ParseREPL() *ast.Library {
 		case token.UNION:
 			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
 		case token.ERROR:
-			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
+			if p.peekTokenIs(token.LPAREN) {
+				mainFn.Body.Statements = append(mainFn.Body.Statements, p.parseExpression(LOWEST))
+			} else {
+				lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
+			}
 		case token.AT:
 			attr := p.parseAttribute()
 			p.attributes.Push(attr)
@@ -2159,7 +2164,8 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.MUTABLETYPE ||
 		p.curToken.Type == token.IDENT ||
 		p.curToken.Type == token.OPTIONAL ||
-		p.curToken.Type == token.DIRTYTYPE
+		p.curToken.Type == token.DIRTYTYPE ||
+		p.curToken.Type == token.ERROR
 }
 
 func (p *Parser) curTokenIsConditionalStatement() bool {

@@ -1045,6 +1045,16 @@ func TestTypeCasting(t *testing.T) {
 			y`,
 			want: []byte{104, 101, 108, 108, 111},
 		},
+		{
+			name: "error type cast from string variable",
+			prog: `let x = "test error" error(x)`,
+			want: errors.New("test error"),
+		},
+		{
+			name: "error type cast from string literal",
+			prog: `error("test error")`,
+			want: errors.New("test error"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1943,6 +1953,12 @@ func deepEqual(a, b any) bool {
 			return false
 		}
 		return a.Err == b.Err
+	case error:
+		b, ok := b.(error)
+		if !ok {
+			return false
+		}
+		return a.Error() == b.Error()
 	default:
 		return a == b
 	}
