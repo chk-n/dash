@@ -731,6 +731,18 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 			switch typ := typ.(type) {
 			case *types.Function:
+				// convert local types to be ImportNamed
+				// except if they are already of type
+				// ImportNamed or are a builtin type
+				for i, argT := range typ.Arg {
+					_, ok := argT.(*types.ImportedNamed)
+					if !ok && !types.IsBuiltinType(argT) {
+						typ.Arg[i] = &types.ImportedNamed{
+							Lib: left.Lib,
+							Typ: argT,
+						}
+					}
+				}
 				// validate function call arguments for imported functions
 				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
 					s.analyseCallArguments(fn, typ.Arg)
@@ -738,17 +750,16 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 				// convert non builtin types to be
 				// ImportedNamed
-				retTs := typ.Ret
 				for i, retT := range typ.Ret {
 					_, ok := retT.(*types.ImportedNamed)
 					if !ok && !types.IsBuiltinType(retT) {
-						retTs[i] = &types.ImportedNamed{
+						typ.Ret[i] = &types.ImportedNamed{
 							Lib: left.Lib,
 							Typ: retT,
 						}
 					}
 				}
-				n.SetType(&types.Multi{Ts: retTs})
+				n.SetType(&types.Multi{Ts: typ.Ret})
 			default:
 				left.Typ = typ
 				n.SetType(left)
