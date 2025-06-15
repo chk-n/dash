@@ -1244,7 +1244,8 @@ func (p *Parser) curTokenIsIdent() bool {
 	case token.INTTYPE, token.FLOATTYPE, token.STRINGTYPE, token.BOOLTYPE,
 		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
 		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
-		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE:
+		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE,
+		token.LIBRARY:
 		return true
 	default:
 		return false
