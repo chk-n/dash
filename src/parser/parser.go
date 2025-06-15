@@ -489,19 +489,21 @@ func (p *Parser) parseStructStatement() *ast.StructStatement {
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 		field := &ast.StructFieldStatement{}
 
-		if p.curTokenIs(token.IDENT) {
-			field.Name = p.parseIdentifier()
+		// All struct fields must have names (can be keywords)
+		field.Name = p.parseIdentifierOrKeyword()
+		if field.Name == nil {
+			return nil
 		}
+
 		if p.curTokenIsType() {
 			field.Type = p.parseType()
 			stmt.Fields = append(stmt.Fields, field)
-		} else {
-			if !p.curTokenIs(token.IDENT) {
-				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-				return nil
-			}
+		} else if p.curTokenIsIdent() {
 			field.Type = p.parseUnknownNamedType()
 			stmt.Fields = append(stmt.Fields, field)
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
 		}
 
 		if p.curTokenIs(token.BAR) {
@@ -539,7 +541,11 @@ func (p *Parser) parseEnumStatement() *ast.EnumStatement {
 	p.nextToken()
 
 	for !p.curTokenIs(token.RBRACE) {
-		stmt.Fields = append(stmt.Fields, p.parseIdentifier())
+		if ident := p.parseIdentifierOrKeyword(); ident != nil {
+			stmt.Fields = append(stmt.Fields, ident)
+		} else {
+			return nil
+		}
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
 		}
@@ -597,13 +603,10 @@ func (p *Parser) parseUnionStatement() *ast.UnionStatement {
 // * x ...i64
 func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterStatement {
 	stmt := &ast.ParameterStatement{}
-	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-
-	if !p.curTokenIs(token.IDENT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+	stmt.Name = p.parseIdentifierOrKeyword()
+	if stmt.Name == nil {
 		return nil
 	}
-	p.nextToken()
 
 	// x,
 	if p.curTokenIs(token.COMMA) {
@@ -1230,6 +1233,36 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 	return ident
 }
 
+// curTokenIsIdent checks if a token can be treated as an identifier
+// in contexts where keywords should be allowed as identifiers
+func (p *Parser) curTokenIsIdent() bool {
+	typ := p.curToken.Type
+	switch typ {
+	case token.IDENT:
+		return true
+	// Type keywords that can be used as identifiers
+	case token.INTTYPE, token.FLOATTYPE, token.STRINGTYPE, token.BOOLTYPE,
+		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
+		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
+		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE:
+		return true
+	default:
+		return false
+	}
+}
+
+// parseIdentifierOrKeyword parses an identifier or a keyword that should be treated as an identifier
+func (p *Parser) parseIdentifierOrKeyword() *ast.Identifier {
+	if !p.curTokenIsIdent() {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		p.nextToken()
+		return nil
+	}
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+	return ident
+}
+
 func (p *Parser) parseIdentifier() *ast.Identifier {
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 	p.nextToken()
@@ -1340,8 +1373,8 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
 		exp.Right = p.parseFunctionCallExpression()
-	} else if p.curTokenIs(token.IDENT) {
-		exp.Right = p.parseIdentifier()
+	} else if p.curTokenIsIdent() {
+		exp.Right = p.parseIdentifierOrKeyword()
 	} else if p.curTokenIs(token.INT) {
 		exp.Right = p.parseIntegerLiteral()
 	} else {

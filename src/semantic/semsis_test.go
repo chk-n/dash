@@ -374,21 +374,6 @@ func TestStructDefinition(t *testing.T) {
 			errors: []string{"struct field 'b' not defined"},
 		},
 		{
-			name:  "struct literal - unnamed fields",
-			input: "struct point {i64, i64} let p = point{0,0}",
-			want:  "lib main struct point {i64, i64} pub fn main() { let p point = point{i64: 0, i64: 0} }",
-		},
-		{
-			name:   "struct literal unnamed, missing field",
-			input:  "struct point {i64, i64} let p = point{0}",
-			errors: []string{"struct 'point' has missing fields"},
-		},
-		{
-			name:   "struct literal - unnamed fields, type mismatch",
-			input:  "struct point {i64, i64} let p = point{0, 1.1}",
-			errors: []string{"type mistmatch, expected type 'i64' but got 'f64'"},
-		},
-		{
 			name:  "struct definition - recursive optional",
 			input: "struct test{a i64, b ?test} let t = test{a: 1, b: test{a: 1}}",
 			want:  "lib main struct test {a i64, b ?test} pub fn main() { let t test = test{a i64: 1, b ?test: test{a i64: 1}} }",
@@ -462,31 +447,6 @@ func TestStructDefinition(t *testing.T) {
 			name:  "cast struct to struct, optional in 'to'",
 			input: `struct a { x i64 } struct b { y ?string, x i64 } let v1 = a{ x: 12 } let v2 = b(v1)`,
 			want:  `lib main struct a {x i64} struct b {y ?string, x i64} pub fn main() { let v1 a = a{x i64: 12} let v2 b = b(v1) }`,
-		},
-		{
-			name:  "cast unnamed struct to unnamed struct",
-			input: `struct a { i64, string } struct b { i64, string } let v1 = a{ 12, "" } let v2 = b(v1)`,
-			want:  `lib main struct a {i64, string} struct b {i64, string} pub fn main() { let v1 a = a{i64: 12, string: ""} let v2 b = b(v1) }`,
-		},
-		{
-			name:   "cast unnamed struct to unnamed struct, wrong order",
-			input:  `struct a { i64, string } struct b { string, i64 } let v1 = a{ 12, "" } let v2 = b(v1)`,
-			errors: []string{"illegal type cast from 'a' to 'b'"},
-		},
-		{
-			name:  "cast unnamed struct to struct",
-			input: `struct a { i64, f64 } struct b { x i64, y f64 } let v1 = a{ 12, 1.1 } let v2 = b(v1)`,
-			want:  `lib main struct a {i64, f64} struct b {x i64, y f64} pub fn main() { let v1 a = a{i64: 12, f64: 1.1} let v2 b = b(v1) }`,
-		},
-		{
-			name:  "cast struct to unnamed struct",
-			input: `struct a { x i64, y string } struct b { i64, string } let v1 = a{x: 12, y: ""} let v2 = b(v1)`,
-			want:  `lib main struct a {x i64, y string} struct b {i64, string} pub fn main() { let v1 a = a{x i64: 12, y string: ""} let v2 b = b(v1) }`,
-		},
-		{
-			name:   "cast struct to unnamed struct, type mismatch",
-			input:  `struct a { x i64, y string } struct b { string, i64 } let v1 = a{x: 12, y: ""} let v2 = b(v1)`,
-			errors: []string{"illegal type cast from 'a' to 'b'"},
 		},
 		{
 			name:  "cast named literal to struct",

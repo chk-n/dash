@@ -413,16 +413,6 @@ func TestStructLiteral(t *testing.T) {
 			},
 		},
 		{
-			name: "unnamed struct initialization",
-			prog: `struct point { i64, i64 }
-			let p = point{1, 2} 
-			p`,
-			want: map[string]any{
-				"0": int64(1),
-				"1": int64(2),
-			},
-		},
-		{
 			name: "nested struct",
 			prog: `struct person {
 				name string
@@ -448,11 +438,6 @@ func TestStructLiteral(t *testing.T) {
 			let p = user{name: "ada", age: 24} 
 			p.name`,
 			want: "ada",
-		},
-		{
-			name: "unnamed field access",
-			prog: "struct point {i64,i64} let p = point{1, 2} p.0",
-			want: int64(1),
 		},
 		{
 			name: "function returning value used in struct field",

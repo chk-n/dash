@@ -240,6 +240,26 @@ func TestInfixExpression(t *testing.T) {
 			input: "a.b + a.c()",
 			want:  "(a.b + a.c())",
 		},
+		{
+			name:  "tag.int",
+			input: "tag.int",
+			want:  "tag.int",
+		},
+		{
+			name:  "tag.float",
+			input: "tag.float",
+			want:  "tag.float",
+		},
+		{
+			name:  "obj.string",
+			input: "obj.string",
+			want:  "obj.string",
+		},
+		{
+			name:  "obj.bool",
+			input: "obj.bool",
+			want:  "obj.bool",
+		},
 	}
 
 	for _, tc := range tests {
@@ -777,6 +797,11 @@ func TestErrorProneFunction(t *testing.T) {
 			input: "fn test()! { try risky() }",
 			want:  "fn test()! { try risky() }",
 		},
+		{
+			name:  "function with keyword parameter names",
+			input: "fn test(int i64, float f64, string string) {}",
+			want:  "fn test(int i64,float f64,string string) { }",
+		},
 	}
 
 	for _, tc := range tests {
@@ -949,6 +974,16 @@ func TestEnumStatement(t *testing.T) {
 				}`,
 			want: "enum status {running, stopped, unknown}",
 		},
+		{
+			name: "enum with type keywords",
+			input: `enum tag {
+						int
+						float
+						string
+						bool
+					}`,
+			want: "enum tag {int, float, string, bool}",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1114,9 +1149,9 @@ func TestStructDefinition(t *testing.T) {
 			want:  "struct user {x f64, friend unknown<user>}",
 		},
 		{
-			name:  "struct - unnamed fields",
-			input: "struct point {i64, i64}",
-			want:  "struct point {i64, i64}",
+			name:  "struct - fields can use type keywords as names",
+			input: "struct point {int i64, float f64}",
+			want:  "struct point {int i64, float f64}",
 		},
 		{
 			name:  "with validation",
@@ -1126,10 +1161,20 @@ func TestStructDefinition(t *testing.T) {
 		{
 			name: "comment after field",
 			input: `struct point {
-						i64 // some really informative comment
-						i64
+						x i64 // some really informative comment
+						y i64
 					}`,
-			want: "struct point {i64, i64}",
+			want: "struct point {x i64, y i64}",
+		},
+		{
+			name: "struct with keyword field names",
+			input: `struct data {
+						int    i64
+						float  f64
+						string string
+						bool   bool
+					}`,
+			want: "struct data {int i64, float f64, string string, bool bool}",
 		},
 	}
 	for _, tc := range tests {
