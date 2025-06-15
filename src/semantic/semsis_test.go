@@ -1541,6 +1541,11 @@ func TestCallArgumentTypeCoercion(t *testing.T) {
 			input:  "fn test(x u8) {} test(257)",
 			errors: []string{"integer literal '257' overflows 'u8'"},
 		},
+		{
+			name:  "append error to error array",
+			input: "struct abc { errs []error } fn test(a abc, errs []error) { let a = a^{ a.errs = errs } }",
+			want:  "lib main struct abc {errs []error} fn test(a abc,errs []error) { let a abc = a^ { a.errs []error = errs } } pub fn main() { }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }

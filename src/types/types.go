@@ -1179,6 +1179,12 @@ func CanCoalesce(from, to TypeSpec) bool {
 			return CanCoalesce(from.T, to.T)
 		}
 		return false
+	case *Error:
+		switch to := to.(type) {
+		case *Error:
+			return from.Name == to.Name
+		}
+		return false
 	case *Null:
 		switch to := to.(type) {
 		case *Optional:
