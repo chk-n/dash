@@ -1531,15 +1531,41 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	arr := e.Eval(args[0], ctx)
-
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
 		val := e.Eval(args[1], ctx)
-		newArr = append(arr, val)
+		val = unwrapFunctionResult(val, 0)
+		if anyArr, ok := val.([]any); ok {
+			newArr = append(arr, anyArr...)
+		} else if byteArr, ok := val.([]uint8); ok {
+			nArr := make([]uint8, len(arr))
+			for i, el := range arr {
+				switch el := el.(type) {
+				case int32:
+					nArr[i] = uint8(el)
+				case uint8:
+					nArr[i] = el
+				}
+			}
+			newArr = append(nArr, byteArr...)
+		} else {
+			newArr = append(arr, val)
+		}
 	case []uint8:
-		val := e.Eval(args[1], ctx).(uint8)
-		newArr = append(arr, val)
+		val := e.Eval(args[1], ctx)
+		val = unwrapFunctionResult(val, 0)
+		// Handle case where we're appending []uint8 to []uint8
+		if byteArr, ok := val.([]uint8); ok {
+			newArr = append(arr, byteArr...)
+		} else {
+			switch val := val.(type) {
+			case int32:
+				newArr = append(arr, uint8(val))
+			case uint8:
+				newArr = append(arr, val)
+			}
+		}
 	default:
 		panic("this is a compiler error. please report")
 	}

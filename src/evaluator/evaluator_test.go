@@ -1704,6 +1704,53 @@ func TestVariableScoping(t *testing.T) {
 	}
 }
 
+func TestAppend(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "append single element to array",
+			prog: `
+			let arr = [1, 2]
+			append(arr, 3)`,
+			want: &Return{[]any{[]any{int64(1), int64(2), int64(3)}}},
+		},
+		{
+			name: "append function result to array - this triggers the bug",
+			prog: `
+			fn get_arr() []i64 { return [3, 4] }
+			let arr = [1, 2]
+			append(arr, get_arr())`,
+			want: &Return{[]any{[]any{int64(1), int64(2), int64(3), int64(4)}}},
+		},
+		{
+			name: "append function result single element",
+			prog: `
+			fn get_num() i64 { return 42 }
+			let arr = [1, 2]
+			append(arr, get_num())`,
+			want: &Return{[]any{[]any{int64(1), int64(2), int64(42)}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPointers(t *testing.T) {
 	tests := []struct {
 		name string
