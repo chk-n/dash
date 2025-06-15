@@ -1581,6 +1581,37 @@ func TestAnonymousFunction(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestErrorStatement(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "error without parameters",
+			input: "error divide_by_zero",
+			want:  "lib main error divide_by_zero pub fn main() { }",
+		},
+		{
+			name:  "error with single parameter",
+			input: "error invalid_value(val string)",
+			want:  "lib main error invalid_value(val string) pub fn main() { }",
+		},
+		{
+			name:  "error with multiple parameters",
+			input: "error out_of_bounds(index i64, size i64)",
+			want:  "lib main error out_of_bounds(index i64, size i64) pub fn main() { }",
+		},
+		{
+			name:  "custom error constructor call with assignment to generic error",
+			input: "error custom_error(val i64) fn handle_error(err error) {} let e = custom_error(42) handle_error(e)",
+			want:  "lib main error custom_error(val i64) fn handle_error(err error) { } pub fn main() { let e custom_error = custom_error(42) handle_error(e) }",
+		},
+		{
+			name:  "custom error constructor call directly as function argument",
+			input: "error my_error(msg string) fn process_error(err error) {} process_error(my_error(\"test\"))",
+			want:  "lib main error my_error(msg string) fn process_error(err error) { } pub fn main() { process_error(my_error(\"test\")) }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

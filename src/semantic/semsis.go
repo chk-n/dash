@@ -1417,7 +1417,17 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 		case *ast.EnumStatement:
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
 		case *ast.ErrorStatement:
-			s.typeSt.Set(n.Name.String(), &types.Error{Name: n.Name.TokenLiteral()})
+			// Error constructors should be functions that return specific error types
+			argTypes := make([]types.TypeSpec, len(n.Params))
+			for i, param := range n.Params {
+				argTypes[i] = param.Type
+			}
+			errorType := &types.Error{Name: n.Name.TokenLiteral()}
+			fnType := &types.Function{
+				Arg: argTypes,
+				Ret: []types.TypeSpec{errorType},
+			}
+			s.fnSt.Set(n.Name.String(), &FnInfo{Type: fnType})
 		case *ast.AssignmentStatement:
 			// TODO
 		}
@@ -2139,6 +2149,13 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 func (s *Semantics) typesEqual(expected, actual types.TypeSpec) bool {
 	if expected.Equal(actual) {
 		return true
+	}
+
+	// Special case: any custom error type can be assigned to generic error type
+	if expectedErr, ok := expected.(*types.Error); ok && expectedErr.Name == "error" {
+		if _, ok := actual.(*types.Error); ok {
+			return true
+		}
 	}
 
 	// as mutable types can be considered equal as their
