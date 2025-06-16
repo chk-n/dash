@@ -253,6 +253,8 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		return n.Value
 	case *ast.NullLiteral:
 		return Optional{isValid: false}
+	case *ast.CopyUpdateExpression:
+		return e.evalCopyUpdateExpression(n.Ident.TokenLiteral(), n, ctx)
 	case *ast.Comment:
 		return nil
 	case nil:
