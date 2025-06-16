@@ -182,7 +182,12 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 
 		if isBuiltinFunction(n.Token.Literal) {
-			// TODO: validate append() receives an array and element
+			// Special validation for append function
+			if n.Token.Literal == "append" {
+				s.validateAppendFunction(n)
+				return
+			}
+
 			builtintFn := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
 			argTs := builtintFn.T.(*types.Function).Arg
 			retTs := builtintFn.T.(*types.Function).Ret
@@ -1324,6 +1329,8 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.TypeSpec, fnName string) type
 			return s.coalesceTypeForBuiltIn(t.T, fnName)
 		}
 		return t
+	case *types.Mutable:
+		return s.coalesceTypeForBuiltIn(t.T, fnName)
 	default:
 		return t
 	}
@@ -2191,4 +2198,42 @@ func getTypesFromExpressions(exps []ast.Expression) []types.TypeSpec {
 		types[i] = exp.Type()
 	}
 	return types
+}
+
+// validateAppendFunction validates that append() receives correct argument types
+func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
+	if len(n.Arguments) < 2 {
+		s.addError(n, errTooLittleArguments("append"))
+		return false
+	} else if len(n.Arguments) > 2 {
+		s.addError(n, errTooManyArguments("append"))
+		return false
+	}
+
+	n.SetType(n.Arguments[0].Type())
+	firstArgType := s.coalesceTypeForBuiltIn(n.Arguments[0].Type(), "append")
+	secondArgType := s.coalesceTypeForBuiltIn(n.Arguments[1].Type(), "append")
+
+	// validate first argument
+	arrayType, ok := firstArgType.(*types.Array)
+	if !ok {
+		s.addError(n.Arguments[0], errTypeMismatch("[]T", firstArgType.String()))
+		return false
+	}
+
+	elementType := arrayType.T
+
+	if secondArgArrType, ok := secondArgType.(*types.Array); ok {
+		if !s.analyseExpressionType(n.Arguments[1], secondArgArrType, arrayType) {
+			return false
+		}
+	} else {
+		if !s.analyseExpressionType(n.Arguments[1], secondArgType, elementType) {
+			return false
+		}
+	}
+
+	n.SetType(n.Arguments[0].Type())
+
+	return true
 }

@@ -1577,7 +1577,7 @@ func TestAppendFunction(t *testing.T) {
 		{
 			name:   "append string to []byte",
 			input:  `let buf = make([]byte, 1) let result = append(buf, "hello")`,
-			errors: []string{"append() second argument must be 'byte' or '[]byte', got 'string'"},
+			errors: []string{"type mistmatch, expected type 'byte' but got 'string'"},
 		},
 		{
 			name:  "append byte to []byte",
@@ -1592,12 +1592,17 @@ func TestAppendFunction(t *testing.T) {
 		{
 			name:   "append int to []string",
 			input:  `let arr = make([]string, 1) let result = append(arr, 42)`,
-			errors: []string{"append() second argument must be 'string' or '[]string', got 'i64'"},
+			errors: []string{"type mistmatch, expected type 'string' but got 'i64'"},
 		},
 		{
 			name:   "append to non-slice",
 			input:  `let x = 42 let result = append(x, 1)`,
-			errors: []string{"append() first argument must be a slice, got 'i64'"},
+			errors: []string{"type mistmatch, expected type '[]T' but got 'i64'"},
+		},
+		{
+			name:  "append char to []byte",
+			input: `let buf = make([]byte, 1) let result = append(buf, 'A')`,
+			want:  "lib main pub fn main() { let buf mut<[]byte> = make([]byte,1) let result mut<[]byte> = append(buf,'A') }",
 		},
 	}
 	runAnalysisTests(t, tests)
