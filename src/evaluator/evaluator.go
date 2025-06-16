@@ -25,8 +25,13 @@ const (
 
 type Error struct {
 	Err string
-	// optional args
-	Args []any
+	// optional
+	Args []struct {
+		// field name
+		name string
+		// argument value
+		val any
+	}
 }
 
 type Return struct {
@@ -105,7 +110,7 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 		case *ast.EnumStatement:
 			e.initialiseEnumStatement(n, ctx)
 		case *ast.ErrorStatement:
-			ctx.vars.Set(n.Name.String(), n.Name.TokenLiteral())
+			ctx.Set(n.Name.String(), n)
 		case *ast.AssignmentStatement:
 			e.evalAssignmentStatement(n, ctx)
 		case *ast.FunctionExpression:
@@ -278,7 +283,11 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	_fn, ok := stk.Get(n.TokenLiteral())
 	fn, ok := _fn.(*Function)
 	if !ok {
-		panic("not a function: " + n.TokenLiteral())
+		errStmt, ok := _fn.(*ast.ErrorStatement)
+		if !ok {
+			panic("not a function: " + n.TokenLiteral())
+		}
+		return e.evalErrorConstructor(errStmt, n.Arguments, stk)
 	}
 
 	newCtx := NewContext(fn.ctx)
@@ -293,6 +302,34 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		return res
 	}
 	return &Return{Values: []any{res}}
+}
+
+func (e *Evaluator) evalErrorConstructor(n *ast.ErrorStatement, args []ast.Expression, ctx *Context) any {
+	// Create an Error with the error name and field mappings
+	errorArgs := make([]struct {
+		name string
+		val  any
+	}, len(n.Params))
+
+	// Evaluate each argument and map it to the corresponding parameter name
+	for i, param := range n.Params {
+		if i < len(args) {
+			paramName := param.Name.Value
+			evaluatedArg := e.Eval(args[i], ctx)
+			errorArgs[i] = struct {
+				name string
+				val  any
+			}{
+				name: paramName,
+				val:  evaluatedArg,
+			}
+		}
+	}
+
+	return &Return{Values: []any{&Error{
+		Err:  n.Name.Value,
+		Args: errorArgs,
+	}}}
 }
 
 // The goal of type casts for now is to only support the minimum number of operations
