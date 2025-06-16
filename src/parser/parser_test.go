@@ -698,25 +698,20 @@ func TestErrorStatement(t *testing.T) {
 			input: "error divide_by_zero",
 			want:  "error divide_by_zero",
 		},
-		// {
-		// 	name:  "public error",
-		// 	input: "pub error network_error",
-		// 	want:  "pub error network_error",
-		// },
 		{
 			name:  "dynamic error with single param",
-			input: "error invalid_value(val string)",
-			want:  "error invalid_value(val string)",
+			input: "error invalid_value{val string}",
+			want:  "error invalid_value{val string}",
 		},
 		{
 			name:  "dynamic error with multiple params",
-			input: "error out_of_bounds(index i64, size i64)",
-			want:  "error out_of_bounds(index i64, size i64)",
+			input: "error out_of_bounds{index i64, size i64}",
+			want:  "error out_of_bounds{index i64, size i64}",
 		},
 		{
 			name:  "error with multiple params same type",
-			input: "error invalid_range(start, end i64)",
-			want:  "error invalid_range(start, end i64)",
+			input: "error invalid_range{start, end i64}",
+			want:  "error invalid_range{start, end i64}",
 		},
 	}
 

@@ -739,13 +739,13 @@ func (es *ErrorStatement) String() string {
 
 	// Add parameters if they exist
 	if len(es.Params) > 0 {
-		out.WriteString("(")
+		out.WriteString("{")
 		params := []string{}
 		for _, p := range es.Params {
 			params = append(params, p.String())
 		}
 		out.WriteString(strings.Join(params, ", "))
-		out.WriteString(")")
+		out.WriteString("}")
 	}
 
 	return out.String()

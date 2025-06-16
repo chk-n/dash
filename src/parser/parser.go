@@ -221,6 +221,8 @@ func (p *Parser) ParseLibrary() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.PUBLIC:
+			p.nextToken()
 		case token.USE:
 			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
@@ -250,8 +252,6 @@ func (p *Parser) ParseLibrary() *ast.Library {
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
 			lib.Nodes = append(lib.Nodes, exp)
-		case token.PUBLIC:
-			p.nextToken()
 		default:
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 			return nil
@@ -278,10 +278,10 @@ func (p *Parser) ParseImports() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
-		case token.USE:
-			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.PUBLIC:
 			p.nextToken()
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		default:
 			p.nextToken()
 		}
@@ -634,6 +634,10 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 
 	// x int)
 	if p.curTokenIs(token.RPAREN) {
+		return stmt
+	}
+	// x int}
+	if p.curTokenIs(token.RBRACE) {
 		return stmt
 	}
 	// x int,
@@ -1055,7 +1059,7 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 			for {
 				pred := p.parseExpression(COLON)
 				mc.Predicates = append(mc.Predicates, pred)
-				
+
 				if p.curTokenIs(token.COMMA) {
 					p.nextToken()
 					continue
@@ -1177,11 +1181,11 @@ func (p *Parser) parseErrorStatement() *ast.ErrorStatement {
 	stmt.Name = p.parseIdentifier()
 
 	// Parse parameters if present
-	if p.curTokenIs(token.LPAREN) {
+	if p.curTokenIs(token.LBRACE) {
 		p.nextToken()
 
-		// Parse parameters until we hit ')'
-		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		// Parse parameters until we hit '}'
+		for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 			param := p.parseParameterStatement(false)
 			if param == nil {
 				return nil
@@ -1193,10 +1197,11 @@ func (p *Parser) parseErrorStatement() *ast.ErrorStatement {
 			}
 		}
 
-		if !p.curTokenIs(token.RPAREN) {
-			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-			return nil
-		}
+		// if !p.curTokenIs(token.RBRACE) {
+		// p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		// return nil
+		// }
+
 		p.nextToken()
 	}
 
