@@ -1498,9 +1498,6 @@ func (e *Evaluator) evalPrintln(args []ast.Expression, stk *Context) any {
 
 func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 
-	typ, _ := args[0].(*ast.TypeLiteral)
-	arrayType, _ := typ.T.(*types.Array)
-
 	size := e.Eval(args[1], stk)
 	sizeVal, _ := size.(int64)
 	if sizeVal < 0 {
@@ -1508,30 +1505,7 @@ func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 	}
 
 	// create array with default values
-	arr := make([]any, sizeVal)
-	var defaultVal any
-	switch arrayType.T.(type) {
-	case *types.Int:
-		defaultVal = int64(0)
-	case *types.Float:
-		defaultVal = float64(0)
-	case *types.String:
-		defaultVal = ""
-	case *types.Bool:
-		defaultVal = false
-	case *types.Byte:
-		defaultVal = uint8(0)
-	case *types.Char:
-		defaultVal = uint32(0)
-	case *types.Struct, *types.Enum, *types.Union:
-		defaultVal = map[string]any{}
-	default:
-		defaultVal = nil
-	}
-
-	for i := range arr {
-		arr[i] = defaultVal
-	}
+	arr := make([]any, 0, sizeVal)
 
 	return &Return{Values: []any{arr}}
 }
