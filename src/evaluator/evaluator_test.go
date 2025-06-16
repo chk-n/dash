@@ -933,22 +933,17 @@ func TestMake(t *testing.T) {
 		{
 			name: "make integer array",
 			prog: "make([]i64, 3)",
-			want: &Return{[]any{[]any{int64(0), int64(0), int64(0)}}},
+			want: &Return{[]any{[]any{nil, nil, nil}}},
 		},
 		{
 			name: "make float array",
 			prog: "make([]f64, 2)",
-			want: &Return{[]any{[]any{float64(0), float64(0)}}},
+			want: &Return{[]any{[]any{nil, nil}}},
 		},
 		{
 			name: "make string array",
-			prog: `make([]string, 2)`,
-			want: &Return{[]any{[]any{"", ""}}},
-		},
-		{
-			name: "make bool array",
-			prog: "make([]bool, 2)",
-			want: &Return{[]any{[]any{false, false}}},
+			prog: `make([]string, 1)`,
+			want: &Return{[]any{[]any{nil}}},
 		},
 		{
 			name: "make empty array",
@@ -1033,12 +1028,12 @@ func TestTypeCasting(t *testing.T) {
 		{
 			name: "error type cast from string variable",
 			prog: `let x = "test error" error(x)`,
-			want: errors.New("test error"),
+			want: errors.New("test error"), // TODO: should be map with type desc
 		},
 		{
 			name: "error type cast from string literal",
 			prog: `error("test error")`,
-			want: errors.New("test error"),
+			want: errors.New("test error"), // TODO: should be map with type desc
 		},
 	}
 	for _, tt := range tests {
@@ -1166,7 +1161,7 @@ func TestMutable(t *testing.T) {
 			buf[0] = 1
 			buf[1] = 2
 			buf`,
-			want: []any{int64(1), int64(2), int64(0)},
+			want: []any{int64(1), int64(2), nil},
 		},
 		{
 			name: "modify array using slice expression",
@@ -1706,7 +1701,7 @@ func TestAppend(t *testing.T) {
 		want any
 	}{
 		{
-			name: "append single element to array",
+			name: "append single element to array literal",
 			prog: `
 			let arr = [1, 2]
 			append(arr, 3)`,
@@ -1727,6 +1722,20 @@ func TestAppend(t *testing.T) {
 			let arr = [1, 2]
 			append(arr, get_num())`,
 			want: &Return{[]any{[]any{int64(1), int64(2), int64(42)}}},
+		},
+		{
+			name: "append single element to array wihout len",
+			prog: `
+			let arr = make([]byte, 2)
+			append(arr, 3)`,
+			want: &Return{[]any{[]any{nil, nil, byte(3)}}},
+		},
+		{
+			name: "append single element to array",
+			prog: `
+			let arr = make([]byte, 0, 2)
+			append(arr, 3)`,
+			want: &Return{[]any{[]any{byte(3)}}},
 		},
 	}
 

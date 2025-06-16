@@ -1494,14 +1494,27 @@ func (e *Evaluator) evalPrintln(args []ast.Expression, stk *Context) any {
 
 func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 
-	size := e.Eval(args[1], stk)
-	sizeVal, _ := size.(int64)
-	if sizeVal < 0 {
-		panic("this is a compiler error. please report")
+	var arr []any
+	if len(args) == 2 {
+		size := e.Eval(args[1], stk)
+		sizeVal, _ := size.(int64)
+		if sizeVal < 0 {
+			panic("this is a compiler error. please report")
+		}
+		arr = make([]any, sizeVal)
+	} else {
+		len := e.Eval(args[1], stk)
+		lenVal, _ := len.(int64)
+		if lenVal < 0 {
+			panic("this is a compiler error. please report")
+		}
+		size := e.Eval(args[2], stk)
+		sizeVal, _ := size.(int64)
+		if sizeVal < 0 || lenVal > sizeVal {
+			panic("this is a compiler error. please report")
+		}
+		arr = make([]any, lenVal, sizeVal)
 	}
-
-	// create array with default values
-	arr := make([]any, 0, sizeVal)
 
 	return &Return{Values: []any{arr}}
 }
