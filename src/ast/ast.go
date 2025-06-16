@@ -912,10 +912,12 @@ type FunctionCallExpression struct {
 	IsAnonymousFn bool
 }
 
-func (e *FunctionCallExpression) expressionNode()          {}
-func (e *FunctionCallExpression) SetType(t types.TypeSpec) {}
-func (e *FunctionCallExpression) Type() types.TypeSpec     { return e.T }
-func (e *FunctionCallExpression) TokenLiteral() string     { return e.Token.Literal }
+func (e *FunctionCallExpression) expressionNode() {}
+func (e *FunctionCallExpression) SetType(t types.TypeSpec) {
+	e.T = t
+}
+func (e *FunctionCallExpression) Type() types.TypeSpec { return e.T }
+func (e *FunctionCallExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *FunctionCallExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(e.Token.Literal)
