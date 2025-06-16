@@ -271,10 +271,6 @@ func (e *Evaluator) initialiseEnumStatement(n *ast.EnumStatement, stk *Context) 
 	stk.Set(n.Name.Value, fields)
 }
 
-func (e *Evaluator) evalMainFunction(n *ast.FunctionExpression, stk *Context) {
-	e.Eval(n.Body, stk)
-}
-
 // returns list of function call results
 func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context) any {
 	_fn, ok := stk.Get(n.TokenLiteral())
