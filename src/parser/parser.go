@@ -1267,8 +1267,9 @@ func (p *Parser) curTokenIsIdent() bool {
 	case token.INTTYPE, token.FLOATTYPE, token.STRINGTYPE, token.BOOLTYPE,
 		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
 		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
-		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE,
-		token.LIBRARY:
+		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE:
+		return true
+	case token.LIBRARY, token.NEXT, token.BREAK:
 		return true
 	default:
 		return false
@@ -1410,7 +1411,7 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 
 // e.g. do_something("123")
 func (p *Parser) parseFunctionCallExpression() ast.Expression {
-	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.FUNCTION) {
+	if !p.curTokenIsIdent() && !p.curTokenIs(token.FUNCTION) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}

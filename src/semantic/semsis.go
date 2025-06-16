@@ -730,7 +730,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				n.SetType(resolvedType)
 				return
 			} else if typ == nil {
-				s.addError(n, errTypeNotFound(n.String()))
+				s.addError(n, errIdentifierNotFound(n.Left.String()+"."+name))
 				return
 			}
 

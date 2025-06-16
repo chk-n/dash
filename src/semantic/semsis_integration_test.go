@@ -109,6 +109,16 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			errors: []string{"too little arguments passed to function 'test'"},
 		},
+		{
+			name: "imported function, not found",
+			input: `
+					lib one
+					--
+					lib two
+					let x = one.next(1)
+				`,
+			errors: []string{"identifier 'one.next' not found"},
+		},
 	}
 
 	for _, tt := range tests {
