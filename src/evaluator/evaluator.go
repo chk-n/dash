@@ -349,6 +349,7 @@ func (e *Evaluator) toInt64(v any) any {
 // Byte casting
 
 func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
+	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
 	case int64:
 		return byte(v)
@@ -358,6 +359,7 @@ func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 
 // Char casting
 func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
+	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
 	case byte:
 		return rune(v)
@@ -369,6 +371,7 @@ func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
 
 // String casting
 func (e *Evaluator) evalStringCast(t *types.String, v any) any {
+	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
 	case *Return:
 		return e.evalStringCast(t, v.Values[0])
@@ -389,6 +392,7 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 // Array casting
 
 func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
+	v = unwrapFunctionResult(v, 0)
 	switch t.T.(type) {
 	case *types.Byte:
 		str := v.(string)
