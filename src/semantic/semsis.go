@@ -1880,6 +1880,9 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 				return false
 			}
 		} else {
+			if exprType == nil {
+				return false
+			}
 			if !exprType.Equal(targetType) {
 				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
 				return false
