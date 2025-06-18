@@ -1324,6 +1324,22 @@ func TestMatchStatement(t *testing.T) {
 			}`,
 			want: int64(-1),
 		},
+		{
+			name: "return match expression",
+			prog: `
+				fn multi_ret(x i64) i64, string {
+					return x, "test"
+				}
+				fn test() i64, string {
+					return match 1 {
+						case 1: multi_ret(42)
+						case _: multi_ret(0)
+					}
+				}
+				test()
+			`,
+			want: &Return{Values: []any{int64(42), "test"}},
+		},
 	}
 
 	for _, tt := range tests {
