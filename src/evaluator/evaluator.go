@@ -720,6 +720,9 @@ func (e *Evaluator) evalMatchCase(c *ast.MatchCase, stk *Context) any {
 	var last any
 	for _, stmt := range c.Body {
 		last = e.Eval(stmt, stk)
+		if _, ok := last.(*Return); ok {
+			return last
+		}
 	}
 	return last
 }

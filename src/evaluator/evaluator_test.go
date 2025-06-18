@@ -1340,6 +1340,24 @@ func TestMatchStatement(t *testing.T) {
 			`,
 			want: &Return{Values: []any{int64(42), "test"}},
 		},
+		{
+			name: "raise in match case",
+			prog: `
+				error some_err
+				
+				fn test()! i64 {
+					 let x = match 0 {
+						case 1: 1
+						case _:
+							raise some_err
+							2
+					}
+					return x
+				}
+				test()
+			`,
+			want: &Return{Values: []any{&Error{Err: "some_err"}}},
+		},
 	}
 
 	for _, tt := range tests {
