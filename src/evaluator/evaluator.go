@@ -186,7 +186,7 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 	case *ast.TypeCastExpression:
 		return e.evalTypeCastExpression(n, ctx)
 	case *ast.AssignmentStatement:
-		e.evalAssignmentStatement(n, ctx)
+		return e.evalAssignmentStatement(n, ctx)
 	case *ast.BlockStatement:
 		return e.evalBlockStatement(n, ctx)
 	case *ast.IfElseExpression:
@@ -457,7 +457,7 @@ func (e *Evaluator) evalErrorCast(t *types.Error, v any) any {
 }
 
 // always returns nil
-func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Context) {
+func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Context) any {
 	// TODO: iterate over if function reached we need to handle that
 	// TODO: data can be assigned to identifiers, struct fields, array indices, slices
 	// g. if in use expression
@@ -473,12 +473,18 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 		switch val.Type().(type) {
 		case *types.Multi:
 			res := e.Eval(val, ctx).(*Return)
+			if _, ok := res.Values[0].(*Error); ok {
+				return res
+			}
 			for j := range len(res.Values) {
 				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
 			}
 		case *types.ImportedNamed:
 			res := e.Eval(val, ctx)
 			if ret, ok := res.(*Return); ok {
+				if _, ok := ret.Values[0].(*Error); ok {
+					return ret
+				}
 				for j := range len(ret.Values) {
 					switch decl := n.Declerations[i+j].(type) {
 					case *ast.IndexExpression:
@@ -505,7 +511,11 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 			}
 		default:
 			res := e.Eval(val, ctx)
-			res = unwrapFunctionResult(res, 0)
+			unwrapped := unwrapFunctionResult(res, 0)
+			if _, ok := unwrapped.(*Error); ok {
+				return res
+			}
+			res = unwrapped
 			switch decl := n.Declerations[i].(type) {
 			case *ast.Identifier:
 				ctx.SetAll(n.VarNameAt(i), res)
@@ -520,6 +530,7 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 			}
 		}
 	}
+	return nil
 }
 
 // Performs a context set but propagates the set up context chain if its a reassignment
