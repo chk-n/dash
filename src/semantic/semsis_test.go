@@ -602,11 +602,16 @@ func TestEnum(t *testing.T) {
 			input:  "enum status{offline, online} let b = status.offline == 1",
 			errors: []string{"type mistmatch, expected type 'status' but got 'i64'"},
 		},
-		// {
-		// 	name:   "enum definition - fiel",
-		// 	input:  "enum status{offline, online} let s = status.on",
-		// 	errors: []string{""},
-		// },
+		{
+			name:   "invalid enum field",
+			input:  "enum status{offline, online} let s = status.invalid",
+			errors: []string{"enum 'status' has no field named 'invalid'"},
+		},
+		{
+			name:   "invalid enum field in expression",
+			input:  "enum abc{field1, field2} let result = abc.field3 == abc.field1",
+			errors: []string{"enum 'abc' has no field named 'field3'"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }

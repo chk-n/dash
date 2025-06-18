@@ -386,8 +386,9 @@ func (sf *StructField) Equal(other StructField) bool {
 // ----- //
 
 type Enum struct {
-	Name string
-	Size int
+	Name   string
+	Size   int
+	Fields []string
 }
 
 func (t *Enum) Type() TypeSpec { return t }
@@ -403,6 +404,16 @@ func (t *Enum) Equal(other TypeSpec) bool {
 	// Size does not have to match as type
 	// only consists of name
 	return t.Name == otherEnum.Name
+}
+
+// HasField checks if the given field name exists in the enum
+func (t *Enum) HasField(fieldName string) bool {
+	for _, field := range t.Fields {
+		if field == fieldName {
+			return true
+		}
+	}
+	return false
 }
 
 type Union struct {

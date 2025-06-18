@@ -627,6 +627,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		case *types.Enum:
 			switch t := n.Right.(type) {
 			case *ast.Identifier:
+				// Validate that the field exists in the enum
+				if !left.HasField(t.Value) {
+					s.addError(n, errEnumUnknownField(left.Name, t.Value))
+					return
+				}
 				t.T = left
 			default:
 				panic("todo: add semsis error")
@@ -708,11 +713,16 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			// set type of expression
 			typ := s.importedSt[n.Left.String()][name]
-			if _, ok := left.Typ.(*types.Enum); ok && typ == nil {
+			if enumType, ok := left.Typ.(*types.Enum); ok && typ == nil {
 				// special case where enum accessed from lib e.g.
 				// lib_x.enum_y.field_z. When typ is nil it means
 				// we are checking enum_y.field_z in map but that
 				// doesnt exist as its defined under scope lib_x.
+				// Validate that the field exists in the imported enum
+				if !enumType.HasField(name) {
+					s.addError(n, errEnumUnknownField(enumType.Name, name))
+					return
+				}
 				n.SetType(left)
 				return
 			} else if t, ok := left.Typ.(*types.Struct); ok && typ == nil {

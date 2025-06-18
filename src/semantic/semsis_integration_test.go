@@ -85,6 +85,28 @@ func TestImportLibrary(t *testing.T) {
 			want: "lib two let x one.abc = one.abc.a",
 		},
 		{
+			name: "import enum with invalid field",
+			input: `
+					lib one
+					pub enum status { online, offline }
+					--
+					lib two
+					let x = one.status.invalid
+				`,
+			errors: []string{"enum 'status' has no field named 'invalid'"},
+		},
+		{
+			name: "import enum with invalid field in expression",
+			input: `
+					lib one
+					pub enum level { low, medium, high }
+					--
+					lib two
+					let result = one.level.invalid == one.level.low
+				`,
+			errors: []string{"enum 'level' has no field named 'invalid'"},
+		},
+		{
 			name: "import global var of type struct",
 			input: `
 					lib one

@@ -99,6 +99,13 @@ var (
 	}
 )
 
+// Enum related semantical errors
+var (
+	errEnumUnknownField = func(name, field string) error {
+		return fmt.Errorf("enum '%s' has no field named '%s'", name, field)
+	}
+)
+
 // Struct definition related semantical errors
 var (
 	errStructNotFound = func(name string) error {

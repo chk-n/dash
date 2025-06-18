@@ -551,7 +551,11 @@ func (p *Parser) parseEnumStatement() *ast.EnumStatement {
 		}
 	}
 
-	stmt.T = &types.Enum{Name: stmt.Name.String(), Size: len(stmt.Fields)}
+	fieldNames := make([]string, len(stmt.Fields))
+	for i, field := range stmt.Fields {
+		fieldNames[i] = field.Value
+	}
+	stmt.T = &types.Enum{Name: stmt.Name.String(), Size: len(stmt.Fields), Fields: fieldNames}
 
 	p.nextToken()
 
