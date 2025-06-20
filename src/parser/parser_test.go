@@ -705,13 +705,8 @@ func TestErrorStatement(t *testing.T) {
 		},
 		{
 			name:  "dynamic error with multiple params",
-			input: "error out_of_bounds{index i64, size i64}",
+			input: "error out_of_bounds{index i64 size i64}",
 			want:  "error out_of_bounds{index i64, size i64}",
-		},
-		{
-			name:  "error with multiple params same type",
-			input: "error invalid_range{start, end i64}",
-			want:  "error invalid_range{start, end i64}",
 		},
 	}
 

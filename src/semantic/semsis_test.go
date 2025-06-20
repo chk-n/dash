@@ -1565,7 +1565,7 @@ func TestErrorStatement(t *testing.T) {
 		},
 		{
 			name:  "error with multiple parameters",
-			input: "error out_of_bounds{index i64, size i64}",
+			input: "error out_of_bounds{index i64 size i64}",
 			want:  "lib main error out_of_bounds{index i64, size i64} pub fn main() { }",
 		},
 		{

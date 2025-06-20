@@ -1190,14 +1190,23 @@ func (p *Parser) parseErrorStatement() *ast.ErrorStatement {
 
 		// Parse parameters until we hit '}'
 		for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
-			param := p.parseParameterStatement(false)
-			if param == nil {
+			field := &ast.ParameterStatement{}
+
+			// All struct fields must have names (can be keywords)
+			field.Name = p.parseIdentifierOrKeyword()
+			if field.Name == nil {
 				return nil
 			}
-			stmt.Params = append(stmt.Params, param)
 
-			if p.curTokenIs(token.COMMA) {
-				p.nextToken()
+			if p.curTokenIsType() {
+				field.Type = p.parseType()
+				stmt.Params = append(stmt.Params, field)
+			} else if p.curTokenIsIdent() {
+				field.Type = p.parseUnknownNamedType()
+				stmt.Params = append(stmt.Params, field)
+			} else {
+				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+				return nil
 			}
 		}
 
