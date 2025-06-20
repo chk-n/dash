@@ -643,6 +643,7 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	if n.Condition != nil && n.Change == nil {
 		for {
 			cond := e.Eval(n.Condition, stk)
+			cond = unwrapFunctionResult(cond, 0)
 			if !cond.(bool) {
 				break
 			}
