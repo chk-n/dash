@@ -1048,8 +1048,15 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		switch n.Token.Type {
 		// Check reassignment used in allowed contexts
 		case token.ASSIGN:
-			// NOTE: technically this branch should not run anymore
-			// with new ast.AssignmentStatement
+			// This case is needed for for loop increments like 'i = i + 2'
+			// which are parsed as InfixExpression, not AssignmentStatement
+
+			if ident, ok := left.(*ast.Identifier); ok {
+				ident.SetType(right.Type())
+				if varInfo, exists := s.varSt.Get(ident.TokenLiteral()); exists && varInfo.Reassignable {
+					s.varSt.Set(ident.TokenLiteral(), &VarInfo{Type: right.Type(), Reassignable: true})
+				}
+			}
 
 		// Ensure boolean operations infered as bool
 		case token.EQ, token.NEQ, token.GT, token.GTE, token.LT, token.LTE:

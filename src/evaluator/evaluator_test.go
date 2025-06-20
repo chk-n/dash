@@ -576,6 +576,16 @@ func TestForStatement(t *testing.T) {
 			want: int64(4),
 		},
 		{
+			name: "loop with custom increment",
+			prog: `
+		    var sum = 0
+		    for i = 0; i < 5; i = i+2 {
+		        sum = sum + 1
+		    }
+		    sum`,
+			want: int64(3),
+		},
+		{
 			name: "nested loops with break",
 			prog: `
 		    var sum = 0

@@ -694,12 +694,12 @@ func TestMatchUnion(t *testing.T) {
 		{
 			name:  "simple",
 			input: "union abc{i64, f64} let v = abc(1) match v' = v { case f64: let i = v let j = v' }",
-			want:  "lib main union abc {i64, f64} pub fn main() { let v abc = abc(1) match (v' = v) { case f64: let i abc = v let j f64 = v' } }",
+			want:  "lib main union abc {i64, f64} pub fn main() { let v abc = abc(1) match (v' abc = v) { case f64: let i abc = v let j f64 = v' } }",
 		},
 		{
 			name:  "union with structs",
 			input: "struct a { x i64 } struct b { y string } union ab { a, b } let s = ab(a{x: 1}) match s' = s { case a: let i = s'.x }",
-			want:  "lib main struct a {x i64} struct b {y string} union ab {a, b} pub fn main() { let s ab = ab(a{x i64: 1}) match (s' = s) { case a: let i i64 = s'.x } }",
+			want:  "lib main struct a {x i64} struct b {y string} union ab {a, b} pub fn main() { let s ab = ab(a{x i64: 1}) match (s' ab = s) { case a: let i i64 = s'.x } }",
 		},
 		{
 			name: "ensure type infered if dot expression",
@@ -712,7 +712,7 @@ func TestMatchUnion(t *testing.T) {
 					let x = n'.x
 				}
 			}`,
-			want: "lib main union abc {a} struct a {x ?abc} fn test(n abc) i64 { match (n' = n) { case a: let x ?abc = n'.x } } pub fn main() { }",
+			want: "lib main union abc {a} struct a {x ?abc} fn test(n abc) i64 { match (n' abc = n) { case a: let x ?abc = n'.x } } pub fn main() { }",
 		},
 		{
 			name:  "ensure default case infers type",
@@ -973,6 +973,11 @@ func TestForLoop(t *testing.T) {
 			name:  "simple for loop",
 			input: "for i = 0; i < 10; i++ { }",
 			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); i++ { } }",
+		},
+		{
+			name:  "custom increment",
+			input: "for i = 0; i < 10; i = i+2  { }",
+			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); (i i64 = (i + 2)) { } }",
 		},
 		{
 			name:  "infinite",

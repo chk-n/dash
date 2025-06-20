@@ -1130,6 +1130,9 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 	// Optional
 	case token.NULL_COALESCE:
 		val = e.evalInfixNullCoalesce(l, r)
+	// Assignment
+	case token.ASSIGN:
+		val = e.evalInfixAssign(n, r, ctx)
 	// Special
 	case token.COLON:
 		val = []any{l, r}
@@ -1374,6 +1377,20 @@ func (e *Evaluator) evalInfixNullCoalesce(l, r any) any {
 		panic("this is a compiler error. please report")
 	}
 	return l
+}
+
+// Handle assignment operations in contexts where expressions were expected
+// e.g. for loop increment
+func (e *Evaluator) evalInfixAssign(n *ast.InfixExpression, r any, ctx *Context) any {
+	// left exp has to be an identifier
+	ident, ok := n.Left.(*ast.Identifier)
+	if !ok {
+		panic("assignment to non-identifier in infix expression")
+	}
+
+	ctx.SetAll(ident.Value, r)
+
+	return r
 }
 
 // The left expression result becomes the first argument to the right function

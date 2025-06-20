@@ -973,8 +973,19 @@ func (e *InfixExpression) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("(")
-	out.WriteString(e.Left.String())
-	out.WriteString(" " + e.Operator + " ")
+	
+	// Special handling for assignment operations to include type annotations
+	if e.Operator == "=" {
+		out.WriteString(e.Left.String())
+		if e.Left.Type() != nil {
+			out.WriteString(" " + e.Left.Type().String())
+		}
+		out.WriteString(" " + e.Operator + " ")
+	} else {
+		out.WriteString(e.Left.String())
+		out.WriteString(" " + e.Operator + " ")
+	}
+	
 	if e.Right != nil {
 		out.WriteString(e.Right.String())
 	}
