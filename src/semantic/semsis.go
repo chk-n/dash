@@ -882,6 +882,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			for _, pred := range c.Predicates {
 				s.analyse(pred, "")
 				cT := pred.Type()
+				if cT == nil {
+					continue
+				}
 				isLiteral := ast.IsLiteral(pred)
 				if !validateMatchCaseType(sT, cT, isLiteral) {
 					s.addError(c, errTypeMismatch(sT.String(), cT.String()))
