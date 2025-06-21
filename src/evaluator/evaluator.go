@@ -419,7 +419,12 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 	case []any:
 		arr := make([]byte, len(v))
 		for i, el := range v {
-			arr[i] = byte(el.(int32))
+			switch el := el.(type) {
+			case uint8:
+				arr[i] = el
+			default:
+				arr[i] = byte(el.(int32))
+			}
 		}
 		return string(arr)
 	case []uint8:
