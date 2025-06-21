@@ -20,8 +20,6 @@ pub fn next_tkn(l *lexer) *lexer, token {
 
     let ch = l.buf[l.idx]
     match ch {
-    case '+': tkn = token{tag: tag.ADD,       start: l.idx, end: l.idx}
-    case '-': tkn = token{tag: tag.SUB,       start: l.idx, end: l.idx}
     case '*': tkn = token{tag: tag.MUL,       start: l.idx, end: l.idx}
     case '%': tkn = token{tag: tag.MOD,       start: l.idx, end: l.idx}
     case ':': tkn = token{tag: tag.COLON,     start: l.idx, end: l.idx}
@@ -38,6 +36,18 @@ pub fn next_tkn(l *lexer) *lexer, token {
     case '@': tkn = token{tag: tag.AT,        start: l.idx, end: l.idx}
     case '.': tkn = token{tag: tag.DOT,       start: l.idx, end: l.idx}
     case '"': return read_string(l)
+    case '+':
+        if peek_ch(l) == '+' {
+            tkn = token{tag: tag.ADDADD, start: l.idx, end: l.idx+1}
+        } else {
+            tkn = token{tag: tag.ADD, start: l.idx, end: l.idx}
+        }
+    case '-':
+        if peek_ch(l) == '-' {
+            tkn = token{tag: tag.SUBSUB, start: l.idx, end: l.idx+1}
+        } else {
+            tkn = token{tag: tag.SUB, start: l.idx, end: l.idx}
+        }
     case '|':
         if peek_ch(l) == '|' {
             tkn = token{tag: tag.LOR, start: l.idx, end: l.idx+1}
@@ -62,7 +72,7 @@ pub fn next_tkn(l *lexer) *lexer, token {
         if peek_ch(l) == '>' {
             tkn = token{tag: tag.RSH, start: l.idx, end: l.idx+1}
         } else if peek_ch(l) == '=' {
-            tkn = token{tag: tag.GEQ, start: l.idx, end: l.idx+1}
+            tkn = token{tag: tag.GTE, start: l.idx, end: l.idx+1}
         } else {
             tkn = token{tag: tag.GT, start: l.idx, end: l.idx}
         }
@@ -70,7 +80,7 @@ pub fn next_tkn(l *lexer) *lexer, token {
         if peek_ch(l) == '<' {
             tkn = token{tag: tag.LSH, start: l.idx, end: l.idx+1}
         } else if peek_ch(l) == '=' {
-            tkn = token{tag: tag.LEQ, start: l.idx, end: l.idx+1}
+            tkn = token{tag: tag.LTE, start: l.idx, end: l.idx+1}
         }  else {
             tkn = token{tag: tag.LT, start: l.idx, end: l.idx}
         }
@@ -140,19 +150,20 @@ fn read_string(l *lexer) *lexer, token {
     var l = l
     let idx = l.idx
 
-    var cnt = 0
     for l.idx < len(l.buf) {
         l = next_ch(l)
 
+        if l.idx >= len(l.buf) {
+            return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
+        }
+
         let ch = l.buf[l.idx]
         if ch == '"' {
-            cnt = cnt + 1
             break
         }
     }
     
-    let typ = if cnt == 1 { tag.STRING } else { tag.ILLEGAL }
-    return l, token{tag: typ, start: idx, end: l.idx}
+    return l, token{tag: tag.STRING, start: idx, end: l.idx}
 }
 
 fn read_multi_string(l *lexer) *lexer, token {
@@ -228,9 +239,11 @@ fn read_number(l *lexer) *lexer, token {
             break
         }
     }
-     if cnt > 1 {
+    if cnt > 1 {
         typ = tag.ILLEGAL
-    }  
+    } else if l.buf[l.idx-1] == '_' {
+        typ = tag.ILLEGAL
+    }
     
     let tkn = token{tag: typ, start: idx, end: l.idx-1}
     return l, tkn

@@ -1,21 +1,21 @@
 // contains the code to represent dash source as an AST
-// and helper methods to print the AST
+// and helper functions such as converting AST to string
 lib ast
 
 use "dash/lexer"
 
-pub let NULL_DATA = data{start: 0, end: 0}
+pub let NULL_DATA = data{x: 0, y: 0}
 
 // TODO: replace with column list
 pub struct ast {
-    src    string
+    src    []byte
     tkns   []token
     nodes  []node
-    // errs   []error
-    // extras []
+    errs   []error
+    extras []index
 }
 
-// index used to access nodes in the AST or extra data
+// index used to access nodes in the AST e.g. ast.nodes
 pub type index u32
 // index used to access lexed tokens e.g ast.tkns
 pub type token_index u32
@@ -27,56 +27,255 @@ pub struct token {
     start source_index
 }
 
-// stores data related to prefix, 
-// infix and postfix
-// use <string_literal>
-// pub <stmt> or <exp>
-// struct <name> <fields>
-// gen struct <name> <fields>
-// enum <name> <ident_list>
-// union <name> <ident_list>
-// error <name> or with params
-// fn
-// let, var
-// for 
-// try <exp>
-// catch
-// if <exp> else <exp>
-// if <exp> else if <exp>
-// fn_call1 <ident> <exp>
-// fn_calln <ident> <subrange>
-// index_exp
-// slice_exp
-// copy_exp <ident> 
-// copy_update <ident> <block>
-// use <ident> <block>
-// raise <exp>
-// defer <block> or <exp> 
-// match
-// return <exp_list>
-// { <stmt_list> }
-// <ident> <type> | <exp>
-// <ident>
-// <literal>
-// array_lit <subrange>
-// struct_lit
-pub struct data {
-    // can also refer to lhs
-    start index
-    // can als orefer to rhs
-    end   index
-}
-
-pub enum tag {
-    add
-}
-
+// represents AST node, used for all
+// statements and expressions
 pub struct node {
     tag   tag
     token token_index
     data  data
 }
 
-pub fn to_string(a ast) string {
-    return ""
+// data represents two indices
+// that can either point to nodes
+// e.g. in the case of infix operations
+// or to a range of nodes in extra
+// array. If it points to nodes in
+// extra array then the range is
+// inclusive i.e. y points to valid
+// node in nodes array
+pub struct data {
+    // can also refer to lhs
+    x index
+    // can als orefer to rhs
+    y index
+}
+
+pub enum tag {
+    ident
+    int
+    float
+    string
+    struct_lit
+    anon_struct_lit
+    array_lit
+    null_unwrap
+    address_of
+    value_of
+    // number ops
+    negate_num
+    add
+    sub
+    mul
+    div
+    mod
+    // binary ops
+    negate_byte
+    or
+    xor
+    and
+    andnot
+    lsh
+    rsh
+    lor
+    land
+    // boolean ops
+    negate_bool
+    eq
+    neq
+    gt
+    gte
+    lt
+    lte
+    dot
+    call
+    expr_list
+    index
+    slice
+    slice_idxs
+}
+
+pub fn literal_to_tag(t lexer.tag)! tag {
+    let ast_tag = match t {
+        case lexer.tag.IDENT: tag.ident
+        case lexer.tag.INT:   tag.int
+        case lexer.tag.FLOAT: tag.float
+        case lexer.tag.STRING: tag.string
+        case _: raise unknown_tag
+    }
+    return ast_tag    
+}
+
+pub fn prefix_to_tag(t lexer.tag)! tag {
+    let ast_tag = match t {
+        case lexer.tag.SUB: tag.negate_num
+        case lexer.tag.LNOT: tag.negate_bool
+        case lexer.tag.NOT: tag.negate_byte
+        case lexer.tag.QMARK: tag.null_unwrap
+        case lexer.tag.AND: tag.address_of
+        case lexer.tag.MUL: tag.value_of
+        case _: raise unknown_tag
+    }
+    return ast_tag
+}
+
+pub fn infix_to_tag(t lexer.tag)! tag {
+    let ast_tag = match t {
+        case lexer.tag.ADD: tag.add
+        case lexer.tag.SUB: tag.sub
+        case lexer.tag.MUL: tag.mul
+        case lexer.tag.DIV: tag.div
+        case lexer.tag.MOD: tag.mod
+        case lexer.tag.OR: tag.or
+        case lexer.tag.LOR: tag.lor
+        case lexer.tag.LAND: tag.land
+        case lexer.tag.XOR: tag.xor
+        case lexer.tag.AND: tag.and
+        case lexer.tag.ANDNOT: tag.andnot
+        case lexer.tag.LSH: tag.lsh
+        case lexer.tag.RSH: tag.rsh
+        case lexer.tag.LT:  tag.lt
+        case lexer.tag.GT:  tag.gt
+        case lexer.tag.GTE: tag.gte
+        case lexer.tag.LTE: tag.lte
+        case lexer.tag.EQ:  tag.eq
+        case lexer.tag.NEQ: tag.neq
+        case lexer.tag.DOT: tag.dot
+        case _: raise unknown_tag
+    }
+    return ast_tag
+}
+
+pub fn to_string(a ast, idx index, buf []byte)! []byte {
+    if idx == -1 {
+        return []
+    }
+
+    var buf = buf
+    let node = a.nodes[idx]
+
+    let data = node.data
+    match node.tag {
+    case tag.ident, tag.int, tag.float, tag.string:
+        let src_idx = a.tkns[node.token].start
+        let lit = get_variable_token(a.src, src_idx)
+        buf = append(buf, lit)
+
+    case tag.struct_lit:
+        buf = to_string(a, data.x, buf)
+        buf = to_string(a, data.y, buf)
+        
+    case tag.anon_struct_lit:
+        buf = append(buf, '{')
+        for i = data.x; i <= data.y; i = i+2 {
+            var ident_idx = a.extras[i]
+            buf = to_string(a, ident_idx, buf)
+            buf = append(buf, ':')
+            var exp_idx = a.extras[i+1]
+            buf = to_string(a, exp_idx, buf)
+            if i != data.y-1 {
+                buf = append(buf, ',')
+            }
+        }
+        buf = append(buf, '}')
+    case tag.array_lit:
+        buf = append(buf, '[')
+        for i = data.x; i <= data.y; i++ {
+            var ident_idx = a.extras[i]
+            buf = to_string(a, ident_idx, buf)
+            if i != data.y {
+                buf = append(buf, ',')
+            }
+        }
+        buf = append(buf, ']')
+
+    case tag.negate_num, tag.negate_bool,
+        tag.negate_byte, tag.null_unwrap,
+        tag.address_of, tag.value_of:
+        let src_idx = a.tkns[node.token].start
+        let op = a.src[src_idx]
+        buf = append(buf, op)        
+        buf = to_string(a, data.x, buf)
+
+    case tag.add, tag.sub, tag.mul,
+        tag.div, tag.mod, tag.or, tag.lor, tag.land,
+        tag.xor, tag.and, tag.andnot, tag.lsh, tag.rsh,
+        tag.lt, tag.gt, tag.lte, tag.gte, tag.eq, tag.neq:
+        buf = append(buf, '(')
+
+        buf = to_string(a, data.x, buf)
+
+        buf = append(buf, ' ')
+        let src_idx = a.tkns[node.token].start
+        let op = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, op)
+        buf = append(buf, ' ')
+
+        buf = to_string(a, data.y, buf)
+        buf = append(buf, ')')
+
+    case tag.dot:
+        buf = to_string(a, data.x, buf)
+        buf = append(buf, '.')
+        buf = to_string(a, data.y, buf)
+
+    case tag.call:
+        buf = to_string(a, data.x, buf)   
+        buf = append(buf, '(')
+        if data.y != -1 {
+            buf = to_string(a, data.y, buf)
+        } 
+        buf = append(buf, ')')
+
+    case tag.expr_list:
+        for i = data.x; i <= data.y; i++ {
+            let idx = a.extras[i]
+            buf = to_string(a, idx, buf)
+            if i != data.y {
+                buf = append(buf,',')
+            }
+        }
+    case tag.index:
+        buf = to_string(a, data.x, buf)   
+        buf = append(buf, '[')
+        buf = to_string(a, data.y, buf)
+        buf = append(buf, ']')
+
+    case tag.slice:
+        buf = to_string(a, data.x, buf)
+        buf = append(buf, '[')
+        buf = to_string(a, data.y, buf)
+        buf = append(buf, ']')
+
+    case tag.slice_idxs:
+        var idx = a.extras[data.x]
+        if idx != -1 {
+            buf = to_string(a, idx, buf)
+        }
+        buf = append(buf, ':')
+        idx = a.extras[data.y]
+        if idx != -1 {
+            buf = to_string(a, idx, buf)
+        }
+
+    case _: raise unknown_tag
+    }
+    return buf   
+}
+
+fn get_variable_token(src []byte, idx source_index) []byte {
+    var l = lexer.new(src, i64(idx))
+    l, let tkn = lexer.next_tkn(l)
+    return src[tkn.start:tkn.end+1]
+}
+
+fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
+    let size = match t {
+    case tag.lor, tag.land, tag.andnot, 
+         tag.lsh, tag.rsh,
+         tag.lte, tag.gte,
+         tag.eq, tag.neq: 2
+    case _: 1
+    }
+    let i = i64(idx)
+    return src[i:i+size]
 }

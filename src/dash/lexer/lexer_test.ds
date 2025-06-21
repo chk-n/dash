@@ -15,9 +15,9 @@ fn test_next_token()! {
         {"!=", tag.NEQ},
         {"=", tag.ASSGN},
         {">", tag.GT},
-        {">=", tag.GEQ},
+        {">=", tag.GTE},
         {"<", tag.LT},
-        {"<=", tag.LEQ},
+        {"<=", tag.LTE},
         {">>", tag.RSH},
         {"<<", tag.LSH},
         {"&", tag.AND},
@@ -94,7 +94,7 @@ fn test_string()! {
         {`""`, tag.STRING},                   
         {`"hello world"`, tag.STRING},        
         {`"hello\nworld"`, tag.STRING},       
-        // {`"`, tag.ILLEGAL},                   
+        {`"`, tag.ILLEGAL},                   
     ]
     
     for i = 0; i < len(tests); i++ {
@@ -120,6 +120,8 @@ fn test_number()! {
         {"123.", tag.FLOAT, "123."},                 
         {".123", tag.DOT, "."},               
         {"123.456.789", tag.ILLEGAL, "123.456."},        
+        {"123_", tag.ILLEGAL, "123_"},        
+        {"123__", tag.ILLEGAL, "123__"},        
         {"0..", tag.ILLEGAL, "0.."},
     ]
     
@@ -127,7 +129,7 @@ fn test_number()! {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
         let l, let tkn = next_tkn(l)
-        
+
         try assert(tkn.tag == tc.1, "token type mismatch")
 
         let lit = get_literal(l, tkn)
@@ -207,3 +209,4 @@ fn test_sequential()! {
         try assert(count == tc.1, "token count mismatch")
     }
 }
+

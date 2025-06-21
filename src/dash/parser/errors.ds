@@ -1,0 +1,29 @@
+lib parser
+
+use "dash/ast"
+// use "dash/lexer"
+// use "fmt"
+
+// invalid_token error should be used
+// when a token is encountered that is
+// not expected
+error invalid_token {
+    idx ast.token_index
+}
+
+error expected_expression {
+    idx ast.token_index
+}
+
+// fn error_to_string(tkns []ast.token, err error) string {
+//     match err = err {
+//     case unknown_token:
+//         let tkn = ast.token_to_string(tkns[err.idx])
+//         return fmt.stringf("unknown token: %s", tkn)
+//     case expected_expression:
+//         let tkn = ast.token_to_string(tkns[err.idx])
+//         return fmt.stringf("expected expression: %s", tkn)
+//     case _:
+//         // return fmt.stringf("%s", err)
+//     }
+// }
