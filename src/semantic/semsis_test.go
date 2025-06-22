@@ -1570,13 +1570,23 @@ func TestErrorStatement(t *testing.T) {
 		},
 		{
 			name:  "custom error constructor call with assignment to generic error",
-			input: "error custom_error{val i64} fn handle_error(err error) {} let e = custom_error(42) handle_error(e)",
-			want:  "lib main error custom_error{val i64} fn handle_error(err error) { } pub fn main() { let e custom_error = custom_error(42) handle_error(e) }",
+			input: "error custom_error{val i64} fn handle_error(err error) {} let e = custom_error{val: 42} handle_error(e)",
+			want:  "lib main error custom_error{val i64} fn handle_error(err error) { } pub fn main() { let e custom_error = custom_error{val i64: 42} handle_error(e) }",
 		},
 		{
 			name:  "custom error constructor call directly as function argument",
-			input: "error my_error{msg string} fn process_error(err error) {} process_error(my_error(\"test\"))",
-			want:  "lib main error my_error{msg string} fn process_error(err error) { } pub fn main() { process_error(my_error(\"test\")) }",
+			input: "error my_error{msg string} fn process_error(err error) {} process_error(my_error{msg: \"test\"})",
+			want:  "lib main error my_error{msg string} fn process_error(err error) { } pub fn main() { process_error(my_error{msg string: \"test\"}) }",
+		},
+		{
+			name:  "error with multiple fields using struct syntax",
+			input: "error validation_error{field string value i64} let e = validation_error{field: \"age\", value: -1}",
+			want:  "lib main error validation_error{field string, value i64} pub fn main() { let e validation_error = validation_error{field string: \"age\", value i64: -1} }",
+		},
+		{
+			name:  "raise error with struct syntax",
+			input: "error bounds_error{index i64 size i64} fn test()! { raise bounds_error{index: 10, size: 5} }",
+			want:  "lib main error bounds_error{index i64, size i64} fn test()! { raise bounds_error{index i64: 10, size i64: 5} } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)

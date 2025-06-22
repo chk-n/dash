@@ -456,6 +456,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			switch t := typ.(type) {
 			case *types.Struct:
 				structType = t
+			case *types.Error:
+				// Handle error types with struct-like syntax
+				s.analyseErrorStructLiteral(n, t)
+				return
 			case *types.Definition:
 				// for type definitions of structs we still want to be
 				// able to validate the usage. This is why we assign the
@@ -471,7 +475,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				return
 			default:
 				// TODO: improve error here
-				s.addError(n, errTypeMismatch("struct", typ.String()))
+				if typ == nil {
+					s.addError(n, errTypeMismatch("struct", "nil"))
+				} else {
+					s.addError(n, errTypeMismatch("struct", typ.String()))
+				}
 				return
 
 			}
@@ -852,9 +860,19 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		// TODO: check if try used with error-prone function
 		n.SetType(n.Right.Type())
 	case *ast.RaiseStatement:
-		if _, ok := s.fnSt.Get(n.Error.TokenLiteral()); !ok {
-			s.addError(n, errIdentifierNotFound(n.Error.String()))
-			return
+		switch exp := n.Error.(type) {
+		case *ast.StructLiteral:
+			s.analyse(exp, "")
+			if _, ok := s.varSt.Get(exp.Name.String()); !ok {
+				s.addError(n, errIdentifierNotFound(n.Error.String()))
+				return
+			}
+		case *ast.Identifier:
+			if _, ok := s.varSt.Get(exp.TokenLiteral()); !ok {
+				s.addError(n, errIdentifierNotFound(n.Error.String()))
+				return
+			}
+
 		}
 	case *ast.MatchExpressionStatement:
 
@@ -1373,6 +1391,9 @@ func (s *Semantics) analyseDuplicateIdentifiers(nodes []ast.Node) {
 		case *ast.EnumStatement:
 			name = stmt.Name.String()
 		case *ast.ErrorStatement:
+			if stmt == nil || stmt.Name == nil {
+				continue
+			}
 			name = stmt.Name.String()
 		case *ast.FunctionExpression:
 			name = stmt.Name.String()
@@ -1455,17 +1476,19 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 		case *ast.EnumStatement:
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
 		case *ast.ErrorStatement:
-			// Error constructors should be functions that return specific error types
-			argTypes := make([]types.TypeSpec, len(n.Params))
+			errorFields := make([]types.ErrorField, len(n.Params))
 			for i, param := range n.Params {
-				argTypes[i] = param.Type
+				errorFields[i] = types.ErrorField{
+					Name: param.Name.TokenLiteral(),
+					T:    param.Type,
+				}
 			}
-			errorType := &types.Error{Name: n.Name.TokenLiteral()}
-			fnType := &types.Function{
-				Arg: argTypes,
-				Ret: []types.TypeSpec{errorType},
+			err := &types.Error{
+				Name:   n.Name.TokenLiteral(),
+				Fields: errorFields,
 			}
-			s.fnSt.Set(n.Name.String(), &FnInfo{Type: fnType})
+			n.T = err
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
 		case *ast.AssignmentStatement:
 			// TODO
 		}
@@ -1614,6 +1637,18 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			n.T = &types.Union{Name: n.Name.String(), Ts: typs}
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
 			s.typeSt.Set(n.Name.String(), n.T)
+		case *ast.ErrorStatement:
+			for i, field := range n.T.Fields {
+				typ := s.inferUnknownNamedType(field.T)
+				if typ == nil {
+					s.addError(n.Params[i], errTypeNotFound(field.T.String()))
+					continue
+				}
+				// n.T.Fields[i].T = typ
+				field.T = typ
+			}
+			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
+			s.typeSt.Set(n.Name.String(), n.Type())
 		case *ast.FunctionExpression:
 			// TODO: add any remaining handling here
 
@@ -2128,12 +2163,72 @@ func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
 		return typeInfo.Type
 	case *types.ImportedNamed:
 		// resolve imported type
-		t.Typ = s.importedSt[t.Lib][t.Typ.Ident()]
+		typ, ok := s.importedSt[t.Lib][t.Typ.Ident()]
+		if !ok {
+			return nil
+		}
+		t.Typ = typ
 		return t
 	case nil:
 		return nil
 	}
 	return typ
+}
+
+func (s *Semantics) analyseErrorStructLiteral(n *ast.StructLiteral, errorType *types.Error) {
+	namedFields := 0
+	for _, f := range n.Fields {
+		if f.Name != nil {
+			namedFields++
+		}
+	}
+
+	if namedFields != 0 && namedFields != len(n.Fields) {
+		s.addError(n, errErrorMissingFields(errorType.Name))
+		return
+	}
+
+	fieldMap := make(map[string]bool)
+	for _, field := range errorType.Fields {
+		fieldMap[field.Name] = false
+	}
+
+	for i, f := range n.Fields {
+		s.analyse(f.Value, "")
+		f.T = f.Value.Type()
+
+		fieldName := f.Name.TokenLiteral()
+
+		var expectedType types.TypeSpec
+		found := false
+		for _, errorField := range errorType.Fields {
+			if errorField.Name == fieldName {
+				expectedType = errorField.T
+				found = true
+				fieldMap[fieldName] = true
+				break
+			}
+		}
+
+		if !found {
+			s.addError(n, errErrorUnknownField(errorType.Name, fieldName))
+			continue
+		}
+
+		if !types.CanCoalesce(f.T, expectedType) {
+			s.addError(n, errTypeMismatch(expectedType.String(), f.T.String()))
+		}
+
+		n.Fields[i].Index = i
+	}
+
+	for fieldName, provided := range fieldMap {
+		if !provided {
+			s.addError(n, errErrorFieldNotDefined(fieldName))
+		}
+	}
+
+	n.T = errorType
 }
 
 // ------- //

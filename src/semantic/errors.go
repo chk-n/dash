@@ -106,6 +106,19 @@ var (
 	}
 )
 
+// Error related
+var (
+	errErrorFieldNotDefined = func(fieldName string) error {
+		return fmt.Errorf("error field '%s' not defined", fieldName)
+	}
+	errErrorUnknownField = func(name, field string) error {
+		return fmt.Errorf("error '%s' has no field named '%s'", name, field)
+	}
+	errErrorMissingFields = func(structName string) error {
+		return fmt.Errorf("error '%s' has missing fields", structName)
+	}
+)
+
 // Struct definition related semantical errors
 var (
 	errStructNotFound = func(name string) error {

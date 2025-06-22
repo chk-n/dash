@@ -141,6 +141,19 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			errors: []string{"identifier 'one.next' not found"},
 		},
+		{
+			name: "error field with imported type",
+			input: `
+					lib one
+					pub type a i64
+					--
+					lib two
+					error abc {
+						x one.a
+					}
+				`,
+			want: "lib two error abc{x one.a}",
+		},
 	}
 
 	for _, tt := range tests {

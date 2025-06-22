@@ -528,8 +528,14 @@ func (t *Pointer) Equal(other TypeSpec) bool {
 	return t.T.Equal(otherPtr.T)
 }
 
-type Error struct {
+type ErrorField struct {
 	Name string
+	T    TypeSpec
+}
+
+type Error struct {
+	Name   string
+	Fields []ErrorField
 }
 
 func (t *Error) Type() TypeSpec { return t }
