@@ -2195,7 +2195,6 @@ func (s *Semantics) analyseErrorStructLiteral(n *ast.StructLiteral, errorType *t
 
 	for i, f := range n.Fields {
 		s.analyse(f.Value, "")
-		f.T = f.Value.Type()
 
 		fieldName := f.Name.TokenLiteral()
 
@@ -2215,8 +2214,16 @@ func (s *Semantics) analyseErrorStructLiteral(n *ast.StructLiteral, errorType *t
 			continue
 		}
 
-		if !types.CanCoalesce(f.T, expectedType) {
-			s.addError(n, errTypeMismatch(expectedType.String(), f.T.String()))
+		f.T = expectedType
+
+		// Validate value against expected type
+		switch f.Value.(type) {
+		case ast.Literal:
+			s.analyseExpressionType(f.Value, f.Value.Type(), expectedType)
+		default:
+			if !types.CanCoalesce(f.Value.Type(), expectedType) {
+				s.addError(n, errTypeMismatch(expectedType.String(), f.Value.Type().String()))
+			}
 		}
 
 		n.Fields[i].Index = i

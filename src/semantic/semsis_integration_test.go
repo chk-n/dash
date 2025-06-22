@@ -145,14 +145,17 @@ func TestImportLibrary(t *testing.T) {
 			name: "error field with imported type",
 			input: `
 					lib one
-					pub type a i64
+					pub type a u32
 					--
 					lib two
 					error abc {
 						x one.a
 					}
+					fn test()! {
+						raise abc{x: 1}
+					}
 				`,
-			want: "lib two error abc{x one.a}",
+			want: "lib two error abc{x one.a} fn test()! { raise abc{x one.a: 1} }",
 		},
 	}
 
