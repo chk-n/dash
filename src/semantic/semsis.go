@@ -1862,6 +1862,8 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			return false
 		}
 		return true
+	case *types.Any:
+		return true
 	}
 
 	switch lit := expr.(type) {

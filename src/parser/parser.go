@@ -148,6 +148,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.ERROR, p.parseTypeLiteral)
+	p.registerPrefix(token.ANYTYPE, p.parseTypeLiteral)
 	//
 	p.registerPrefix(token.TRY, p.parseTryExpression)
 
@@ -1280,7 +1281,8 @@ func (p *Parser) curTokenIsIdent() bool {
 	case token.INTTYPE, token.FLOATTYPE, token.STRINGTYPE, token.BOOLTYPE,
 		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
 		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
-		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE:
+		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE,
+		token.ANYTYPE:
 		return true
 	case token.LIBRARY, token.NEXT, token.BREAK:
 		return true
@@ -2236,7 +2238,8 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.IDENT ||
 		p.curToken.Type == token.OPTIONAL ||
 		p.curToken.Type == token.DIRTYTYPE ||
-		p.curToken.Type == token.ERROR
+		p.curToken.Type == token.ERROR ||
+		p.curToken.Type == token.ANYTYPE
 }
 
 func (p *Parser) curTokenIsConditionalStatement() bool {

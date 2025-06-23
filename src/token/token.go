@@ -47,7 +47,8 @@ const (
 	// ------------- //
 	// Type keywords //
 	// ------------- //
-
+	//any
+	ANYTYPE
 	// int
 	INTTYPE
 	// i8
@@ -290,6 +291,7 @@ var keywords = map[string]Type{
 	"null":  NULL,
 
 	// Types
+	"any":    ANYTYPE,
 	"int":    INTTYPE,
 	"i8":     I8TYPE,
 	"i16":    I16TYPE,

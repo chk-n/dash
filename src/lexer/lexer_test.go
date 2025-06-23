@@ -165,6 +165,7 @@ func TestNextToken(t *testing.T) {
 		{
 			name: "type keywords",
 			input: `
+				any
 				int
 				i8
 				i16
@@ -184,6 +185,7 @@ func TestNextToken(t *testing.T) {
 				mut
 			`,
 			tokens: []wantToken{
+				{"any", token.ANYTYPE},
 				{"int", token.INTTYPE},
 				{"i8", token.I8TYPE},
 				{"i16", token.I16TYPE},

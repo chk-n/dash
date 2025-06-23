@@ -1415,6 +1415,16 @@ func TestFunction(t *testing.T) {
 				let a, let b = func("h", false)`,
 			want: `lib main struct abc {x f64} type xyz fn(string,bool)i64,abc fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
 		},
+		{
+			name:  "pass literal to any",
+			input: "fn test(x any) {} test(1)",
+			want:  "lib main fn test(x any) { } pub fn main() { test(1) }",
+		},
+		{
+			name:  "pass identifier to any",
+			input: "fn test(x any) {} let x = 1.0 test(x)",
+			want:  "lib main fn test(x any) { } pub fn main() { let x f64 = 1.0 test(x) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }

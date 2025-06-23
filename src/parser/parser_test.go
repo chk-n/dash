@@ -102,6 +102,16 @@ func TestType(t *testing.T) {
 			input: "error",
 			want:  "error",
 		},
+		{
+			name:  "any",
+			input: "any",
+			want:  "any",
+		},
+		{
+			name:  "any array",
+			input: "[]any",
+			want:  "[]any",
+		},
 	}
 
 	for _, tc := range tests {

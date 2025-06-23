@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"maps"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -41,6 +42,11 @@ type Return struct {
 type Optional struct {
 	isValid bool
 	value   any
+}
+
+type Any struct {
+	descriptor uint32
+	value      any
 }
 
 type Union struct {
@@ -227,17 +233,9 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		}
 		return val
 
-	// case *ast.TypeLiteral:
-	// switch t := n.T.(type) {
-	// case *types.Int:
-	// 	return int64(0)
-	// case *types.Float:
-	// 	return float64(0)
-	// case *types.Struct:
-	// 	return "strct." + t.Name
-	// case *types.Error:
-	// 	return errors.New(t.Name)
-	// }
+	case *ast.TypeLiteral:
+		// for type literals in match expressions, return the type name
+		return n.String()
 	case *ast.StructLiteral:
 		return e.evalStructLiteral(n, ctx)
 	case *ast.ArrayLiteral:
@@ -300,11 +298,27 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	// evaluate arguments and set values in fresh symbol table
 	for i, arg := range n.Arguments {
 		fnArgName := fn.arguments[i].Name.Value
-		newCtx.Set(fnArgName, e.Eval(arg, stk))
+		argValue := e.Eval(arg, stk)
+
+		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
+			argValue = e.evalToAny(argValue)
+		}
+
+		newCtx.Set(fnArgName, argValue)
 	}
 	res := e.Eval(fn.body, newCtx)
-	if _, ok := res.(*Return); ok {
-		return res
+
+	if returnVal, ok := res.(*Return); ok {
+		// check if function has any return types that are 'any'
+		for i, retType := range n.ReturnTypes {
+			if _, isAnyType := retType.(*types.Any); isAnyType && i < len(returnVal.Values) {
+				// wrap return value in Any if not already
+				if _, isAlreadyAny := returnVal.Values[i].(*Any); !isAlreadyAny {
+					returnVal.Values[i] = e.evalToAny(returnVal.Values[i])
+				}
+			}
+		}
+		return returnVal
 	}
 	return &Return{Values: []any{res}}
 }
@@ -365,14 +379,31 @@ func (e *Evaluator) evalIntCast(t *types.Int, v any) any {
 	// 8, 9
 	case 8:
 		// return toUint8(v)
-	// 16, 17
-	// 32, 33
+	case 16:
+	case 17:
+	case 32:
+		return e.toUint32(v)
+	case 33:
 	case 64:
 		// toUint64()
 	case 65:
 		return e.toInt64(v)
 	}
 	panic("invalid int cast")
+}
+
+func (e *Evaluator) toUint32(v any) any {
+	switch v := v.(type) {
+	case byte:
+		return uint32(v)
+	case rune:
+		return uint32(v)
+	case int64:
+		return uint32(v)
+	case uint32:
+		return v
+	}
+	panic("invalid cast to u32")
 }
 
 func (e *Evaluator) toInt64(v any) any {
@@ -687,7 +718,31 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 
 	typ := types.GetUnderlyingType(n.Scrutinee.Type())
 	// TODO: handle multiple predicates in one case
-	if _, ok := typ.(*types.Union); ok {
+	if _, ok := typ.(*types.Any); ok {
+		// Handle matching against 'any' type
+		anyVal, ok := scrutinee.(*Any)
+		if !ok {
+			panic("matching against non-any type")
+		}
+
+		for _, c := range n.Cases {
+			// check each predicate in the case
+			for _, pred := range c.Predicates {
+				var typeName string
+				if typeLit, ok := pred.(*ast.TypeLiteral); ok {
+					// Use token literal for type literals to get actual type name
+					typeName = typeLit.TokenLiteral()
+				} else {
+					typeName = pred.String()
+				}
+				caseDescriptor := generateTypeDescriptor(typeName)
+
+				if caseDescriptor == anyVal.descriptor {
+					return e.evalMatchCase(c, stk)
+				}
+			}
+		}
+	} else if _, ok := typ.(*types.Union); ok {
 		unionVal, ok := scrutinee.(*Union)
 		if !ok {
 			panic("matching against non-union type")
@@ -1676,7 +1731,14 @@ func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Conte
 	// evaluate arguments and set values in fresh symbol table
 	for i, arg := range args {
 		fnArgName := fn.arguments[i].Name.Value
-		newCtx.Set(fnArgName, e.Eval(arg, ctx))
+		argValue := e.Eval(arg, ctx)
+
+		// Check if parameter type is 'any' and convert if needed
+		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
+			argValue = e.evalToAny(argValue)
+		}
+
+		newCtx.Set(fnArgName, argValue)
 	}
 	res := e.Eval(fn.body, newCtx)
 	if _, ok := res.(*Return); ok {
@@ -1698,6 +1760,38 @@ func generateTypeDescriptor(typeName string) uint32 {
 	hash := fnv.New32a()
 	hash.Write([]byte(typeName))
 	return hash.Sum32()
+}
+
+// convertGoTypeToDash converts Go type names to Dash type names
+func convertGoTypeToDash(goTypeName string) string {
+	switch goTypeName {
+	case "uint32":
+		return "u32"
+	case "uint64":
+		return "u64"
+	case "uint8":
+		return "u8"
+	case "uint16":
+		return "u16"
+	case "int64":
+		return "i64"
+	case "int32":
+		return "i32"
+	case "int16":
+		return "i16"
+	case "int8":
+		return "i8"
+	case "float64":
+		return "f64"
+	case "float32":
+		return "f32"
+	case "bool":
+		return "bool"
+	case "string":
+		return "string"
+	default:
+		return goTypeName
+	}
 }
 
 func unwrapFunctionResult(res any, idx int) any {
@@ -1722,6 +1816,26 @@ func castTo[T any](v any) (T, error) {
 		return val, fmt.Errorf("unable to cast %v to type", v)
 	}
 	return val, nil
+}
+
+// evalToAny converts a value to Any{} with type descriptor if not already Any
+func (e *Evaluator) evalToAny(v any) *Any {
+	if anyVal, ok := v.(*Any); ok {
+		return anyVal
+	}
+
+	if _, ok := v.(map[string]any); ok {
+		panic("structs are not supported in evalToAny")
+	}
+
+	goTypeName := reflect.TypeOf(v).String()
+	dashTypeName := convertGoTypeToDash(goTypeName)
+	descriptor := generateTypeDescriptor(dashTypeName)
+
+	return &Any{
+		descriptor: descriptor,
+		value:      v,
+	}
 }
 
 func valueToString(v any) string {

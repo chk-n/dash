@@ -60,6 +60,7 @@ var (
 	ConstString = String{}
 	ConstNull   = Null{}
 	ConstError  = Error{Name: "error"}
+	ConstAny    = Any{}
 )
 
 // ------------ //
@@ -910,6 +911,8 @@ func GetUnderlyingStructType(t Type) (*Struct, bool) {
 // type. For example if 'from' is type of a literal
 func CanCoalesce(from, to Type) bool {
 	switch from := from.(type) {
+	case *Any:
+		return true
 	case *Int:
 		switch to := to.(type) {
 		case *Dirty:
@@ -1304,6 +1307,8 @@ func TokenToType(tk token.Token) Type {
 		return &Dirty{}
 	case token.ERROR:
 		return &ConstError
+	case token.ANYTYPE:
+		return &ConstAny
 	}
 	panic("invalid token " + tk.Literal)
 }
