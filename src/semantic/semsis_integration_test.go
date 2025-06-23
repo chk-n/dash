@@ -186,7 +186,7 @@ func TestImportLibrary(t *testing.T) {
 			progs := strings.Split(tt.input, "--")
 
 			// parse and analyse leaf library
-			imports := make(map[string]map[string]types.TypeSpec)
+			imports := make(map[string]map[string]types.Type)
 			{
 				p := GetParser(progs[0])
 				ast := p.ParseLibrary()

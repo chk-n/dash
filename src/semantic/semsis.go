@@ -29,19 +29,19 @@ type FnInfo struct {
 }
 
 type VarInfo struct {
-	Type         types.TypeSpec
+	Type         types.Type
 	Reassignable bool
 }
 
 type TypeInfo struct {
-	Type types.TypeSpec
+	Type types.Type
 }
 
 type Semantics struct {
 	// Path to file being analysed
 	path string
 	// symbol table for externally referenced types, functions, variables etc.
-	importedSt map[string]map[string]types.TypeSpec
+	importedSt map[string]map[string]types.Type
 	// TODO: replace with varSt
 	// symbol table for functions
 	fnSt *internal.StackedSymTab[*FnInfo]
@@ -55,7 +55,7 @@ type Semantics struct {
 	// current function type being analysed
 	fnScope *internal.Stack[*types.Function]
 	// symbol table for custom types (type defs)
-	typeSt *internal.StackedSymTab[types.TypeSpec]
+	typeSt *internal.StackedSymTab[types.Type]
 	// TODO: store this info in type e.g. as guarded type
 	// tracks whether a given type is guarded so we
 	// can mark operations as dirty e.g. for use,
@@ -68,10 +68,10 @@ type SemanticalError struct {
 	Err error
 }
 
-func New(sourcePath string, importedSt map[string]map[string]types.TypeSpec) *Semantics {
+func New(sourcePath string, importedSt map[string]map[string]types.Type) *Semantics {
 	// convert all keys of importedSt from "../../lib_name" to "lib_name"
 	// so they can be accessed in semsis using semsis scope
-	normalizedImportedSt := make(map[string]map[string]types.TypeSpec)
+	normalizedImportedSt := make(map[string]map[string]types.Type)
 	for key, value := range importedSt {
 		normalizedKey := path.Base(key)
 		normalizedImportedSt[normalizedKey] = value
@@ -82,7 +82,7 @@ func New(sourcePath string, importedSt map[string]map[string]types.TypeSpec) *Se
 		varSt:       internal.NewStackedSymbolTable[*VarInfo](),
 		scope:       internal.NewStack[scope](),
 		fnScope:     internal.NewStack[*types.Function](),
-		typeSt:      internal.NewStackedSymbolTable[types.TypeSpec](),
+		typeSt:      internal.NewStackedSymbolTable[types.Type](),
 		guardedType: internal.NewCache[string, struct{}](),
 		importedSt:  normalizedImportedSt,
 	}
@@ -246,7 +246,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				s.addError(n, errIllegalTypeCast(from.String(), to.String()))
 				return
 			}
-			n.ReturnTypes = []types.TypeSpec{to}
+			n.ReturnTypes = []types.Type{to}
 		} else {
 			rts, ok := s.fnSt.Get(fnName)
 			if !ok {
@@ -350,7 +350,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			// we want to compare type by type and thus we need to
 			// extract multi types if a function call is returned
-			var typs []types.TypeSpec
+			var typs []types.Type
 			if mt, ok := retT.(*types.Multi); ok {
 				typs = append(typs, mt.Ts...)
 			} else {
@@ -374,9 +374,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		// - last value in block is an expreesion
 		// - type of last expression in each block is equal
 		if s.scope.GetLast() == ASSIGNMENT {
-			var prevT types.TypeSpec
+			var prevT types.Type
 			hasTypeMismatch := false
-			typs := make([]types.TypeSpec, len(n.Conditionals))
+			typs := make([]types.Type, len(n.Conditionals))
 			for i, cond := range n.Conditionals {
 				lastStmt := cond.Block.Statements[len(cond.Block.Statements)-1]
 				switch exp := lastStmt.(type) {
@@ -550,7 +550,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 				// Get type of the field as per struct definition
 				// We need to handle structs with named and unnamed fields
-				var fieldType types.TypeSpec
+				var fieldType types.Type
 				var err error
 				if f.Name != nil {
 					fieldType, _, err = structType.GetTypeByField(f.Name.TokenLiteral())
@@ -896,7 +896,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		for _, c := range n.Cases {
 			// Analyze each predicate in the case
-			var firstMatchingType types.TypeSpec
+			var firstMatchingType types.Type
 			for _, pred := range c.Predicates {
 				s.analyse(pred, "")
 				cT := pred.Type()
@@ -1185,7 +1185,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	}
 }
 
-func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expectedTs []types.TypeSpec) {
+func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expectedTs []types.Type) {
 	// Check arguments passed
 	if len(expectedTs) < len(n.Arguments) {
 		s.addError(n, errTooManyArguments(n.TokenLiteral()))
@@ -1337,7 +1337,7 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 
 }
 
-func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isReassignable bool) {
+func (s *Semantics) setDeclerationInSymTab(n string, t types.Type, isReassignable bool) {
 	_, isMutable := t.(*types.Mutable)
 	vi := &VarInfo{
 		Type:         t,
@@ -1348,7 +1348,7 @@ func (s *Semantics) setDeclerationInSymTab(n string, t types.TypeSpec, isReassig
 
 // Recursively removes types.Definition and *types.Dirty (where applicable e.g. not for 'validate')
 // to return the primitive type so it can be used with built in function.
-func (s *Semantics) coalesceTypeForBuiltIn(t types.TypeSpec, fnName string) types.TypeSpec {
+func (s *Semantics) coalesceTypeForBuiltIn(t types.Type, fnName string) types.Type {
 	switch t := t.(type) {
 	case *types.Definition:
 		return s.coalesceTypeForBuiltIn(t.Underlying, fnName)
@@ -1422,7 +1422,7 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 			for _, f := range n.Fields {
 				_, exists := s.varSt.Get(f.Type.Ident())
 
-				var fieldType types.TypeSpec
+				var fieldType types.Type
 				if !exists && !types.IsTypeIdent(f.Type.Ident()) {
 					fieldType = &types.UnknownNamed{Name: f.Type.Ident()}
 				} else {
@@ -1604,7 +1604,7 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
 			s.typeSt.Set(n.Name.String(), n.Type())
 		case *ast.UnionStatement:
-			typs := make([]types.TypeSpec, len(n.Types))
+			typs := make([]types.Type, len(n.Types))
 			for i, typ := range n.Types {
 				// if recursive def we already added error
 				// and skip any further checks
@@ -1673,7 +1673,7 @@ func (s *Semantics) getIdentFromPrefix(n ast.Node) *ast.Identifier {
 // struct: none
 // dirty<T>: checks underlying type
 // definition<T>: checks underlying type
-func validateOperator(t types.TypeSpec, tkn token.Type) bool {
+func validateOperator(t types.Type, tkn token.Type) bool {
 	if tkn == token.ASSIGN {
 		return true
 	}
@@ -1777,7 +1777,7 @@ func validateOperator(t types.TypeSpec, tkn token.Type) bool {
 // - validates named types exist in current scope
 // - sets function signature type in symbol table
 func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name string) {
-	argTypes := make([]types.TypeSpec, len(n.Arguments))
+	argTypes := make([]types.Type, len(n.Arguments))
 	for i := range n.Arguments {
 		arg := n.Arguments[i]
 		if arg.Type == nil {
@@ -1816,7 +1816,7 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 		argTypes[i] = arg.Type
 	}
 
-	retTypes := make([]types.TypeSpec, len(n.ReturnValues))
+	retTypes := make([]types.Type, len(n.ReturnValues))
 	// set types of named return arguments
 	for i, ret := range n.ReturnValues {
 		typ := s.inferUnknownNamedType(ret.T)
@@ -1852,7 +1852,7 @@ func (s *Semantics) isReassignable(ident string) bool {
 
 // Validates whether expr can be coerced into the targetType in the case
 // of literals or if there is an exact match for the remaining expressions
-func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.TypeSpec) bool {
+func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.Type) bool {
 
 	// special case handling for error and union types
 	switch targetType.(type) {
@@ -2091,7 +2091,7 @@ func (s *Semantics) addError(n ast.Node, err error) {
 	s.errors = append(s.errors, &SemanticalError{At: n, Err: err})
 }
 
-func (s *Semantics) inferUnknownNamedType(typ types.TypeSpec) types.TypeSpec {
+func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 	switch t := typ.(type) {
 	case *types.Dirty:
 		typ := s.inferUnknownNamedType(t.T)
@@ -2189,7 +2189,7 @@ func (s *Semantics) analyseErrorStructLiteral(n *ast.StructLiteral, errorType *t
 
 		fieldName := f.Name.TokenLiteral()
 
-		var expectedType types.TypeSpec
+		var expectedType types.Type
 		found := false
 		for _, errorField := range errorType.Fields {
 			if errorField.Name == fieldName {
@@ -2280,7 +2280,7 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 }
 
 // typesEqual compares two types for equality, handling mutable types properly
-func (s *Semantics) typesEqual(expected, actual types.TypeSpec) bool {
+func (s *Semantics) typesEqual(expected, actual types.Type) bool {
 	if expected.Equal(actual) {
 		return true
 	}
@@ -2301,15 +2301,15 @@ func (s *Semantics) typesEqual(expected, actual types.TypeSpec) bool {
 }
 
 // unwrapMutable unwraps Mutable types to their underlying types
-func (s *Semantics) unwrapMutable(t types.TypeSpec) types.TypeSpec {
+func (s *Semantics) unwrapMutable(t types.Type) types.Type {
 	if mutable, ok := t.(*types.Mutable); ok {
 		return mutable.T
 	}
 	return t
 }
 
-func getTypesFromExpressions(exps []ast.Expression) []types.TypeSpec {
-	types := make([]types.TypeSpec, len(exps))
+func getTypesFromExpressions(exps []ast.Expression) []types.Type {
+	types := make([]types.Type, len(exps))
 	for i, exp := range exps {
 		types[i] = exp.Type()
 	}

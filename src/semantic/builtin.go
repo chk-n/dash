@@ -18,22 +18,22 @@ func isBuiltinFunction(lit string) bool {
 
 // Constant argument and return types for built-in fns
 var (
-	intRetT     = []types.TypeSpec{&types.ConstI64}
-	genericArgT = []types.TypeSpec{&types.Generic{Name: "T"}}
+	intRetT     = []types.Type{&types.ConstI64}
+	genericArgT = []types.Type{&types.Generic{Name: "T"}}
 )
 
-func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionExpression {
-	var args []types.TypeSpec
-	var rets []types.TypeSpec
+func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpression {
+	var args []types.Type
+	var rets []types.Type
 	var errorProne bool
 
 	switch lit {
 	case "append":
-		args = []types.TypeSpec{argsTypes[0], argsTypes[1]}
-		rets = []types.TypeSpec{argsTypes[0]}
+		args = []types.Type{argsTypes[0], argsTypes[1]}
+		rets = []types.Type{argsTypes[0]}
 	case "len":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "len", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
 				&types.String{},
@@ -43,8 +43,8 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 
 		rets = intRetT
 	case "cap":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "cap", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
 				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
@@ -58,17 +58,17 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 	case "make":
 		// if initial value omitted, don't add third argument type
 		if len(argsTypes) < 3 {
-			args = []types.TypeSpec{&types.Type{T: argsTypes[0]}, &types.ConstI64}
+			args = []types.Type{argsTypes[0], &types.ConstI64}
 		} else {
-			args = []types.TypeSpec{&types.Type{T: argsTypes[0]}, &types.ConstI64, argsTypes[2]}
+			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
 		}
-		rets = []types.TypeSpec{&types.Mutable{T: argsTypes[0]}}
+		rets = []types.Type{&types.Mutable{T: argsTypes[0]}}
 	case "validate":
-		args = []types.TypeSpec{&types.Dirty{T: &types.Generic{Name: "T"}}}
-		rets = []types.TypeSpec{&types.ConstBool}
+		args = []types.Type{&types.Dirty{T: &types.Generic{Name: "T"}}}
+		rets = []types.Type{&types.ConstBool}
 	case "println":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.ConstString,
 				&types.Generic{Name: "T"},
 			}},
@@ -76,7 +76,7 @@ func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionEx
 	case "assert":
 		// builtin function that with type fn(bool, string)!
 		// it is error prone
-		args = []types.TypeSpec{&types.ConstBool, &types.ConstString}
+		args = []types.Type{&types.ConstBool, &types.ConstString}
 		errorProne = true
 	default:
 		return nil

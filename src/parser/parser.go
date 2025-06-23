@@ -1956,8 +1956,8 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 // Types //
 // ----- //
 
-func (p *Parser) parseType() types.TypeSpec {
-	var typ types.TypeSpec
+func (p *Parser) parseType() types.Type {
+	var typ types.Type
 	switch p.curToken.Type {
 	case token.OPTIONAL:
 		p.nextToken()
@@ -1986,7 +1986,7 @@ func (p *Parser) parseType() types.TypeSpec {
 }
 
 // []int, [10]int
-func (p *Parser) parseArrayType() types.TypeSpec {
+func (p *Parser) parseArrayType() types.Type {
 	p.nextToken()
 
 	typ := &types.Array{}
@@ -2008,7 +2008,7 @@ func (p *Parser) parseArrayType() types.TypeSpec {
 
 // ngl this feels like a really dirty fix to stay LL(1) and all because
 // we want array literals like this '[1,1,2]'
-func (p *Parser) parseArrayTypeSkipFirst() types.TypeSpec {
+func (p *Parser) parseArrayTypeSkipFirst() types.Type {
 	typ := &types.Array{}
 
 	if p.curTokenIs(token.INT) {
@@ -2075,7 +2075,7 @@ func (p *Parser) parseFunctionType() *types.Function {
 	panic("unreachable")
 }
 
-func (p *Parser) parsePrimitiveType() types.TypeSpec {
+func (p *Parser) parsePrimitiveType() types.Type {
 	if !p.curTokenIsType() {
 		return nil
 	}
@@ -2085,7 +2085,7 @@ func (p *Parser) parsePrimitiveType() types.TypeSpec {
 	return types.TokenToType(p.curToken)
 }
 
-func (p *Parser) parseImportedNamedType() types.TypeSpec {
+func (p *Parser) parseImportedNamedType() types.Type {
 	typ := &types.ImportedNamed{Lib: p.curToken.Literal}
 	p.nextToken()
 	// wat "." token
@@ -2095,7 +2095,7 @@ func (p *Parser) parseImportedNamedType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseUnknownNamedType() types.TypeSpec {
+func (p *Parser) parseUnknownNamedType() types.Type {
 	typ := &types.UnknownNamed{Name: p.curToken.Literal}
 
 	p.nextToken()
@@ -2106,7 +2106,7 @@ func (p *Parser) parseUnknownNamedType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parsePointerType() types.TypeSpec {
+func (p *Parser) parsePointerType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Pointer)
 	p.nextToken()
 
@@ -2114,7 +2114,7 @@ func (p *Parser) parsePointerType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseMutableType() types.TypeSpec {
+func (p *Parser) parseMutableType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Mutable)
 	p.nextToken()
 
@@ -2133,7 +2133,7 @@ func (p *Parser) parseMutableType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseDirtyType() types.TypeSpec {
+func (p *Parser) parseDirtyType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Dirty)
 	p.nextToken()
 

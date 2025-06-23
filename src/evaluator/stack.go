@@ -11,7 +11,7 @@ type Context struct {
 	imps *internal.Cache[string, *ast.Library]
 	// Keeps track of all type defs, aliases, unions, and structs
 	// available in current context
-	typs *internal.Cache[string, types.TypeSpec]
+	typs *internal.Cache[string, types.Type]
 	// stores variables, function closures, functions
 	vars *internal.StackedSymTab[any]
 	prev *Context
@@ -22,7 +22,7 @@ func NewContext(prev *Context) *Context {
 		imps: internal.NewCache[string, *ast.Library](),
 		vars: internal.NewStackedSymbolTable[any](),
 		prev: prev,
-		typs: internal.NewCache[string, types.TypeSpec](),
+		typs: internal.NewCache[string, types.Type](),
 	}
 }
 
@@ -31,7 +31,7 @@ func NewContextWith(prev *Context, imps *internal.Cache[string, *ast.Library]) *
 		imps: imps,
 		vars: internal.NewStackedSymbolTable[any](),
 		prev: prev,
-		typs: internal.NewCache[string, types.TypeSpec](),
+		typs: internal.NewCache[string, types.Type](),
 	}
 }
 

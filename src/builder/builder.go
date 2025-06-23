@@ -138,7 +138,7 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 
 		// extract all global exported types from imported libs
 		// and create a map for semsis
-		typeTable := make(map[string]map[string]types.TypeSpec)
+		typeTable := make(map[string]map[string]types.Type)
 		for _, n := range lib.Nodes {
 			switch n := n.(type) {
 			case *ast.UseStatement:

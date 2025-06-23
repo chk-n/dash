@@ -63,7 +63,7 @@ func TestEvalLibrary(t *testing.T) {
 
 			libs := make(map[string]*ast.Library)
 			// parse and analyse leaf library
-			imports := make(map[string]map[string]types.TypeSpec)
+			imports := make(map[string]map[string]types.Type)
 			{
 				p := getParser(progs[0])
 				lib := p.ParseLibrary()
