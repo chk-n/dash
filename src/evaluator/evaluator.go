@@ -1,7 +1,6 @@
 package evaluator
 
 import (
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -24,7 +23,8 @@ const (
 )
 
 type Error struct {
-	Err string
+	descriptor uint32
+	Err        string
 	// optional
 	Args []struct {
 		// field name
@@ -70,12 +70,11 @@ func New(libs map[string]*ast.Library) *Evaluator {
 	}
 }
 
-func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
-
+func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 	// For all imports of current library ensure
 	// context is aware of imports and initialise
 	// those imported libraries if not already done
-	for _, n := range n.Nodes {
+	for _, n := range lib.Nodes {
 		imp, ok := n.(*ast.UseStatement)
 		if !ok {
 			continue
@@ -97,7 +96,7 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 	}
 
 	// initialise types
-	for _, n := range n.Nodes {
+	for _, n := range lib.Nodes {
 		switch n := n.(type) {
 		case *ast.UnionStatement:
 			ctx.typs.Set(n.Name.TokenLiteral(), n.T)
@@ -110,7 +109,13 @@ func (e *Evaluator) InitialiseLib(n *ast.Library, ctx *Context) {
 		case *ast.EnumStatement:
 			e.initialiseEnumStatement(n, ctx)
 		case *ast.ErrorStatement:
-			ctx.Set(n.Name.String(), n)
+			typeName := lib.Name.String() + "." + n.Name.String()
+			typeDesc := generateTypeDescriptor(typeName)
+			err := &Error{
+				descriptor: typeDesc,
+				Err:        typeName,
+			}
+			ctx.Set(n.Name.String(), err)
 		case *ast.AssignmentStatement:
 			e.evalAssignmentStatement(n, ctx)
 		case *ast.FunctionExpression:
@@ -325,10 +330,11 @@ func (e *Evaluator) evalErrorConstructor(n *ast.ErrorStatement, args []ast.Expre
 			}
 		}
 	}
-
+	typeDesc := generateTypeDescriptor(n.Name.Value)
 	return &Return{Values: []any{&Error{
-		Err:  n.Name.Value,
-		Args: errorArgs,
+		descriptor: typeDesc,
+		Err:        n.Name.Value,
+		Args:       errorArgs,
 	}}}
 }
 
@@ -347,8 +353,6 @@ func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Conte
 		return e.evalStringCast(t, val)
 	case *types.Array:
 		return e.evalArrayCast(t, val)
-	case *types.Error:
-		return e.evalErrorCast(t, val)
 
 	}
 	return val
@@ -447,18 +451,6 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 		return newArr
 	}
 	panic("invalid array cast")
-}
-
-// Error casting
-
-func (e *Evaluator) evalErrorCast(t *types.Error, v any) any {
-	switch val := v.(type) {
-	case string:
-		return errors.New(val)
-	case *Error:
-		return errors.New(val.Err)
-	}
-	panic("this is a compiler error. please report")
 }
 
 // always returns nil
@@ -693,23 +685,38 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 	stk.Scope()
 	defer stk.Unscope()
 
+	typ := types.GetUnderlyingType(n.Scrutinee.Type())
 	// TODO: handle multiple predicates in one case
-	if _, ok := n.Scrutinee.Type().(*types.Union); ok {
+	if _, ok := typ.(*types.Union); ok {
 		unionVal, ok := scrutinee.(*Union)
 		if !ok {
 			panic("matching against non-union type")
 		}
 
 		for _, c := range n.Cases {
-			// Check each predicate in the case
+			// check each predicate in the case
 			for _, pred := range c.Predicates {
-				// Get type name from predicate
 				typeName := pred.String()
-				// Hash it for comparison
 				caseDescriptor := generateTypeDescriptor(typeName)
 
-				// Match descriptors
 				if caseDescriptor == unionVal.descriptor {
+					return e.evalMatchCase(c, stk)
+				}
+			}
+		}
+	} else if _, ok := typ.(*types.Error); ok {
+		errVal, ok := scrutinee.(*Error)
+		if !ok {
+			panic("matching against non-union type")
+		}
+
+		for _, c := range n.Cases {
+			// check each predicate in the case
+			for range c.Predicates {
+				typeName := errVal.Err
+				caseDescriptor := generateTypeDescriptor(typeName)
+
+				if caseDescriptor == errVal.descriptor {
 					return e.evalMatchCase(c, stk)
 				}
 			}
@@ -749,7 +756,6 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 	var exp any
 	for _, stmt := range n.Statements {
 		exp = e.Eval(stmt, stk)
-
 		// We stop execution only in 3 circumstances
 		// because of a return statement, break/next
 		// statement or because of an error due to "try"
@@ -1410,12 +1416,12 @@ func (e *Evaluator) evalInfixPipe(l, r any, ctx *Context) any {
 	case *ast.Identifier:
 		fnVal, ok := ctx.Get(rightExpr.Value)
 		if !ok {
-			return &Error{Err: fmt.Sprintf("undefined function: %s", rightExpr.Value)}
+			panic("this is a compiler error. please report")
 		}
 
 		fn, ok := fnVal.(*Function)
 		if !ok {
-			return &Error{Err: fmt.Sprintf("%s is not a function", rightExpr.Value)}
+			panic("this is a compiler error. please report")
 		}
 
 		newCtx := NewContext(fn.ctx)
@@ -1494,7 +1500,8 @@ func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 	ret := res.(*Return)
 	if len(ret.Values) > 0 {
 		if err, ok := ret.Values[0].(*Error); ok {
-			newErr := &Error{Err: err.Err}
+			typeDesc := generateTypeDescriptor(err.Err)
+			newErr := &Error{descriptor: typeDesc, Err: err.Err}
 			return &Return{Values: []any{newErr}}
 		}
 	}
@@ -1517,7 +1524,8 @@ func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any 
 
 	// Return an Error that represents the raised error
 	// This Error will be caught by try/catch blocks up the stack
-	return &Return{Values: []any{&Error{Err: errName}}}
+	typeDesc := generateTypeDescriptor(errName)
+	return &Return{Values: []any{&Error{descriptor: typeDesc, Err: errName}}}
 }
 
 // ------------------ //
@@ -1613,7 +1621,8 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 
 	if !cond {
 		msg := e.Eval(args[1], ctx).(string)
-		return &Return{Values: []any{&Error{Err: msg}}}
+		typeDesc := generateTypeDescriptor("std.assert")
+		return &Return{Values: []any{&Error{descriptor: typeDesc, Err: msg}}}
 	}
 	return nil
 }

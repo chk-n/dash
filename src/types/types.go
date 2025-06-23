@@ -548,6 +548,11 @@ func (t *Error) Equal(other TypeSpec) bool {
 	if !ok {
 		return false
 	}
+	if t.Name == "error" {
+		return true
+	} else if otherErr.Name == "error" {
+		return true
+	}
 	return t.Name == otherErr.Name
 }
 
@@ -745,6 +750,9 @@ func (t *ImportedNamed) Ident() string {
 	return t.Lib + "." + t.Typ.Ident()
 }
 func (t *ImportedNamed) String() string {
+	if t.Typ == nil {
+		return t.Lib + ".<nil>"
+	}
 	return t.Lib + "." + t.Typ.String()
 }
 func (t *ImportedNamed) Equal(other TypeSpec) bool {
@@ -1197,9 +1205,21 @@ func CanCoalesce(from, to TypeSpec) bool {
 		}
 		return false
 	case *Error:
+		_, ok := to.(*Error)
+		return ok
+	case *Union:
+		for _, t := range from.Ts {
+			if CanCoalesce(t, to) {
+				return true
+			}
+		}
+		return false
+	case *Optional:
 		switch to := to.(type) {
-		case *Error:
-			return from.Name == to.Name
+		case *Optional:
+			return CanCoalesce(from.T, to.T)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return false
 	case *Null:

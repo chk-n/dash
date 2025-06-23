@@ -1103,14 +1103,33 @@ func TestMatchExpressionStatement(t *testing.T) {
 		// NOTE: maybe we change semsis to issue a warning that case -1 is impossible
 		// due to 'y' being unsigned even if u8 can be coalesced to i64.
 		{
-			name:  "int, cases out of bounds for type",
-			input: `let x = u8(1) let y = match x { case 256: 0 case -1: 1 }`,
-			want:  "lib main pub fn main() { let x u8 = u8(1) let y i64 = match x { case 256: 0 case -1: 1 } }",
+			name:   "int, cases out of bounds for type",
+			input:  `let x = u8(1) let y = match x { case 256: 0 case -1: 1 }`,
+			errors: []string{"integer literal '256' overflows 'u8'"},
 		},
 		{
 			name:  "byte with char literals",
 			input: "let b = byte(0) match b { case '0': let c = b }",
 			want:  "lib main pub fn main() { let b byte = byte(0) match b { case '0': let c char = b } }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestMatchErrorStatement(t *testing.T) {
+	tests := []testCase{
+		{
+			name: "simple match error",
+			input: `
+				error one
+				fn test(err error) i64 {
+					return match err {
+					case one: 1
+					case _: -1
+					}
+				}
+			`,
+			want: "lib main error one fn test(err error) i64 { return match err { case one: 1 case _: -1 } } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)

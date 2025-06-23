@@ -9,7 +9,7 @@ import (
 	"dash-lang.io/src/types"
 )
 
-func TestEval(t *testing.T) {
+func TestEvalLibrary(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -33,6 +33,27 @@ func TestEval(t *testing.T) {
 			want: map[string]any{
 				"x": int64(5),
 			},
+		},
+		{
+			name: "match error",
+			input: `
+				lib one
+				pub error a {
+					x i64
+				}
+				pub error b
+				--
+				use "one"
+				
+				fn test(err error) i64 {
+					return match err {
+					case one.a: 1
+					case one.b: 2
+					}
+				}
+				test(one.a)
+			`,
+			want: &Return{Values: []any{int64(1)}},
 		},
 	}
 

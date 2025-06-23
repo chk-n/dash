@@ -157,6 +157,28 @@ func TestImportLibrary(t *testing.T) {
 				`,
 			want: "lib two error abc{x one.a} fn test()! { raise abc{x one.a: 1} }",
 		},
+		{
+			name: "match error",
+			input: `
+				lib one
+				pub error a
+				pub error b
+				--
+				lib two
+				
+				fn test(err error) i64 {
+					return match err {
+					case one.a: 1
+					case one.b: 2
+					}
+				}
+
+				fn main() {
+					test(one.a)
+				}
+			`,
+			want: "lib two fn test(err error) i64 { return match err { case one.a: 1 case one.b: 2 } } pub fn main() { test(one.a) }",
+		},
 	}
 
 	for _, tt := range tests {

@@ -1035,16 +1035,6 @@ func TestTypeCasting(t *testing.T) {
 			y`,
 			want: []byte{104, 101, 108, 108, 111},
 		},
-		{
-			name: "error type cast from string variable",
-			prog: `let x = "test error" error(x)`,
-			want: errors.New("test error"), // TODO: should be map with type desc
-		},
-		{
-			name: "error type cast from string literal",
-			prog: `error("test error")`,
-			want: errors.New("test error"), // TODO: should be map with type desc
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1367,6 +1357,21 @@ func TestMatchStatement(t *testing.T) {
 				test()
 			`,
 			want: &Return{Values: []any{&Error{Err: "some_err"}}},
+		},
+		{
+			name: "match error",
+			prog: `
+				error one
+				error two
+				fn test(err error) i64 {
+					return match err {
+					case one: 1
+					case two: 2
+					}
+				}
+				test(one)
+			`,
+			want: &Return{Values: []any{int64(1)}},
 		},
 	}
 

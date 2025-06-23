@@ -903,9 +903,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				if cT == nil {
 					continue
 				}
-				isLiteral := ast.IsLiteral(pred)
-				if !validateMatchCaseType(sT, cT, isLiteral) {
-					s.addError(c, errTypeMismatch(sT.String(), cT.String()))
+				if !s.analyseExpressionType(pred, pred.Type(), sT) {
 					continue
 				}
 				// As the types match, we can replace type of predicate.
@@ -1219,15 +1217,7 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 			}
 			continue
 		} else {
-			switch arg.(type) {
-			case ast.Literal:
-				s.analyseExpressionType(arg, arg.Type(), expectedType)
-			default:
-				if !s.typesEqual(expectedType, arg.Type()) {
-					s.addError(arg, errTypeMismatch(expectedType.String(), arg.Type().String()))
-					return
-				}
-			}
+			s.analyseExpressionType(arg, arg.Type(), expectedType)
 		}
 
 	}
@@ -1671,23 +1661,6 @@ func (s *Semantics) getIdentFromPrefix(n ast.Node) *ast.Identifier {
 	return nil
 }
 
-func validateMatchCaseType(sT, cT types.TypeSpec, isCtLiteral bool) bool {
-	if isCtLiteral {
-		return types.CanCoalesce(sT, cT)
-	}
-	switch sT := sT.(type) {
-	case *types.Union:
-		for _, t := range sT.Ts {
-			if validateMatchCaseType(t, cT, isCtLiteral) {
-				return true
-			}
-		}
-		return false
-	default:
-		return sT.Equal(cT)
-	}
-}
-
 // NOTE: does not validate assignment!!
 // int: +, -, *, /, %, <, <=, >=, >, ==, !=
 // float: +, -, *, /, <, <=, >=, >, ==, !=
@@ -1880,6 +1853,17 @@ func (s *Semantics) isReassignable(ident string) bool {
 // Validates whether expr can be coerced into the targetType in the case
 // of literals or if there is an exact match for the remaining expressions
 func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.TypeSpec) bool {
+
+	// special case handling for error and union types
+	switch targetType.(type) {
+	case *types.Error, *types.Union:
+		if !types.CanCoalesce(exprType, targetType) {
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
+		}
+		return true
+	}
+
 	switch lit := expr.(type) {
 	case *ast.PrefixExpression:
 		if ast.IsLiteral(lit.Right) {
@@ -1918,6 +1902,13 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	case *ast.Identifier:
+		if _, ok := targetType.(*types.Optional); ok {
+			if !types.CanCoalesce(exprType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+			return true
+		}
 		// we want to treat function values are literals
 		if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
 			if !types.CanCoalesce(exprType, targetType) {
