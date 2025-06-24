@@ -1390,6 +1390,10 @@ func (e *Evaluator) evalInfixEqual(l, r any) any {
 				return false
 			}
 
+			if lErr.Err != rErr.Err {
+				return false
+			}
+
 			if len(lErr.Args) != len(rErr.Args) {
 				return false
 			}
