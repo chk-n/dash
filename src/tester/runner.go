@@ -1,7 +1,6 @@
 package tester
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 type TestResult struct {
 	Name     string
 	Duration time.Duration
-	Error    error
+	Error    string
 	Passed   bool
 }
 
@@ -106,7 +105,7 @@ func (tr *TestRunner) runTest(fn *ast.FunctionExpression, eval *evaluator.Evalua
 		if err == nil {
 			result.Passed = true
 		} else if err, ok := err.(*evaluator.Error); ok {
-			result.Error = errors.New(err.Err)
+			result.Error = err.String()
 			result.Passed = false
 		}
 	}

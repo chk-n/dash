@@ -1540,7 +1540,7 @@ func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 	if len(ret.Values) > 0 {
 		if err, ok := ret.Values[0].(*Error); ok {
 			typeDesc := generateTypeDescriptor(err.Err)
-			newErr := &Error{descriptor: typeDesc, Err: err.Err}
+			newErr := &Error{descriptor: typeDesc, Err: err.Err, Args: err.Args}
 			return &Return{Values: []any{newErr}}
 		}
 	}
@@ -1552,19 +1552,10 @@ func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any 
 	// Evaluate the error expression to get the actual error value/name
 	errVal := e.Eval(n.Error, ctx)
 
-	// If it's a simple error identifier, use its string representation directly
-	var errName string
-	switch err := errVal.(type) {
-	case *ast.Identifier:
-		errName = err.Value
-	default:
-		errName = n.Error.String()
+	if _, ok := errVal.(*Error); !ok {
+		panic("this is a compiler error. please report")
 	}
-
-	// Return an Error that represents the raised error
-	// This Error will be caught by try/catch blocks up the stack
-	typeDesc := generateTypeDescriptor(errName)
-	return &Return{Values: []any{&Error{descriptor: typeDesc, Err: errName}}}
+	return &Return{Values: []any{errVal}}
 }
 
 // ------------------ //
@@ -1822,6 +1813,29 @@ func (e *Evaluator) evalToAny(v any) *Any {
 	}
 }
 
+// converts an Error to a string representation
+func (e *Error) String() string {
+	var b strings.Builder
+	b.WriteString(e.Err)
+
+	if len(e.Args) > 0 {
+		b.WriteString("{")
+		first := true
+		for k, v := range e.Args {
+			if !first {
+				b.WriteString(", ")
+			}
+			b.WriteString(k)
+			b.WriteString(": ")
+			b.WriteString(valueToString(v))
+			first = false
+		}
+		b.WriteString("}")
+	}
+
+	return b.String()
+}
+
 func valueToString(v any) string {
 	switch v := v.(type) {
 	case string:
@@ -1832,6 +1846,8 @@ func valueToString(v any) string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(v)
+	case *Error:
+		return v.String()
 	case []any:
 		var b strings.Builder
 		b.WriteString("[")
