@@ -27,12 +27,7 @@ type Error struct {
 	descriptor uint32
 	Err        string
 	// optional
-	Args []struct {
-		// field name
-		name string
-		// argument value
-		val any
-	}
+	Args map[string]any
 }
 
 type Return struct {
@@ -286,11 +281,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	_fn, ok := stk.Get(n.TokenLiteral())
 	fn, ok := _fn.(*Function)
 	if !ok {
-		errStmt, ok := _fn.(*ast.ErrorStatement)
-		if !ok {
-			panic("not a function: " + n.TokenLiteral())
-		}
-		return e.evalErrorConstructor(errStmt, n.Arguments, stk)
+		panic("not a function: " + n.TokenLiteral())
 	}
 
 	newCtx := NewContext(fn.ctx)
@@ -321,35 +312,6 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		return returnVal
 	}
 	return &Return{Values: []any{res}}
-}
-
-func (e *Evaluator) evalErrorConstructor(n *ast.ErrorStatement, args []ast.Expression, ctx *Context) any {
-	// Create an Error with the error name and field mappings
-	errorArgs := make([]struct {
-		name string
-		val  any
-	}, len(n.Params))
-
-	// Evaluate each argument and map it to the corresponding parameter name
-	for i, param := range n.Params {
-		if i < len(args) {
-			paramName := param.Name.Value
-			evaluatedArg := e.Eval(args[i], ctx)
-			errorArgs[i] = struct {
-				name string
-				val  any
-			}{
-				name: paramName,
-				val:  evaluatedArg,
-			}
-		}
-	}
-	typeDesc := generateTypeDescriptor(n.Name.Value)
-	return &Return{Values: []any{&Error{
-		descriptor: typeDesc,
-		Err:        n.Name.Value,
-		Args:       errorArgs,
-	}}}
 }
 
 // The goal of type casts for now is to only support the minimum number of operations
@@ -1192,7 +1154,7 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 	case token.EQ:
 		val = e.evalInfixEqual(l, r)
 	case token.NEQ:
-		val = e.evalInfixNotEqual(l, r)
+		val = !(e.evalInfixEqual(l, r).(bool))
 	// Optional
 	case token.NULL_COALESCE:
 		val = e.evalInfixNullCoalesce(l, r)
@@ -1418,17 +1380,33 @@ func (e *Evaluator) evalInfixEqual(l, r any) any {
 	if r_, ok := r.(Optional); ok {
 		r = r_.value
 	}
-	return l == r
-}
 
-func (e *Evaluator) evalInfixNotEqual(l, r any) any {
-	if l_, ok := l.(Optional); ok {
-		l = l_.value
+	// special handling for errors,
+	// where we compare type descriptor
+	// and then field by field
+	if lErr, ok := l.(*Error); ok {
+		if rErr, ok := r.(*Error); ok {
+			if lErr.descriptor != rErr.descriptor {
+				return false
+			}
+
+			if len(lErr.Args) != len(rErr.Args) {
+				return false
+			}
+
+			for k := range lErr.Args {
+				if !(e.evalInfixEqual(lErr.Args[k], rErr.Args[k]).(bool)) {
+					return false
+				}
+			}
+			return true
+		}
+		return false
 	}
-	if r_, ok := r.(Optional); ok {
-		r = r_.value
+	if _, ok := r.(*Error); ok {
+		return false
 	}
-	return l != r
+	return l == r
 }
 
 func (e *Evaluator) evalInfixNullCoalesce(l, r any) any {
@@ -1522,7 +1500,7 @@ func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context
 // Literals //
 // -------- //
 
-func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) map[string]any {
+func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 	strct := make(map[string]any)
 
 	for _, field := range n.Fields {
@@ -1537,6 +1515,12 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) map[st
 		// Unwrap Return structs to get the actual value
 		val = unwrapFunctionResult(val, 0)
 		strct[name] = val
+	}
+	if _, ok := n.T.(*types.Error); ok {
+		return &Error{
+			Err:  n.Name.String(),
+			Args: strct,
+		}
 	}
 	return strct
 }

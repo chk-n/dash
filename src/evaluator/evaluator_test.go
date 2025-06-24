@@ -1987,6 +1987,53 @@ func NewEvaluator() *Evaluator {
 	}
 }
 
+func TestErrorComparison(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "error equality with fields",
+			prog: `
+			error test_error{code i64 msg string}
+			fn test(e1 error) bool {
+				return e1 == e1
+			}
+			let x = test(test_error{code: 404, msg: "not found"})
+			x`,
+			want: true,
+		},
+		{
+			name: "error inequality",
+			prog: `
+			error error_one
+			error error_two
+			fn test(e1, e2 error) bool {
+				return e1 != e2
+			}
+			let x =test(error_one, error_two)
+			x`,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func deepEqual(a, b any) bool {
 	switch a := a.(type) {
 	case []uint8:

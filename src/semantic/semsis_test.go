@@ -1617,6 +1617,16 @@ func TestErrorStatement(t *testing.T) {
 			input: "error bounds_error{index i64 size i64} fn test()! { raise bounds_error{index: 10, size: 5} }",
 			want:  "lib main error bounds_error{index i64, size i64} fn test()! { raise bounds_error{index i64: 10, size i64: 5} } pub fn main() { }",
 		},
+		{
+			name:  "error equality comparison",
+			input: "error test_error fn test(e1 error, e2 error) bool { return e1 == e2 }",
+			want:  "lib main error test_error fn test(e1 error,e2 error) bool { return (e1 == e2) } pub fn main() { }",
+		},
+		{
+			name:  "error inequality comparison",
+			input: "error custom_err{val i64} fn test(e1 custom_err, e2 error) bool { return e1 != e2 }",
+			want:  "lib main error custom_err{val i64} fn test(e1 custom_err,e2 error) bool { return (e1 != e2) } pub fn main() { }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }

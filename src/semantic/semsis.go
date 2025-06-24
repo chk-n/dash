@@ -1466,6 +1466,9 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 		case *ast.EnumStatement:
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
 		case *ast.ErrorStatement:
+			if n == nil {
+				continue
+			}
 			errorFields := make([]types.ErrorField, len(n.Params))
 			for i, param := range n.Params {
 				errorFields[i] = types.ErrorField{
@@ -1628,14 +1631,16 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.T})
 			s.typeSt.Set(n.Name.String(), n.T)
 		case *ast.ErrorStatement:
+			if n == nil {
+				continue
+			}
 			for i, field := range n.T.Fields {
 				typ := s.inferUnknownNamedType(field.T)
 				if typ == nil {
 					s.addError(n.Params[i], errTypeNotFound(field.T.String()))
 					continue
 				}
-				// n.T.Fields[i].T = typ
-				field.T = typ
+				n.T.Fields[i].T = typ
 			}
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
 			s.typeSt.Set(n.Name.String(), n.Type())
@@ -1751,6 +1756,13 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 			return false
 		}
 	case *types.Pointer:
+		switch tkn {
+		case token.EQ, token.NEQ:
+			return true
+		default:
+			return false
+		}
+	case *types.Error:
 		switch tkn {
 		case token.EQ, token.NEQ:
 			return true
