@@ -95,18 +95,17 @@ pub enum tag {
 }
 
 pub fn literal_to_tag(t lexer.tag)! tag {
-    let ast_tag = match t {
+    return match t {
         case lexer.tag.IDENT: tag.ident
         case lexer.tag.INT:   tag.int
         case lexer.tag.FLOAT: tag.float
         case lexer.tag.STRING: tag.string
         case _: raise unexpected_tag
     }
-    return ast_tag    
 }
 
 pub fn prefix_to_tag(t lexer.tag)! tag {
-    let ast_tag = match t {
+    return match t {
         case lexer.tag.SUB: tag.negate_num
         case lexer.tag.LNOT: tag.negate_bool
         case lexer.tag.NOT: tag.negate_byte
@@ -115,11 +114,10 @@ pub fn prefix_to_tag(t lexer.tag)! tag {
         case lexer.tag.MUL: tag.value_of
         case _: raise unexpected_tag
     }
-    return ast_tag
 }
 
 pub fn infix_to_tag(t lexer.tag)! tag {
-    let ast_tag = match t {
+    return match t {
         case lexer.tag.ADD: tag.add
         case lexer.tag.SUB: tag.sub
         case lexer.tag.MUL: tag.mul
@@ -142,7 +140,6 @@ pub fn infix_to_tag(t lexer.tag)! tag {
         case lexer.tag.DOT: tag.dot
         case _: raise unexpected_tag
     }
-    return ast_tag
 }
 
 pub fn to_string(a ast, idx index, buf []byte)! []byte {
