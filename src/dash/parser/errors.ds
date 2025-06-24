@@ -1,28 +1,82 @@
 lib parser
 
 use "dash/ast"
-// use "dash/lexer"
+use "dash/lexer"
 // use "fmt"
 
-// invalid_token error should be used
-// when a token is encountered that is
-// not expected
-error invalid_token {
-    idx ast.token_index
+// unexpected_token error should be used
+// as the name implies; when unexpected
+// lexer tokens are encountered
+error unexpected_token {
+    i    ast.token_index
+    // want lexer.tag
+}
+
+error expected_brace {
+    i ast.token_index
+}
+
+error expected_bracket {
+    i ast.token_index
+}
+
+error expected_parenthesis {
+    i ast.token_index
+}
+
+error expected_identifier {
+    i ast.token_index
 }
 
 error expected_expression {
-    idx ast.token_index
+    i ast.token_index
 }
 
-// fn error_to_string(tkns []ast.token, err error) string {
+error expected_colon {
+    i ast.token_index
+}
+
+error expected_comma {
+    i ast.token_index
+}
+
+error invalid_prefix_expression {
+    i ast.token_index
+}
+
+error invalid_negation {
+    i ast.index
+}
+
+error invalid_postfix_expression {
+    i ast.token_index
+}
+
+error empty_struct {
+    i ast.token_index
+}
+
+// unexpected_expression should be used
+// when a previously parsed node does
+// not match what is expected in the
+// current parsing context
+error unexpected_expression {
+    // the unexpected node
+    i ast.index
+    want string
+}
+
+error unexpected_eof {
+    i    ast.token_index
+    want lexer.tag
+}
+
+// fn error_to_string(err error) string {
 //     match err = err {
-//     case unknown_token:
-//         let tkn = ast.token_to_string(tkns[err.idx])
-//         return fmt.stringf("unknown token: %s", tkn)
+//     case invalid_token:
+//         return fmt.stringf("unknown token: %d", err.i)
 //     case expected_expression:
-//         let tkn = ast.token_to_string(tkns[err.idx])
-//         return fmt.stringf("expected expression: %s", tkn)
+//         return fmt.stringf("expected expression: %d", err.i)
 //     case _:
 //         // return fmt.stringf("%s", err)
 //     }

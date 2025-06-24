@@ -100,7 +100,7 @@ pub fn literal_to_tag(t lexer.tag)! tag {
         case lexer.tag.INT:   tag.int
         case lexer.tag.FLOAT: tag.float
         case lexer.tag.STRING: tag.string
-        case _: raise unknown_tag
+        case _: raise unexpected_tag
     }
     return ast_tag    
 }
@@ -113,7 +113,7 @@ pub fn prefix_to_tag(t lexer.tag)! tag {
         case lexer.tag.QMARK: tag.null_unwrap
         case lexer.tag.AND: tag.address_of
         case lexer.tag.MUL: tag.value_of
-        case _: raise unknown_tag
+        case _: raise unexpected_tag
     }
     return ast_tag
 }
@@ -140,7 +140,7 @@ pub fn infix_to_tag(t lexer.tag)! tag {
         case lexer.tag.EQ:  tag.eq
         case lexer.tag.NEQ: tag.neq
         case lexer.tag.DOT: tag.dot
-        case _: raise unknown_tag
+        case _: raise unexpected_tag
     }
     return ast_tag
 }
@@ -257,7 +257,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             buf = to_string(a, idx, buf)
         }
 
-    case _: raise unknown_tag
+    case _: raise unexpected_tag
     }
     return buf   
 }

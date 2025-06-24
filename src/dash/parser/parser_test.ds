@@ -12,8 +12,8 @@ fn test_parse_scalar_literals()! {
     // try assert_parse(`"a\"b"`, `"a\"b"`) // TODO: this is lexer issue
     try assert_parse(`"hello"`, `"hello"`)
 
-    try assert_parse_error("1_000_", "")
-    try assert_parse_error(`", world`, "")
+    try assert_parse_error("1_000_", [unexpected_token{i: 0}])
+    try assert_parse_error(`", world`, [unexpected_token{i: 0}])
 }
 
 @test
@@ -23,18 +23,18 @@ fn test_parse_struct_literal()! {
     try assert_parse("{a: 1, b: false}", "{a:1,b:false}")
     try assert_parse("{a: {b: 2}, c: 4}", "{a:{b:2},c:4}")
 
-    try assert_parse_error("a{", "")
-    try assert_parse_error("{", "")
-    try assert_parse_error("{a", "")
-    try assert_parse_error("{a:", "")
-    try assert_parse_error("{a: 1", "")
-    try assert_parse_error("{a: 1,", "")
-    try assert_parse_error("{a: 1 b", "")
-    try assert_parse_error("{a: 1, b", "")
-    try assert_parse_error("{a: 1, b:", "")
-    // try assert_parse_error("{}", "{}")
-    try assert_parse_error("{a:, b: 2}", "")
-    try assert_parse_error("{a: 1, b:}", "") 
+    try assert_parse_error("{", [expected_identifier{i: 1}])
+    try assert_parse_error("a{", [expected_identifier{i: 2}])
+    try assert_parse_error("{a", [expected_colon{i: 2}])
+    try assert_parse_error("{a:", [expected_expression{i: 3}])
+    try assert_parse_error("{a: 1", [expected_brace{i: 4}])
+    try assert_parse_error("{a: 1,", [expected_brace{i: 5}])
+    try assert_parse_error("{a: 1 b", [expected_comma{i: 4}])
+    try assert_parse_error("{a: 1, b", [expected_colon{i: 6}])
+    try assert_parse_error("{a: 1, b:", [expected_expression{i: 7}])
+    // try assert_parse_error("{}", [empty_struct{i: 0}])
+    try assert_parse_error("{a:, b: 2}", [expected_expression{i: 3}])
+    try assert_parse_error("{a: 1, b:}", [expected_expression{i: 7}]) 
 }
 
 @test
@@ -46,13 +46,13 @@ fn test_parse_array_literal()! {
     try assert_parse("[[1], [2,3]]", "[[1],[2,3]]")
     try assert_parse("[[[[[1]]]]]", "[[[[[1]]]]]")
     
-    try assert_parse_error("[", "")
-    try assert_parse_error("[a", "")
-    try assert_parse_error("[a,", "")
-    try assert_parse_error("[a,1", "")
-    try assert_parse_error("[a,1,", "")
-    try assert_parse_error("[a,,]", "")
-    try assert_parse_error("[,1,]", "")
+    try assert_parse_error("[", [expected_bracket{i: 1}])
+    try assert_parse_error("[a", [expected_bracket{i: 2}])
+    try assert_parse_error("[a,", [expected_bracket{i: 3}])
+    try assert_parse_error("[a,1", [expected_bracket{i: 4}])
+    try assert_parse_error("[a,1,", [expected_bracket{i: 5}])
+    try assert_parse_error("[a,,]", [expected_expression{i: 3}])
+    try assert_parse_error("[,1,]", [expected_expression{i: 1}])
 }
 
 @test
@@ -69,7 +69,7 @@ fn test_nested_literals()! {
     try assert_parse("{arr: [func(), call(x)]}", "{arr:[func(),call(x)]}")
     try assert_parse("[[1, 2], [3, 4]]", "[[1,2],[3,4]]")
     
-    try assert_parse_error("{a: [1, 2, b: 3}", "")
+    try assert_parse_error("{a: [1, 2, b: 3}", [expected_comma{i: 9}])
 }
 
 @test
@@ -84,12 +84,12 @@ fn test_parse_prefix()! {
     try assert_parse("*p", "*p")
     try assert_parse("(((((((((1)))))))))", "1")
 
-    try assert_parse_error("(", "")
-    try assert_parse_error("()", "")
-    try assert_parse_error("(()", "")
-    try assert_parse_error("(1", "")
-    try assert_parse_error("(1+", "")
-    try assert_parse_error("(1+)", "")
+    try assert_parse_error("(", [expected_expression{i: 1}])
+    try assert_parse_error("()", [expected_expression{i: 1}])
+    try assert_parse_error("(()", [expected_expression{i: 2}])
+    try assert_parse_error("(1", [expected_parenthesis{i: 2}])
+    try assert_parse_error("(1+", [expected_expression{i: 3}])
+    try assert_parse_error("(1+)", [expected_expression{i: 3}])
 }
 
 @test
@@ -120,8 +120,8 @@ fn test_parse_infix()! {
     try assert_parse("a<b", "(a < b)")
     try assert_parse("a<=b", "(a <= b)")
     
-    try assert_parse_error("1 + 1_", "")
-    try assert_parse_error("1+", "")
+    try assert_parse_error("1 + 1_", [unexpected_token{i: 2}])
+    try assert_parse_error("1+", [expected_expression{i: 2}])
 }
 
 @test
@@ -137,13 +137,13 @@ fn test_call_expression()! {
     try assert_parse("func(x, {y: z})", "func(x,{y:z})")
     try assert_parse("outer(inner(a, b), c)", "outer(inner(a,b),c)")
 
-    try assert_parse_error("a(", "")
-    try assert_parse_error("a(b", "")
-    try assert_parse_error("a(b,", "")
-    try assert_parse_error("a(b,,", "")
-    try assert_parse_error("a(b,c,", "")
-    try assert_parse_error("a(b,,)", "")
-    try assert_parse_error("a(,)", "")
+    try assert_parse_error("a(", [expected_parenthesis{i: 2}])
+    try assert_parse_error("a(b", [expected_parenthesis{i: 3}])
+    try assert_parse_error("a(b,", [expected_parenthesis{i: 4}])
+    try assert_parse_error("a(b,,", [expected_expression{i: 4}])
+    try assert_parse_error("a(b,c,", [expected_parenthesis{i: 6}])
+    try assert_parse_error("a(b,,)", [expected_expression{i: 4}])
+    try assert_parse_error("a(,)", [expected_expression{i: 2}])
  }
 
 @test
@@ -159,12 +159,12 @@ fn test_index_expression()! {
     try assert_parse("a[:1][0]", "a[:1][0]")
     try assert_parse("a[b():c()]", "a[b():c()]")
 
-    try assert_parse_error("a[", "")
-    try assert_parse_error("a[0", "")
-    try assert_parse_error("a[0:", "")
-    try assert_parse_error("a[:", "")
-    try assert_parse_error("a[1:2:3]", "")
-    try assert_parse_error("a[::1]", "")
+    try assert_parse_error("a[", [expected_expression{i: 2}])
+    try assert_parse_error("a[0", [expected_bracket{i: 3}])
+    try assert_parse_error("a[0:", [expected_expression{i: 4}])
+    try assert_parse_error("a[:", [expected_expression{i: 3}])
+    try assert_parse_error("a[1:2:3]", [expected_bracket{i: 5}])
+    try assert_parse_error("a[::1]", [expected_expression{i: 3}])
     // try assert_parse_error("a[:]", "")
 }
 
@@ -175,8 +175,8 @@ fn test_dot_expression()! {
     try assert_parse("a.b().c", "a.b().c")
     try assert_parse("a.b[0].c", "a.b[0].c")
     
-    try assert_parse_error("a.", "")
-    try assert_parse_error("a.b.", "")
+    try assert_parse_error("a.", [expected_expression{i: 2}])
+    try assert_parse_error("a.b.", [expected_expression{i: 4}])
     // try assert_parse_error("a[:4].b", "")
 }
 
@@ -223,16 +223,27 @@ fn assert_parse(input, want string)! {
 }
 
 error expected_error
+error error_len_mismatch {
+    got_len  i64
+    want_len i64
+}
+error error_mismatch {
+    got  error
+    want error
+}
 
-fn assert_parse_error(input, want string)! {
+fn assert_parse_error(input string, want []error)! {
     let a = try parse([]byte(input), mode.exp)
 
-    // let idx = ast.index(len(a.nodes)-1)
-    // let buf = make([]byte, 0, len(want))
-    // let got = try ast.to_string(a, idx, buf)
     if len(a.errs) == 0 {
         raise expected_error
     }
-    // println(len(a.errs))
-    // try assert(want == got, "expected ast to match")    
+    if len(a.errs) != len(want) {
+        raise error_len_mismatch{got_len: len(a.errs), want_len: len(want)}
+    }
+    for i = 0; i < len(want); i++ {
+        if want[i] != a.errs[i] {
+            raise error_mismatch{got: a.errs[i], want: want[i]}
+        }
+    }
 }
