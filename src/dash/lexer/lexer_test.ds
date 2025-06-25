@@ -45,8 +45,25 @@ fn test_next_token()! {
         {"@", tag.AT},
         // identifiers
         {"abc", tag.IDENT},
-        {"i64", tag.IDENT},
         {"ifelse", tag.IDENT},
+        // type literals
+        {"u8", tag.U8_TYPE},
+        {"u16", tag.U16_TYPE},
+        {"u32", tag.U32_TYPE},
+        {"u64", tag.U64_TYPE},
+        {"i8", tag.I8_TYPE},
+        {"i16", tag.I16_TYPE},
+        {"i32", tag.I32_TYPE},
+        {"i64", tag.I64_TYPE},
+        {"int", tag.INT_TYPE},
+        {"f32", tag.F32_TYPE},
+        {"f64", tag.F64_TYPE},
+        {"float", tag.FLOAT_TYPE},
+        {"byte", tag.BYTE_TYPE},
+        {"char", tag.CHAR_TYPE},
+        {"string", tag.STRING_TYPE},
+        {"bool", tag.BOOL_TYPE},
+        {"error", tag.ERROR},
         // keywords
         {"pub", tag.PUB},
         {"lib", tag.LIB},
@@ -181,6 +198,7 @@ fn test_whitespace()! {
         try assert(lit == tc.2, "literal mismatch")
     }
 }
+
 
 // TODO: improve this test with token type array
 @test

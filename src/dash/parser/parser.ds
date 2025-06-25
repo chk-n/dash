@@ -18,6 +18,9 @@ struct parser {
 // defines parser mode such as
 enum mode {
     lib
+    // use if only library name and imports 
+    // should be parsed
+    imp
     // use if only expressions should be parsed
     exp
 }
@@ -120,7 +123,6 @@ fn parse_library(p parser)! parser, ast.index {
         return p, -1
     }
 
-
     var extra = make([]ast.index, 0, 5)
 
     for !is_tag(p, lexer.tag.EOF) {
@@ -133,11 +135,13 @@ fn parse_library(p parser)! parser, ast.index {
             // public or not, so we can safely
             // consume token here
             p = next_token(p)
+        case lexer.tag.TYPE:
+            p, node = try parse_type_statement(p)
+        // case lexer.tag.ALIAS:
         // case lexer.tag.STRUCT:
         case lexer.tag.ENUM:
             p, node = try parse_enum_statement(p)
         // case lexer.tag.ERROR:
-        // case lexer.tag.TYPE:
         // case lexer.tag.ALIAS:
         // case lexer.tag.UNION:
         // case lexer.tag.FN:
@@ -198,9 +202,39 @@ fn find_next_valid_global_token(p parser)! parser {
 // Statements //
 // ---------- //
 
+fn parse_type_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.TYPE), "expected 'type'")
+
+    let op_tkn = p.tkn_i
+    // consume 'type'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+    p, let ident = parse_literal(p)
+    // TODO: verify ident is of type IDENT
+
+    p, let typ = parse_type_literal(p)
+    if typ == -1 {
+        return p, -1
+    }
+
+    var nodes = append(p.nodes, {
+        tag: ast.tag.type_def, 
+        token: op_tkn, 
+        data: {x: ident, y: typ},
+    })
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+    
+    return p, idx
+}
+
 
 fn parse_enum_statement(p parser)! parser, ast.index {
-    try assert(is_tag(p, lexer.tag.ENUM), "expected enum")
+    try assert(is_tag(p, lexer.tag.ENUM), "expected 'enum'")
 
     // TODO: check pub or not
 
@@ -263,8 +297,6 @@ fn parse_enum_statement(p parser)! parser, ast.index {
 fn parse_statement_in_block(p parser)! parser, ast.index {
     let tag = current_tag(p)
     return match tag {
-        // TODO: add all keywords that can be used as
-        // identifiers
         case lexer.tag.LET, lexer.tag.VAR, lexer.tag.IDENT:
             try parse_assignment_statement(p)
         case _: raise unexpected_token{i: p.tkn_i}
@@ -473,6 +505,96 @@ fn parse_ident_or_struct(p parser)! parser, ast.index {
     return p, idx       
 }
 
+// parse_type_literal parses scalar and aggregate types
+fn parse_type_literal(p parser)! parser, ast.index {
+    var p = p
+
+    if !is_type_literal(p) {
+        p = add_error(p, expected_type{i: p.tkn_i})
+        return p, -1
+    }
+
+    return match current_tag(p) {
+        case lexer.tag.LBRACK:
+            try parse_array_type(p)
+        case lexer.tag.LBRACE:
+            try parse_column_type(p)
+        case lexer.tag.IDENT:
+            try parse_expression(p, precedence.none)
+        case _:
+            try parse_literal(p)
+    }   
+}
+
+// parse_array_type parses array types like []i32, [][]string, etc.
+fn parse_array_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.LBRACK), "expected '['")
+    
+    let op_tkn = p.tkn_i
+    // consume '['
+    var p = next_token(p)
+    
+    if !is_tag(p, lexer.tag.RBRACK) {
+        p = add_error(p, expected_bracket{i: p.tkn_i})
+        return p, -1
+    }
+    // consume ']'
+    p = next_token(p)
+    
+    p, let element_type = try parse_type_literal(p)
+    if element_type == -1 {
+        return p, -1
+    }
+    
+    var nodes = append(p.nodes, {
+        tag: ast.tag.array_type,
+        token: op_tkn,
+        data: {x: element_type, y: -1}
+    })
+    
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+    
+    return p, idx
+}
+
+// parse_column_type parses column types like {}abc and {}x.abc
+fn parse_column_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.LBRACE), "expected '{'")
+    
+    let op_tkn = p.tkn_i
+    // consume '{'
+    var p = next_token(p)
+    
+    if !is_tag(p, lexer.tag.RBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    // consume '}'
+    p = next_token(p)
+    
+    if is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_expression{i: p.tkn_i})
+        return p, -1
+    }
+    
+    p, let type_ref = try parse_expression(p, precedence.none)
+    if type_ref == -1 {
+        return p, -1
+    }
+    
+    var nodes = append(p.nodes, {
+        tag: ast.tag.column_type,
+        token: op_tkn,
+        data: {x: type_ref, y: -1}
+    })
+    
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+    
+    return p, idx
+}
+
 fn parse_literal(p parser)! parser, ast.index {
     let tag = try ast.literal_to_tag(p.tkns[p.tkn_i].tag)
 
@@ -483,7 +605,6 @@ fn parse_literal(p parser)! parser, ast.index {
     })
     
     var p = p^{ p.nodes = nodes }
-
     let idx = ast.index(len(nodes)-1)
      
     p = next_token(p)
@@ -806,6 +927,21 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
 // ------ //
 // Helper //
 // ------ //
+
+// is_type_literal cheks whether current token
+// is or could be (i.e. '[', '{') a type literal
+fn is_type_literal(p parser) bool {
+    return match current_tag(p) {
+        case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
+             lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
+             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,
+             lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
+             lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
+             lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
+             lexer.tag.LBRACK, lexer.tag.LBRACE, lexer.tag.IDENT: true
+        case _: false
+    }
+}
 
 // appends extra
 fn add_extra(p parser, et ast.tag, e []ast.index) parser, ast.index {

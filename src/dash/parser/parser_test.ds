@@ -254,6 +254,50 @@ fn test_parse_enum_statement()! {
     try assert_error("lib a enum b {}", [expected_identifier{i:5}])
 }
 
+@test
+fn test_parse_type_statement()! {
+    try assert_canonical("lib a type x u8")
+    try assert_canonical("lib a type x u16")
+    try assert_canonical("lib a type x u32")
+    try assert_canonical("lib a type x u64")
+    try assert_canonical("lib a type x i8")
+    try assert_canonical("lib a type x i16")
+    try assert_canonical("lib a type x i32")
+    try assert_canonical("lib a type x i64")
+    try assert_canonical("lib a type x int")
+
+    try assert_canonical("lib a type x char")
+    try assert_canonical("lib a type x byte")
+     
+    try assert_canonical("lib a type x f32")
+    try assert_canonical("lib a type x f64")
+    try assert_canonical("lib a type x float")
+    
+    try assert_canonical("lib a type x bool")
+
+    try assert_canonical("lib a type x string")
+    try assert_canonical("lib a type x []byte")
+    try assert_canonical("lib a type x []y")
+    try assert_canonical("lib a type x [][][][][]i64")
+    
+    try assert_canonical("lib a type x {}abc")
+    try assert_canonical("lib a type x {}y.z")
+
+    // // TODO: add map type
+
+    try assert_canonical("lib a type x y")
+    try assert_canonical("lib a type x y.z")
+    
+    // // try assert_canonical("lib a pub type x i64")
+
+    try assert_error("lib a type", [expected_identifier{i: 3}])
+    try assert_error("lib a type x", [expected_type{i: 4}])
+    try assert_error("lib a type x []", [expected_type{i: 6}])
+    try assert_error("lib a type x {}", [expected_expression{i: 6}])
+    try assert_error("lib a type x {}{}", [expected_expression{i: 6}])
+    try assert_error("lib a type x 32", [expected_type{i: 4}])
+}
+
 // ------- //
 // Helpers //
 // ------- //
