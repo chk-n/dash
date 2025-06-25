@@ -40,6 +40,18 @@ error expected_comma {
     i ast.token_index
 }
 
+error expected_assign_or_comma {
+    i ast.token_index
+}
+
+error invalid_library_name {
+    i ast.token_index
+}
+
+error invalid_statement {
+    i ast.token_index
+}
+
 error invalid_prefix_expression {
     i ast.token_index
 }
