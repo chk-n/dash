@@ -53,6 +53,8 @@ pub struct data {
 pub enum tag {
     library
     lib_stmts
+    enum
+    enum_fields
     assignment
     decl_list
     let_decl
@@ -184,6 +186,27 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
                 buf = append(buf, ' ')
             }
         }
+
+    case tag.enum:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        buf = to_string(a, data.x, buf)
+        buf = append(buf, ' ')
+        buf = append(buf, '{')
+        buf = to_string(a, data.y, buf)
+        buf = append(buf, '}')
+        
+    case tag.enum_fields:
+        for i = data.x; i <= data.y; i++ {
+            let idx = a.extras[i]
+            buf = to_string(a, idx, buf)
+            if i != data.y {
+                buf = append(buf,' ')
+            }
+        }
+        
         
     case tag.assignment:
         buf = to_string(a, data.x, buf)
@@ -323,6 +346,7 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
+    case tag.enum: 4
     case tag.let_decl, tag.var_decl,
          tag.library: 3
     case tag.lor, tag.land, tag.andnot, 
