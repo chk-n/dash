@@ -529,13 +529,7 @@ fn parse_struct_literal(p parser)! parser, ast.index {
         p = next_token(p)
     }
 
-    if len(extra) == 0 && is_tag(p, lexer.tag.RBRACE){
-        // this means current tag is RBRACE but
-        // loop never ran so the struct literal
-        // is empty '{}'
-        p = add_error(p, empty_struct{i: op_tkn})
-        return p, -1
-    } else if len(extra) == 0 {
+    if len(extra) == 0 {
         p = add_error(p, expected_identifier{i: p.tkn_i})
         return p, -1
     } else if !is_tag(p, lexer.tag.RBRACE) {

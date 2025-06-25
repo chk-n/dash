@@ -34,7 +34,7 @@ fn test_parse_struct_literal()! {
     try assert_parse_error("{a: 1 b", [expected_comma{i: 4}])
     try assert_parse_error("{a: 1, b", [expected_colon{i: 6}])
     try assert_parse_error("{a: 1, b:", [expected_expression{i: 7}])
-    // try assert_parse_error("{}", [empty_struct{i: 0}])
+    // try assert_parse_error("{}", [expected_identifier{i: 1}])
     try assert_parse_error("{a:, b: 2}", [expected_expression{i: 3}])
     try assert_parse_error("{a: 1, b:}", [expected_expression{i: 7}]) 
 }

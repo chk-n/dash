@@ -64,10 +64,6 @@ error invalid_postfix_expression {
     i ast.token_index
 }
 
-error empty_struct {
-    i ast.token_index
-}
-
 // unexpected_expression should be used
 // when a previously parsed node does
 // not match what is expected in the
