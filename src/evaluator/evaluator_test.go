@@ -1714,6 +1714,17 @@ func TestVariableScoping(t *testing.T) {
 			x`,
 			want: int64(1),
 		},
+		{
+			name: "let scoping",
+			prog: `
+			let x = 1
+			for {
+				let x = 2
+				break
+			}
+			x`,
+			want: int64(1),
+		},
 		// NOTE: blocks not supported yet
 		// {
 		// 	name: "nested block scope",

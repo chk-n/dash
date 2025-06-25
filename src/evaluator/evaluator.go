@@ -606,6 +606,8 @@ func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression, stk *Context) 
 }
 
 func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
+	stk.Scope()
+	defer stk.Unscope()
 	// classic for loop
 	if n.Assignment != nil {
 		e.evalAssignmentStatement(n.Assignment, stk)
