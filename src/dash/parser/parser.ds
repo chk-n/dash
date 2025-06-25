@@ -114,11 +114,11 @@ fn parse_library(p parser)! parser, ast.index {
     }
 
     p, let ident = try parse_literal(p)
+    // TODO: assert ident is IDENT
     if ident == -1 {
         p = add_error(p, invalid_library_name{i: p.tkn_i})
         return p, -1
     }
-    // TODO: assert ident is IDENT
 
 
     var extra = make([]ast.index, 0, 5)
@@ -145,12 +145,13 @@ fn parse_library(p parser)! parser, ast.index {
              lexer.tag.IDENT:
             p, node = try parse_assignment_statement(p)
         case _:
-            // TODO: add error that not valid stmt/exp
-            // in global scope
             p = add_error(p, invalid_statement{i: p.tkn_i})
-            p = find_next_valid_global_token(p)
         }
         if node == -1 {
+            // TODO: this is not reliable as identifiers
+            // can be keywords in certain cases so we need
+            // to find a better solution
+            p = find_next_valid_global_token(p)
             next
         }
         extra = append(extra, node)
