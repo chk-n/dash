@@ -224,13 +224,20 @@ fn test_parse_assignment()! {
     try assert_canonical("lib a x = 2.2")
     try assert_canonical("lib a let x,var y,z = 1,2,3")
     try assert_canonical("lib a w,x,y,z = 1,2,3")
+    try assert_canonical("lib a a,b,let x = 1,2,3")
+    try assert_canonical("lib a let x = 1 var y = 2")
     try assert_parse("lib a let a = 1,", "lib a let a = 1")
+    // try assert_canonical("lib a pub let x = 1")
 
     try assert_error("lib a x", [expected_assign_or_comma{i: 3}])
     try assert_error("lib a w,", [expected_assign_or_comma{i: 4}])
     try assert_error("lib a let", [expected_identifier{i: 3}])
+    try assert_error("lib a var = 1", [expected_identifier{i: 3}])
     try assert_error("lib a let a", [expected_assign_or_comma{i: 4}])
+    try assert_error("lib a let a,", [expected_assign_or_comma{i: 5}])
     try assert_error("lib a let a =", [expected_expression{i: 5}])
+    try assert_error("lib a let x = 1,,", [expected_expression{i: 7}])
+    try assert_error("lib a let x, var = 1", [expected_identifier{i: 6}])
 }
 
 // ------- //
