@@ -366,9 +366,6 @@ fn parse_decleration_statement(p parser)! parser, ast.index {
     }
 
     p, let ident = parse_literal(p)
-    if ident == -1 {
-        return p, -1
-    }
     // TODO: verify ident is of type IDENT
 
     var nodes = append(p.nodes, {
