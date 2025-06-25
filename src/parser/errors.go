@@ -7,6 +7,9 @@ var (
 	errInvalidToken = func(got string) error {
 		return fmt.Errorf("invalid token '%s'", got)
 	}
+	errMissingArgumentType = func(argName string) error {
+		return fmt.Errorf("argument '%s' missing type", argName)
+	}
 )
 
 // Attribute errors

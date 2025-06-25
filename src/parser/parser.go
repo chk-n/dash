@@ -626,6 +626,12 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 		return stmt
 	}
 
+	// x)  - last parameter without type (like x, but with ) instead of ,)
+	if p.curTokenIs(token.RPAREN) {
+		p.addError(p.curToken, errMissingArgumentType(stmt.Name.Value))
+		return stmt
+	}
+
 	stmt.Type = p.parseType()
 	if stmt.Type == nil {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))

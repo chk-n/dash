@@ -633,9 +633,10 @@ func TestCopyExpression(t *testing.T) {
 
 func TestFunctionLiteral(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name   string
+		input  string
+		want   string
+		errors []string
 	}{
 		{
 			name: "public normal function",
@@ -678,6 +679,11 @@ func TestFunctionLiteral(t *testing.T) {
 			input: "pub fn test(args ...i64) {}",
 			want:  "pub fn test(args []i64) { }",
 		},
+		{
+			name:   "missing argument type",
+			input:  "fn test(x) {} ",
+			errors: []string{"argument 'x' missing type"},
+		},
 		// {
 		// 	name:  "ensure no infinite recursion",
 		// 	input: "fn some_func(m, mut<i64>)",
@@ -690,8 +696,21 @@ func TestFunctionLiteral(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseFunctionExpression()
 
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			// Check for expected errors
+			if tc.errors != nil {
+				if len(p.Errors()) != len(tc.errors) {
+					t.Errorf("expected %d errors but got %d", len(tc.errors), len(p.Errors()))
+				}
+				for i, err := range p.Errors() {
+					if i < len(tc.errors) && !strings.Contains(err, tc.errors[i]) {
+						t.Errorf("want error %s but got %s", tc.errors[i], err)
+					}
+				}
+			} else {
+				// Check that the function was parsed correctly when no errors expected
+				if tc.want != stmt.String() {
+					t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+				}
 			}
 		})
 	}
