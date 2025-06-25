@@ -333,6 +333,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		} else if len(fnType.Ret) > len(retTypes) {
 			retTypesStr := make([]string, len(retTypes))
 			for i, rt := range retTypes {
+				if rt == nil {
+					continue
+				}
 				retTypesStr[i] = rt.String()
 
 			}
@@ -2200,6 +2203,9 @@ func (s *Semantics) analyseErrorStructLiteral(n *ast.StructLiteral, errorType *t
 
 	for i, f := range n.Fields {
 		s.analyse(f.Value, "")
+		if f.Value.Type() == nil {
+			continue
+		}
 
 		fieldName := f.Name.TokenLiteral()
 
