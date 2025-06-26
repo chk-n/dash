@@ -48,6 +48,10 @@ error expected_type {
     i ast.token_index
 }
 
+error expected_string_literal {
+    i ast.token_index
+}
+
 error invalid_library_name {
     i ast.token_index
 }

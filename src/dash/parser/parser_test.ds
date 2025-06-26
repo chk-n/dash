@@ -241,6 +241,20 @@ fn test_parse_assignment()! {
 }
 
 @test
+fn test_parse_use_statement()! {
+    try assert_canonical(`lib a use ""`)
+    try assert_canonical(`lib a use "abc"`)
+    try assert_canonical(`lib a use "abc/xyz"`)
+    try assert_canonical(`lib a use xyz "abc/xyz"`)
+
+    try assert_error(`lib a use`, [expected_string_literal{i:3}])
+    try assert_error(`lib a use abc`, [expected_string_literal{i:4}])
+    try assert_error(`lib a use "`, [expected_string_literal{i:3}]) 
+    try assert_error(`lib a use abc "`, [expected_string_literal{i:4}])
+    // try assert_error(`lib a pub use ""`, [expected_identifier{i: 3}])
+}
+
+@test
 fn test_parse_enum_statement()! {
     try assert_canonical("lib a enum b {x}")
     try assert_canonical("lib a enum b {x y z}")

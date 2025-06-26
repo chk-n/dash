@@ -128,7 +128,8 @@ fn parse_library(p parser)! parser, ast.index {
     for !is_tag(p, lexer.tag.EOF) {
         var node = ast.index(-1)
         match current_tag(p) {
-        // case lexer.tag.USE:
+        case lexer.tag.USE:
+            p, node = try parse_use_statement(p)
         case lexer.tag.PUB:
             // statements check previous token
             // to see if they were declerared
@@ -201,6 +202,37 @@ fn find_next_valid_global_token(p parser)! parser {
 // ---------- //
 // Statements //
 // ---------- //
+
+fn parse_use_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.USE), "expected 'use'")
+
+    let op_tkn = p.tkn_i
+    // consume 'use'
+    var p = next_token(p)
+    // optionally parse import alias
+    var a = ast.index(-1)
+    if is_tag(p, lexer.tag.IDENT) {
+        p, a = parse_literal(p)
+        // TODO: verify a is IDENT
+    }
+
+    if !is_tag(p, lexer.tag.STRING) {
+        p = add_error(p, expected_string_literal{i: p.tkn_i})
+        return p, -1
+    
+    }
+    p, let lib_name = parse_literal(p)
+
+    var nodes = append(p.nodes, {
+        tag: ast.tag.use_def, 
+        token: op_tkn, 
+        data: {x: a, y: lib_name},
+    })
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+
+    return p, idx
+}
 
 fn parse_type_statement(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.TYPE), "expected 'type'")

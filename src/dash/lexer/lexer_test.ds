@@ -112,6 +112,9 @@ fn test_string()! {
         {`"hello world"`, tag.STRING},        
         {`"hello\nworld"`, tag.STRING},       
         {`"`, tag.ILLEGAL},                   
+        {`"a`, tag.ILLEGAL},                   
+        {`"a/`, tag.ILLEGAL},                   
+        {`"a/b`, tag.ILLEGAL},                   
     ]
     
     for i = 0; i < len(tests); i++ {

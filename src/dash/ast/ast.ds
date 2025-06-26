@@ -53,6 +53,7 @@ pub struct data {
 pub enum tag {
     library
     lib_stmts
+    use_def
     type_def
     enum
     enum_fields
@@ -202,7 +203,19 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
                 buf = append(buf, ' ')
             }
         }
-
+    case tag.use_def:
+        // TODO: once we can parse import alias then
+        // data.x will contain idx of that node
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        if data.x != -1 {
+            buf = append(buf, ' ')
+            buf = to_string(a, data.x, buf)
+        }
+        buf = append(buf, ' ')
+        buf = to_string(a, data.y, buf)
+        
     case tag.enum_fields, tag.union_types:
         buf = append(buf, '{')
         for i = data.x; i <= data.y; i++ {
@@ -366,7 +379,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     case tag.union_def: 5
     case tag.enum, tag.type_def: 4
     case tag.let_decl, tag.var_decl,
-         tag.library: 3
+         tag.library, tag.use_def: 3
     case tag.lor, tag.land, tag.andnot, 
          tag.lsh, tag.rsh,
          tag.lte, tag.gte,
