@@ -293,8 +293,8 @@ fn test_parse_type_statement()! {
     try assert_error("lib a type", [expected_identifier{i: 3}])
     try assert_error("lib a type x", [expected_type{i: 4}])
     try assert_error("lib a type x []", [expected_type{i: 6}])
-    try assert_error("lib a type x {}", [expected_expression{i: 6}])
-    try assert_error("lib a type x {}{}", [expected_expression{i: 6}])
+    try assert_error("lib a type x {}", [expected_type{i: 4}])
+    try assert_error("lib a type x {}{}", [expected_type{i: 4}])
     try assert_error("lib a type x 32", [expected_type{i: 4}])
 }
 
