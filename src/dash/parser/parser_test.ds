@@ -255,20 +255,6 @@ fn test_parse_use_statement()! {
 }
 
 @test
-fn test_parse_enum_statement()! {
-    try assert_canonical("lib a enum b {x}")
-    try assert_canonical("lib a enum b {x y z}")
-    // try assert_canonical("lib a pub enum b {x}")
-
-    try assert_error("lib a enum", [expected_identifier{i: 3}])
-    try assert_error("lib a enum b", [expected_brace{i: 4}] )
-    try assert_error("lib a enum b {", [expected_identifier{i: 5}])
-    try assert_error("lib a enum b { x", [expected_brace{i: 6}])
-    try assert_error("lib a enum b { x y", [expected_brace{i: 7}])
-    try assert_error("lib a enum b {}", [expected_identifier{i:5}])
-}
-
-@test
 fn test_parse_type_statement()! {
     try assert_canonical("lib a type x u8")
     try assert_canonical("lib a type x u16")
@@ -313,6 +299,22 @@ fn test_parse_type_statement()! {
 }
 
 @test
+fn test_struct_statement()! {
+    try assert_canonical("lib a struct x {a i64}")
+    try assert_canonical("lib a struct x {a y b string}")
+    try assert_canonical("lib a struct x {a y.z}")
+
+    try assert_error("lib a struct", [expected_identifier{i: 3}])
+    try assert_error("lib a struct 1", [expected_identifier{i: 3}])
+    try assert_error("lib a struct a", [expected_brace{i: 4}])
+    try assert_error("lib a struct a {", [expected_identifier{i: 5}])
+    try assert_error("lib a struct a { ``", [expected_identifier{i: 5}])
+    try assert_error("lib a struct a { x", [expected_type{i: 6}])
+    try assert_error("lib a struct a { x +", [expected_type{i: 6}])
+    try assert_error("lib a struct a { x i64", [expected_brace{i: 7}])
+}
+
+@test
 fn test_union_statement()! {
     try assert_canonical("lib a union x {i64}")
     try assert_canonical("lib a union x {f32 y y.z}")
@@ -326,7 +328,20 @@ fn test_union_statement()! {
     try assert_error("lib a union x { y.z", [expected_brace{i: 8}])
     try assert_error("lib a union x {123}", [expected_type{i: 5}])
     try assert_error("lib a union x {}", [expected_type{i: 5}])
+}
 
+@test
+fn test_parse_enum_statement()! {
+    try assert_canonical("lib a enum b {x}")
+    try assert_canonical("lib a enum b {x y z}")
+    // try assert_canonical("lib a pub enum b {x}")
+
+    try assert_error("lib a enum", [expected_identifier{i: 3}])
+    try assert_error("lib a enum b", [expected_brace{i: 4}] )
+    try assert_error("lib a enum b {", [expected_identifier{i: 5}])
+    try assert_error("lib a enum b { x", [expected_brace{i: 6}])
+    try assert_error("lib a enum b { x y", [expected_brace{i: 7}])
+    try assert_error("lib a enum b {}", [expected_identifier{i:5}])
 }
 
 // ------- //

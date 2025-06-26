@@ -139,7 +139,8 @@ fn parse_library(p parser)! parser, ast.index {
         case lexer.tag.TYPE:
             p, node = try parse_type_statement(p)
         // case lexer.tag.ALIAS:
-        // case lexer.tag.STRUCT:
+        case lexer.tag.STRUCT:
+            p, node = try parse_struct_statement(p)
         case lexer.tag.ENUM:
             p, node = try parse_enum_statement(p)
         // case lexer.tag.ERROR:
@@ -264,6 +265,61 @@ fn parse_type_statement(p parser)! parser, ast.index {
     return p, idx
 }
 
+fn parse_struct_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.STRUCT), "expected 'struct'")
+
+    let op_tkn = p.tkn_i
+    // consume 'struct'
+    var p = next_token(p)
+    
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+    p, let ident = parse_literal(p)
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    var extra = make([]ast.index, 0, 4)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+        
+        if !is_tag(p, lexer.tag.IDENT) {
+            p = add_error(p, expected_identifier{i: p.tkn_i})
+            return p, -1
+        }
+        p, let fname = parse_literal(p)
+
+        if !is_type_literal(p) {
+            p = add_error(p, expected_type{i: p.tkn_i})
+            return p, -1
+        }
+        p, let ftype = parse_type_literal(p)
+
+        extra = append(extra, [fname, ftype])
+    }
+    if len(extra) == 0 {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    } else if !is_tag(p, lexer.tag.RBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    p, let fields = add_extra(p, ast.tag.struct_fields, extra)
+
+    p, let strct = add_node(p,{
+        tag: ast.tag.struct_def, 
+        token: op_tkn, 
+        data: {x: ident, y: fields},
+    })
+
+    return p, strct
+}
 
 fn parse_enum_statement(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.ENUM), "expected 'enum'")
@@ -874,7 +930,6 @@ fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
     if node == -1 {
         return p, -1
     }
-       
     var nodes = append(p.nodes, {
         tag: try ast.infix_to_tag(op_tag),
         token: op_tkn,
@@ -1070,6 +1125,14 @@ fn add_extra(p parser, et ast.tag, e []ast.index) parser, ast.index {
     let node = ast.index(len(nodes)-1)
 
     return p, node
+}
+
+fn add_node(p parser, n ast.node) parser, ast.index {
+    var nodes = append(p.nodes, n)
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+
+    return p, idx
 }
 
 fn add_error(p parser, err error) parser {
