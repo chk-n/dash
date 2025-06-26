@@ -56,6 +56,8 @@ pub enum tag {
     type_def
     enum
     enum_fields
+    union_def
+    union_types
     assignment
     decl_list
     let_decl
@@ -183,7 +185,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
     let data = node.data
     match node.tag {
     case tag.library, tag.type_def,
-         tag.enum:
+         tag.enum, tag.union_def:
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -201,7 +203,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
 
-    case tag.enum_fields:
+    case tag.enum_fields, tag.union_types:
         buf = append(buf, '{')
         for i = data.x; i <= data.y; i++ {
             let idx = a.extras[i]
@@ -361,6 +363,7 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
+    case tag.union_def: 5
     case tag.enum, tag.type_def: 4
     case tag.let_decl, tag.var_decl,
          tag.library: 3

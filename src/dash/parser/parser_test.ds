@@ -298,6 +298,23 @@ fn test_parse_type_statement()! {
     try assert_error("lib a type x 32", [expected_type{i: 4}])
 }
 
+@test
+fn test_union_statement()! {
+    try assert_canonical("lib a union x {i64}")
+    try assert_canonical("lib a union x {f32 y y.z}")
+    // try assert_canonical("lib a pub union x {i64}")
+    
+    try assert_error("lib a union", [expected_identifier{i: 3}])
+    try assert_error("lib a union x", [expected_brace{i: 4}])
+    try assert_error("lib a union x {", [expected_type{i: 5}])
+    try assert_error("lib a union x { i64", [expected_brace{i: 6}])
+    try assert_error("lib a union x { y", [expected_brace{i: 6}])
+    try assert_error("lib a union x { y.z", [expected_brace{i: 8}])
+    try assert_error("lib a union x {123}", [expected_type{i: 5}])
+    try assert_error("lib a union x {}", [expected_type{i: 5}])
+
+}
+
 // ------- //
 // Helpers //
 // ------- //

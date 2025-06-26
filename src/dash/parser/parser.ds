@@ -142,12 +142,12 @@ fn parse_library(p parser)! parser, ast.index {
         case lexer.tag.ENUM:
             p, node = try parse_enum_statement(p)
         // case lexer.tag.ERROR:
-        // case lexer.tag.ALIAS:
-        // case lexer.tag.UNION:
-        // case lexer.tag.FN:
+        case lexer.tag.UNION:
+            p, node = try parse_union_statement(p)
         case lexer.tag.LET, lexer.tag.VAR,
              lexer.tag.IDENT:
             p, node = try parse_assignment_statement(p)
+        // case lexer.tag.FN:
         case _:
             p = add_error(p, invalid_statement{i: p.tkn_i})
         }
@@ -282,6 +282,72 @@ fn parse_enum_statement(p parser)! parser, ast.index {
         tag: ast.tag.enum, 
         token: op_tkn, 
         data: {x: ident, y: fields},
+    })
+    var p = p^{ p.nodes = nodes }
+    let idx = ast.index(len(nodes)-1)
+    
+    return p, idx
+}
+
+fn parse_union_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.UNION), "expected 'union'")
+
+    let op_tkn = p.tkn_i
+    // consume 'union'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+
+    p, let ident = parse_literal(p)
+    // TODO: verify ident is of type IDENT
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    // consume '{'
+    p = next_token(p)
+
+    var extra = make([]ast.index, 0, 4)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+        // as unions dont allow aggregate types we need to split
+        // up the parsing
+        if is_tag(p, lexer.tag.IDENT) {
+            p, let typ = try parse_expression(p, precedence.none)
+            if typ == -1 {
+                return p, -1
+            }
+            extra = append(extra, typ)
+        } else if is_scalar_type(p) {
+            p, let typ = try parse_literal(p)
+            if typ == -1 {
+                return p, -1
+            }
+            extra = append(extra, typ)
+        } else {
+            p = add_error(p, expected_type{i: p.tkn_i})
+            return p, -1
+        }
+    }
+    if len(extra) == 0 {
+        p = add_error(p, expected_type{i: p.tkn_i})
+        return p, -1
+    } else if !is_tag(p, lexer.tag.RBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    // consume '}'
+    p = next_token(p)
+
+    p, let types = add_extra(p, ast.tag.union_types, extra)
+
+    var nodes = append(p.nodes, {
+        tag: ast.tag.union_def, 
+        token: op_tkn, 
+        data: {x: ident, y: types},
     })
     var p = p^{ p.nodes = nodes }
     let idx = ast.index(len(nodes)-1)
@@ -939,6 +1005,19 @@ fn is_type_literal(p parser) bool {
              lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.LBRACE, lexer.tag.IDENT: true
+        case _: false
+    }
+}
+
+// is_scalar_type checks whether current token is a scalar type
+fn is_scalar_type(p parser) bool {
+    return match current_tag(p) {
+        case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
+             lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
+             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,
+             lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
+             lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
+             lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR: true
         case _: false
     }
 }
