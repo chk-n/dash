@@ -1091,9 +1091,29 @@ fn is_type_literal(p parser) bool {
              lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
              lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
-             lexer.tag.LBRACK, lexer.tag.LBRACE, lexer.tag.IDENT: true
+             lexer.tag.LBRACK, lexer.tag.IDENT: true
+        case lexer.tag.LBRACE: maybe_column_type(p)
         case _: false
     }
+}
+
+fn maybe_column_type(p parser) bool {
+    if i64(p.tkn_i+2) >= len(p.tkns)-1 {
+        return false
+    }
+    let tag = current_tag(p)
+    if tag != lexer.tag.LBRACE {
+        return false
+    }
+    let peek_tag = p.tkns[p.tkn_i+1].tag
+    if peek_tag != lexer.tag.RBRACE {
+        return false
+    }
+    let peek2_tag = p.tkns[p.tkn_i+2].tag
+    if peek2_tag != lexer.tag.IDENT {
+        return false
+    }
+    return true
 }
 
 // is_scalar_type checks whether current token is a scalar type
