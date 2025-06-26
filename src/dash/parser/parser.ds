@@ -366,15 +366,13 @@ fn parse_enum_statement(p parser)! parser, ast.index {
 
     p, let fields = add_extra(p, ast.tag.enum_fields, extra)
 
-    var nodes = append(p.nodes, {
+    p, let enum_def = add_node(p, {
         tag: ast.tag.enum_def, 
         token: op_tkn, 
         data: {x: ident, y: fields},
     })
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
     
-    return p, idx
+    return p, enum_def
 }
 
 fn parse_union_statement(p parser)! parser, ast.index {
@@ -432,15 +430,13 @@ fn parse_union_statement(p parser)! parser, ast.index {
 
     p, let types = add_extra(p, ast.tag.union_types, extra)
 
-    var nodes = append(p.nodes, {
+    p, let union_def = add_node(p, {
         tag: ast.tag.union_def, 
         token: op_tkn, 
         data: {x: ident, y: types},
     })
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
     
-    return p, idx
+    return p, union_def
 }
 
 // fn parse_block_statement() {
@@ -520,16 +516,13 @@ fn parse_assignment_statement(p parser)! parser, ast.index {
 
     p, let exps = add_extra(p, ast.tag.expr_list, extra)
 
-    var nodes = append(p.nodes, {
+    p, let assign = add_node(p, {
         tag: ast.tag.assignment,
         token: op_tkn, 
         data: {x: decls, y: exps},
     })
     
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
-
-    return p, idx
+    return p, assign
 }
 
 // parse_decleration_statement parses let and var statements
@@ -554,16 +547,13 @@ fn parse_decleration_statement(p parser)! parser, ast.index {
     p, let ident = parse_literal(p)
     // TODO: verify ident is of type IDENT
 
-    var nodes = append(p.nodes, {
+    p, let decl = add_node(p, {
         tag: ast.decl_to_tag(op_tag),
         token: op_tkn, 
         data: {x: ident, y: -1},
     })
     
-    var p = p^{ p.nodes = nodes }
-
-    let idx = ast.index(len(nodes)-1)
-    return p, idx
+    return p, decl
 }
 
 // ----------- //
@@ -647,16 +637,13 @@ fn parse_ident_or_struct(p parser)! parser, ast.index {
         return p, -1
     }
 
-    var nodes = append(p.nodes, {
+    p, let lit = add_node(p, {
         tag: ast.tag.struct_lit,
         token: p.tkn_i,
         data: {x: ident, y: strct},
-    })
-    
-    var p = p^{ p.nodes = nodes }
+    })    
 
-    let idx = ast.index(len(nodes)-1)
-    return p, idx       
+    return p, lit      
 }
 
 // parse_type_literal parses scalar and aggregate types
@@ -700,16 +687,13 @@ fn parse_array_type(p parser)! parser, ast.index {
         return p, -1
     }
     
-    var nodes = append(p.nodes, {
+    p, let typ = add_node(p, {
         tag: ast.tag.array_type,
         token: op_tkn,
         data: {x: element_type, y: -1}
     })
-    
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
-    
-    return p, idx
+       
+    return p, typ
 }
 
 // parse_column_type parses column types like {}abc and {}x.abc
@@ -737,32 +721,26 @@ fn parse_column_type(p parser)! parser, ast.index {
         return p, -1
     }
     
-    var nodes = append(p.nodes, {
+    p, let typ = add_node(p, {
         tag: ast.tag.column_type,
         token: op_tkn,
         data: {x: type_ref, y: -1}
     })
     
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
-    
-    return p, idx
+    return p, typ
 }
 
 fn parse_literal(p parser)! parser, ast.index {
     let tag = try ast.literal_to_tag(p.tkns[p.tkn_i].tag)
 
-    var nodes = append(p.nodes, {
+    var p, let lit = add_node(p, {
         tag: tag,
         token: p.tkn_i,
         data: ast.NULL_DATA,
     })
-    
-    var p = p^{ p.nodes = nodes }
-    let idx = ast.index(len(nodes)-1)
-     
+         
     p = next_token(p)
-    return p, idx
+    return p, lit
 }
 
 fn parse_struct_literal(p parser)! parser, ast.index {
@@ -904,16 +882,13 @@ fn parse_negate_expression(p parser)! parser, ast.index {
     // TODO: ensure fn call, number/bool/byte literal
     // identifier, prefix or infix tag
     
-    var nodes = append(p.nodes, {
+    p, let exp = add_node(p, {
         tag:   try ast.prefix_to_tag(op_tag),
         token: op_tkn,
         data:  {x: node, y: -1}
     })
-    p = p^{ p.nodes = nodes }
-
-    let idx = ast.index(len(nodes)-1)
-    return p, idx
-
+    
+    return p, exp
 }
 
 fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
@@ -930,15 +905,14 @@ fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
     if node == -1 {
         return p, -1
     }
-    var nodes = append(p.nodes, {
+
+    p, let exp = add_node(p, {
         tag: try ast.infix_to_tag(op_tag),
         token: op_tkn,
         data: {x: prev, y: node}
     })
-    p = p^{ p.nodes = nodes }
 
-    let idx = ast.index(len(nodes)-1)
-    return p, idx
+    return p, exp
 }
 
 fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
@@ -986,15 +960,13 @@ fn parse_call_expression(p parser, prev ast.index)! parser, ast.index {
     // consume ')'
     p = next_token(p)
 
-    var nodes = append(p.nodes, {
+    p, let exp = add_node(p, {
         tag: ast.tag.call,
         token: op_tkn,
         data: {x: prev, y: node}
     })
-    p = p^{ p.nodes = nodes }
 
-    let idx = ast.index(len(nodes)-1)
-    return p, idx   
+    return p, exp
 }
 
 // parse_expression_list parses comma seperated list of expressions
@@ -1066,22 +1038,20 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
     
     p = next_token(p)
 
-    var nodes = append(p.nodes, {
+    p, let exp = add_node(p, {
         tag: tag,
         token: op_tkn,
         data: {x: prev, y: node}
     })
-    p = p^{ p.nodes = nodes }
-
-    let idx = ast.index(len(nodes)-1)
-    return p, idx       
+    
+    return p, exp      
 }
 
 // ------ //
 // Helper //
 // ------ //
 
-// is_type_literal cheks whether current token
+// is_type_literal checks whether current token
 // is or could be (i.e. '[', '{') a type literal
 fn is_type_literal(p parser) bool {
     return match current_tag(p) {
@@ -1136,13 +1106,11 @@ fn add_extra(p parser, et ast.tag, e []ast.index) parser, ast.index {
     var extras = append(p.extras, e)
     var p = p^{ p.extras = extras }
 
-    var nodes = append(p.nodes, {
+    p, let node = add_node(p, {
         tag: et,
         token: 0, // N/A
         data: {x: start, y: end}
     })
-    p = p^{ p.nodes = nodes }
-    let node = ast.index(len(nodes)-1)
 
     return p, node
 }
