@@ -311,7 +311,7 @@ fn parse_enum_statement(p parser)! parser, ast.index {
     p, let fields = add_extra(p, ast.tag.enum_fields, extra)
 
     var nodes = append(p.nodes, {
-        tag: ast.tag.enum, 
+        tag: ast.tag.enum_def, 
         token: op_tkn, 
         data: {x: ident, y: fields},
     })
