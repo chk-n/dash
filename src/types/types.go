@@ -1191,6 +1191,13 @@ func CanCoalesce(from, to Type) bool {
 			}
 		}
 		return false
+	case *Enum:
+		switch to := to.(type) {
+		case *Enum:
+			return from.Name == to.Name
+		}
+		return false
+
 	case *Optional:
 		switch to := to.(type) {
 		case *Optional:

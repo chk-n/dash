@@ -343,6 +343,56 @@ fn test_parse_enum_statement()! {
     try assert_error("lib a enum b {}", [expected_identifier{i:5}])
 }
 
+@test
+fn test_parse_function_statement()! {
+    try assert_canonical("lib a fn abc()")
+    try assert_canonical("lib a fn abc() i64")
+    try assert_canonical("lib a fn abc() u8,string")
+    try assert_canonical("lib a fn abc() f32,x.y,y")
+    try assert_canonical("lib a fn abc()!")
+    try assert_canonical("lib a fn abc()! xyz")
+    try assert_canonical("lib a fn abc()! xyz,byte")
+    try assert_canonical("lib a fn abc() {}")
+    try assert_canonical("lib a fn abc()! {}")    
+    try assert_canonical("lib a fn abc() xyz {}")
+    try assert_canonical("lib a fn abc()! xyz {}")
+    try assert_canonical("lib a fn abc() xyz,i64 {}")
+    try assert_canonical("lib a fn abc()! xyz,i64 {}")
+    
+    try assert_canonical("lib a fn abc(a i64)")
+    try assert_parse("lib a fn abc(a i64,)", "lib a fn abc(a i64)")
+    try assert_canonical("lib a fn abc(a,b i64)")
+    try assert_canonical("lib a fn abc(a,b,c,d,e,f,g,h i64)")
+    try assert_canonical("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
+    try assert_canonical("lib a fn abc(a string,b i64)")
+
+    // NOTE: these issues will be caught by semsis
+    try assert_canonical("lib a fn abc(a)")
+    try assert_canonical("lib a fn abc(a,b)")
+    try assert_canonical("lib a fn abc(a i64,b)")
+
+    try assert_canonical("lib a @abc(c) fn abc()")
+    try assert_canonical(`lib a @abc(a,1.1) fn abc()`)
+    try assert_canonical("lib a @xyz fn abc()")
+
+    // try assert_canonical("lib a pub fn abc()")
+    // try assert_canonical("lib a pub fn abc() {}")
+
+    try assert_error("lib a fn", [expected_identifier{i: 3}])
+    try assert_error("lib a fn abc", [expected_parenthesis{i: 4}])
+    try assert_error("lib a fn abc(", [expected_parenthesis{i: 5}])
+    try assert_error("lib a fn abc() {", [expected_brace{i: 7}])
+    try assert_error("lib a fn abc()! {", [expected_brace{i: 8}])
+    try assert_error("lib a fn abc(a,,) ", [expected_identifier{i: 7}])
+    try assert_error("lib a fn abc(a b i64) ", [expected_comma{i: 6}])
+    try assert_error("lib a fn abc(a,b, i64) ", [expected_identifier{i: 9}])
+    try assert_error("lib a fn abc() xyz {} abc", [invalid_statement{i: 9}])
+    try assert_error("lib a @ fn abc(", [expected_identifier{i: 3}, expected_parenthesis{i: 6}])
+    try assert_error("lib a @abc(", [expected_expression{i: 5}])
+    try assert_error("lib a @abc(a", [expected_parenthesis{i: 6}])
+    try assert_error("lib a @xyz fn abc(", [expected_parenthesis{i: 7}])
+    
+}
 // ------- //
 // Helpers //
 // ------- //

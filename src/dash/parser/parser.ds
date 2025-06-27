@@ -30,8 +30,11 @@ enum mode {
 // e.g. if/else and match statements
 enum context {
     none
-    // e.g. if/else or match statements
-    cond_brace
+    // whether parser should interpret
+    // ident followed by '{' as struct
+    // literal or identifier and e.g.
+    // start of block
+    brace
 }
 
 // defines the precedence of infix operators
@@ -148,6 +151,8 @@ fn parse_library(p parser)! parser, ast.index {
             p, node = try parse_union_statement(p)
         case lexer.tag.LET, lexer.tag.VAR:
             p, node = try parse_assignment_statement(p)
+        case lexer.tag.AT:
+            p, node = try parse_attribute_statement(p)
         case lexer.tag.FN:
             p, node = try parse_function_statement(p)
         case _:
@@ -386,9 +391,7 @@ fn parse_union_statement(p parser)! parser, ast.index {
         p = add_error(p, expected_identifier{i: p.tkn_i})
         return p, -1
     }
-
     p, let ident = parse_literal(p)
-    // TODO: verify ident is of type IDENT
 
     if !is_tag(p, lexer.tag.LBRACE) {
         p = add_error(p, expected_brace{i: p.tkn_i})
@@ -439,9 +442,230 @@ fn parse_union_statement(p parser)! parser, ast.index {
     return p, union_def
 }
 
-// fn parse_block_statement() {
-    
-// }
+fn parse_attribute_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.AT), "expected '@'")
+
+    let op_tkn = p.tkn_i
+    // consume '@'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+    p, let ident = try parse_literal(p)
+
+    var exprs = ast.index(-1)
+    if is_tag(p, lexer.tag.LPAREN) {
+        p = next_token(p)
+        p, exprs = try parse_expression_list(p, lexer.tag.RPAREN)
+        if exprs == -1 {
+            return p, -1
+        }
+        if !is_tag(p, lexer.tag.RPAREN) {
+            p = add_error(p, expected_parenthesis{i: p.tkn_i})
+            return p, -1
+        }
+        p = next_token(p)
+    }
+
+   
+    p, let attr = add_node(p, {
+        tag: ast.tag.attribute,
+        token: op_tkn,
+        data: {x: ident, y: exprs},        
+    })
+
+    return p, attr
+}
+
+// parse_function_statement parses a function definition and
+// stores the following in extra: [fn_ident, fn_args, fn_rets, fn_body]
+// fn_args, fn_rets and fn_body (assuming neither index is -1)
+// points to nodes with start and end indices that point to
+// extra array
+fn parse_function_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.FN), "expected 'fn'")
+
+    let op_tkn = p.tkn_i
+    // consume 'fn'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+    p, let ident = parse_literal(p)
+
+    if !is_tag(p, lexer.tag.LPAREN) {
+        p = add_error(p, expected_parenthesis{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    // parse optional argument list
+    var args = ast.index(-1)
+    if !is_tag(p, lexer.tag.RPAREN) {
+        p, args = try parse_function_argument_list(p)
+    }
+
+    if !is_tag(p, lexer.tag.RPAREN) {
+        p = add_error(p, expected_parenthesis{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    // is error-prone function?
+    var tag = ast.tag.fn_def
+    if is_tag(p, lexer.tag.LNOT) {
+        tag = ast.tag.fn_err_def
+        p = next_token(p)
+    }
+    // parse optional return type list
+    var rets = ast.index(-1)
+    if is_type_literal(p) {
+        p = p^{ p.ctx = context.brace }
+        p, rets = try parse_function_return_list(p)
+        p = p^{ p.ctx = context.none }
+    }
+    // parse optional body
+    var body = ast.index(-1)
+    if is_tag(p, lexer.tag.LBRACE) {
+        p, body = try parse_block_statement(p)
+    }
+    let extra = [ident, args, rets, body]
+    let start = len(p.extras)
+    let end = start+len(extra)-1
+    var extras = append(p.extras, extra)
+    var p = p^{ p.extras = extras }
+
+    p, let fn_def = add_node(p, {
+        tag: tag,
+        token: op_tkn,
+        data: {x: start, y: end}
+    })
+
+    return p, fn_def
+}
+
+fn parse_function_argument_list(p parser)! parser, ast.index {
+    var p = p
+    var extra = make([]ast.index, 0, 2)
+
+    // loop ensures we append ident idx and type idx to extra,
+    // this means each loop adds two elements to extra regardless
+    // if the identifier has a type defined or not
+    for !is_tag(p, lexer.tag.RPAREN) && !is_tag(p, lexer.tag.EOF) {
+        if !is_tag(p, lexer.tag.IDENT) {
+            p = add_error(p, expected_identifier{i: p.tkn_i})
+            p = next_token(p)
+            return p, -1
+        }
+        p, let arg = try parse_literal(p)
+        extra = append(extra, arg)
+
+        if is_type_literal(p) {
+            p, let typ = try parse_type_literal(p)
+            extra = append(extra, typ)
+        } else {
+            extra = append(extra, -1)
+        }
+        
+        if is_tag(p, lexer.tag.RPAREN) || is_tag(p, lexer.tag.EOF) {
+            break
+        } else if is_tag(p, lexer.tag.COMMA) {
+            p = next_token(p)
+        } else {
+            if is_type_literal(p) {
+                // if current token is a type literal it can
+                // only mean that the previous token was supposed
+                // to be a comma
+                p = add_error(p, expected_comma{i: p.tkn_i-1})
+            } else {
+                p = add_error(p, expected_comma{i: p.tkn_i})
+            }
+            p = next_token(p)
+            return p, -1
+        }
+    }
+    // NOTE: maybe we validate that last node in extra
+    // is not an ident? or should we just do this in
+    // semsis
+
+    p, let args = add_extra(p, ast.tag.fn_arg_list, extra)
+    return p, args
+}
+
+fn parse_function_return_list(p parser)! parser, ast.index {
+    var p = p
+    var extra = make([]ast.index, 0, 2)
+    for !is_tag(p, lexer.tag.LBRACE) && !is_tag(p, lexer.tag.EOF) {
+        if !is_type_literal(p) {
+            p = add_error(p, expected_type{i: p.tkn_i})
+            return p, -1
+        }
+        p, let typ = try parse_type_literal(p)
+        extra = append(extra, typ)
+
+        if is_tag(p, lexer.tag.LBRACE) || is_tag(p, lexer.tag.EOF) {
+            break
+        }
+        if is_tag(p, lexer.tag.COMMA) {
+            p = next_token(p)
+        } else {
+            p = add_error(p, expected_comma{i: p.tkn_i})
+            return p, -1
+        }
+    }
+
+    p, let rets = add_extra(p, ast.tag.fn_ret_list, extra)
+    return p, rets
+}
+
+fn parse_block_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.LBRACE), "expected '{'")
+
+    let op_tkn = p.tkn_i
+    // consume '{'
+    var p = next_token(p)
+    var extra = make([]ast.index, 0, 2)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+        p, let stmt = try parse_statement_in_block(p)
+        if stmt == -1 {
+            p = find_next_valid_block_token(p)
+            next
+        }
+    }
+    // empty block is allowed
+    if !is_tag(p, lexer.tag.RBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    p, let blk = try add_extra(p, ast.tag.block_stmt, extra)
+    return p, blk
+}
+
+fn find_next_valid_block_token(p parser)! parser {
+    var p = p
+    for !is_tag(p, lexer.tag.EOF) {
+        match current_tag(p) {
+        case lexer.tag.IF, lexer.tag.MATCH,
+             lexer.tag.FOR, lexer.tag.RETURN,
+             lexer.tag.RAISE, lexer.tag.NEXT,
+             lexer.tag.BREAK, lexer.tag.TRY,
+             lexer.tag.DEFER, lexer.tag.FN,
+             lexer.tag.LET, lexer.tag.VAR,
+             lexer.tag.IDENT:
+            return p
+        case _:
+            p = next_token(p)
+        }
+    }
+    return p
+}
+
 
 // parse_statement_in_block parses statements within a
 fn parse_statement_in_block(p parser)! parser, ast.index {
@@ -449,6 +673,16 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
     return match tag {
         case lexer.tag.LET, lexer.tag.VAR, lexer.tag.IDENT:
             try parse_assignment_statement(p)
+        // case lexer.tag.IF:
+        // case lexer.tag.FOR:
+        // case lexer.tag.MATCH:
+        // case lexer.tag.TRY:
+        // case lexer.tag.RAISE:
+        // case lexer.tag.RETURN:
+        // case lexer.tag.DEFER:
+        // case lexer.tag.BREAK, lexer.tag.NEXT:
+        // // function call
+        // case lexer.tag.IDENT:
         case _: raise unexpected_token{i: p.tkn_i}
     }
 }
@@ -627,7 +861,7 @@ fn parse_ident_or_struct(p parser)! parser, ast.index {
 
     if is_tag(p, lexer.tag.DOT) {
         return try parse_infix_expression(p, ident)
-    } else if p.ctx == context.cond_brace || !is_tag(p, lexer.tag.LBRACE) {
+    } else if p.ctx == context.brace || !is_tag(p, lexer.tag.LBRACE) {
         // do not parse {} if we are currently in an if/else condition
         return p, ident
     }
@@ -979,12 +1213,22 @@ fn parse_expression_list(p parser, end lexer.tag)! parser, ast.index {
     for !is_tag(p, end) && !is_tag(p, lexer.tag.EOF) {
         p, let node = parse_expression(p, precedence.none)
         if node == -1 {
+            p = add_error(p, expected_expression{i: p.tkn_i})
             return p, node
         }
         extra = append(extra, node)
-        if is_tag(p, lexer.tag.COMMA) {
-            p = next_token(p)
+        if is_tag(p, end) || is_tag(p, lexer.tag.EOF) {
+            break
         }
+        if !is_tag(p, lexer.tag.COMMA) {
+            p = add_error(p, expected_comma{i: p.tkn_i})
+            return p, -1
+        }
+        p = next_token(p)
+    }
+    if len(extra) == 0 {
+        p = add_error(p, expected_expression{i: p.tkn_i})
+        return p, -1
     }
 
     p, let exps = add_extra(p, ast.tag.expr_list, extra)

@@ -61,6 +61,12 @@ pub enum tag {
     enum_fields
     union_def
     union_types
+    attribute
+    fn_def
+    fn_err_def
+    fn_arg_list
+    fn_ret_list
+    block_stmt
     assignment
     decl_list
     let_decl
@@ -184,7 +190,6 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
 
     var buf = buf
     let node = a.nodes[idx]
-
     let data = node.data
     match node.tag {
     case tag.library, tag.type_def,
@@ -206,6 +211,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
                 buf = append(buf, ' ')
             }
         }
+
     case tag.use_def:
         // TODO: once we can parse import alias then
         // data.x will contain idx of that node
@@ -218,6 +224,18 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         }
         buf = append(buf, ' ')
         buf = to_string(a, data.y, buf)
+
+    case tag.attribute:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = to_string(a, data.x, buf)
+        if data.y != -1 {
+            buf = append(buf, '(')
+            buf = to_string(a, data.y, buf)
+            buf = append(buf, ')')
+        }
+    
 
     case tag.struct_fields:
         buf = append(buf, '{')
@@ -232,9 +250,9 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
         buf = append(buf, '}')
-    
         
-    case tag.enum_fields, tag.union_types:
+    case tag.enum_fields, tag.union_types,
+         tag.block_stmt:
         buf = append(buf, '{')
         for i = data.x; i <= data.y; i++ {
             let idx = a.extras[i]
@@ -244,6 +262,60 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
         buf = append(buf, '}')
+    
+    case tag.fn_def, tag.fn_err_def:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        let ident = a.extras[data.x]
+        buf = to_string(a, ident, buf)
+        
+        buf = append(buf, '(')
+        let args = a.extras[data.x+1]
+        if args != -1 {
+            buf = to_string(a, args, buf)
+        }
+        buf = append(buf, ')')
+
+        if node.tag == tag.fn_err_def {
+            buf = append(buf, '!')
+        }
+        
+        let rets = a.extras[data.x+2]
+        if rets != -1 {
+            buf = append(buf, ' ')
+            buf = to_string(a, rets, buf)
+        }
+        
+        let body = a.extras[data.x+3]
+        if body != -1 {
+            buf = append(buf, ' ')
+            buf = to_string(a, body, buf)
+        }
+        
+    case tag.fn_arg_list:
+        for i = data.x; i <= data.y; i = i+2 {
+            let ident = a.extras[i]
+            buf = to_string(a, ident, buf)
+            let typ = a.extras[i+1]
+            if typ != -1 {              
+                buf = append(buf, ' ')
+                buf = to_string(a, typ, buf)
+            }
+            if i != data.y-1 {
+                buf = append(buf,',')
+            }
+        }
+
+    case tag.fn_ret_list:
+        for i = data.x; i <= data.y; i++ {
+            let idx = a.extras[i]
+            buf = to_string(a, idx, buf)
+            if i != data.y {
+                buf = append(buf,',')
+            }
+        }
         
     case tag.assignment:
         buf = to_string(a, data.x, buf)
@@ -291,6 +363,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
         buf = append(buf, '}')
+
     case tag.array_lit:
         buf = append(buf, '[')
         for i = data.x; i <= data.y; i++ {
@@ -348,6 +421,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
                 buf = append(buf,',')
             }
         }
+
     case tag.index:
         buf = to_string(a, data.x, buf)   
         buf = append(buf, '[')
@@ -399,7 +473,8 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     case tag.enum_def, tag.type_def: 4
     case tag.let_decl, tag.var_decl,
          tag.library, tag.use_def: 3
-    case tag.lor, tag.land, tag.andnot, 
+    case tag.fn_def, tag.fn_err_def,
+         tag.lor, tag.land, tag.andnot, 
          tag.lsh, tag.rsh,
          tag.lte, tag.gte,
          tag.eq, tag.neq: 2
