@@ -1181,7 +1181,7 @@ fn parse_call_expression(p parser, prev ast.index)! parser, ast.index {
     if !is_tag(p, lexer.tag.RPAREN) {
         p, node = parse_expression_list(p, lexer.tag.RPAREN)
         if node == -1 {
-            return p, node
+            return p, -1
         }
     }
     // TODO: validate node is either -1, ident, call, dot, or index
@@ -1213,8 +1213,7 @@ fn parse_expression_list(p parser, end lexer.tag)! parser, ast.index {
     for !is_tag(p, end) && !is_tag(p, lexer.tag.EOF) {
         p, let node = parse_expression(p, precedence.none)
         if node == -1 {
-            p = add_error(p, expected_expression{i: p.tkn_i})
-            return p, node
+            return p, -1
         }
         extra = append(extra, node)
         if is_tag(p, end) || is_tag(p, lexer.tag.EOF) {

@@ -131,6 +131,7 @@ fn test_call_expression()! {
     try assert_parse_exp("a()", "a()")
     try assert_parse_exp("a(1)", "a(1)")
     try assert_parse_exp("a(b)", "a(b)")
+    try assert_parse_exp(`a("b",1.2)`, `a("b",1.2)`)
     try assert_parse_exp("a(1,b,1.0)", "a(1,b,1.0)")
     try assert_parse_exp("a(b,)", "a(b)")
     try assert_parse_exp("func({a: 1, b: 2})", "func({a:1,b:2})")
@@ -139,7 +140,7 @@ fn test_call_expression()! {
     try assert_parse_exp("func(x, {y: z})", "func(x,{y:z})")
     try assert_parse_exp("outer(inner(a, b), c)", "outer(inner(a,b),c)")
 
-    try assert_parse_error("a(", [expected_parenthesis{i: 2}])
+    try assert_parse_error("a(", [expected_expression{i: 2}])
     try assert_parse_error("a(b", [expected_parenthesis{i: 3}])
     try assert_parse_error("a(b,", [expected_parenthesis{i: 4}])
     try assert_parse_error("a(b,,", [expected_expression{i: 4}])
