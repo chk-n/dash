@@ -203,14 +203,13 @@ fn test_whitespace()! {
 }
 
 
-// TODO: improve this test with token type array
 @test
 fn test_sequential()! {
     let tests = [
-        {"a+b", 3},
-        {"if(x>10){return true}", 10},
-        {"let x = 123 + 456", 6},
-        {"fn add(a, b int) { return a + b }", 14},
+        {`a("b")`, [tag.IDENT, tag.LPAREN, tag.STRING, tag.RPAREN]},       
+        {"a+b", [tag.IDENT, tag.ADD, tag.IDENT]},
+        {"if x>10 {return}", [tag.IF, tag.IDENT, tag.GT, tag.INT, tag.LBRACE, tag.RETURN, tag.RBRACE]},
+        {"let x = 123 + 456", [tag.LET, tag.IDENT, tag.ASSGN, tag.INT, tag.ADD, tag.INT]},
     ]
     
     for i = 0; i < len(tests); i++ {
@@ -224,10 +223,9 @@ fn test_sequential()! {
             if tkn.tag == tag.EOF {
                 break
             }
+            try assert(tkn.tag == tc.1[count], "token type mismatch")
             count = count + 1
         }
-        
-        try assert(count == tc.1, "token count mismatch")
     }
 }
 

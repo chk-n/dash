@@ -159,11 +159,11 @@ fn read_string(l *lexer) *lexer, token {
 
         let ch = l.buf[l.idx]
         if ch == '"' {
+            l = next_ch(l)
             break
         }
     }
-    
-    return l, token{tag: tag.STRING, start: idx, end: l.idx}
+    return l, token{tag: tag.STRING, start: idx, end: l.idx-1}
 }
 
 fn read_multi_string(l *lexer) *lexer, token {
