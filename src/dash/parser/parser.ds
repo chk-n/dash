@@ -146,10 +146,10 @@ fn parse_library(p parser)! parser, ast.index {
         // case lexer.tag.ERROR:
         case lexer.tag.UNION:
             p, node = try parse_union_statement(p)
-        case lexer.tag.LET, lexer.tag.VAR,
-             lexer.tag.IDENT:
+        case lexer.tag.LET, lexer.tag.VAR:
             p, node = try parse_assignment_statement(p)
-        // case lexer.tag.FN:
+        case lexer.tag.FN:
+            p, node = try parse_function_statement(p)
         case _:
             p = add_error(p, invalid_statement{i: p.tkn_i})
         }
@@ -190,7 +190,7 @@ fn find_next_valid_global_token(p parser)! parser {
              lexer.tag.ERROR, lexer.tag.TYPE,
              lexer.tag.ALIAS, lexer.tag.UNION,
              lexer.tag.FN, lexer.tag.LET,
-             lexer.tag.VAR, lexer.tag.IDENT:
+             lexer.tag.VAR:
             return p
         case _:
             p = next_token(p)
