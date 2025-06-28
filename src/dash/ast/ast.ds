@@ -71,6 +71,7 @@ pub enum tag {
     decl_list
     let_decl
     var_decl
+    if_stmt
 
     dot
     call
@@ -323,6 +324,28 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = append(buf, '=')
         buf = append(buf, ' ')
         buf = to_string(a, data.y, buf)
+        
+    case tag.if_stmt:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        let n = (data.y - data.x)+1
+        for i = data.x; i < data.y; i = i+2 {
+            let idx = a.extras[i]
+            buf = to_string(a, idx, buf)
+            buf = append(buf, ' ')
+            let idx = a.extras[i+1]
+            buf = to_string(a, idx, buf)
+            if n > 1 && i < data.y-2  {
+                buf = append(buf, []byte(" else if "))
+            }
+        }
+        if n%2 != 0 {
+            buf = append(buf, []byte(" else "))
+            let idx = a.extras[data.y]
+            buf = to_string(a, idx, buf)
+        }
 
     case tag.decl_list:
         for i = data.x; i <= data.y; i++ {
@@ -473,6 +496,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     case tag.enum_def, tag.type_def: 4
     case tag.let_decl, tag.var_decl,
          tag.library, tag.use_def: 3
+    case tag.if_stmt: 2
     case tag.fn_def, tag.fn_err_def,
          tag.lor, tag.land, tag.andnot, 
          tag.lsh, tag.rsh,

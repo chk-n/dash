@@ -82,6 +82,10 @@ error unexpected_expression {
     want string
 }
 
+error unexpected_statement {
+    i ast.index
+}
+
 error unexpected_eof {
     i    ast.token_index
     want lexer.tag

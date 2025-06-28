@@ -108,6 +108,13 @@ fn next_token(p parser) parser {
     return p
 }
 
+fn peek_tag(p parser) lexer.tag {
+    if i64(p.tkn_i + 1) >= len(p.tkns) {
+        return lexer.tag.EOF
+    }
+    return p.tkns[p.tkn_i+1].tag
+}
+
 fn parse_library(p parser)! parser, ast.index {
 
     let op_tkn = p.tkn_i
@@ -631,9 +638,15 @@ fn parse_block_statement(p parser)! parser, ast.index {
     var extra = make([]ast.index, 0, 2)
     for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
         p, let stmt = try parse_statement_in_block(p)
+        if is_tag(p, lexer.tag.RBRACE) {
+            extra = append(extra, stmt)
+            break
+        }
         if stmt == -1 {
             p = find_next_valid_block_token(p)
             next
+        } else {           
+            extra = append(extra, stmt)
         }
     }
     // empty block is allowed
@@ -642,13 +655,13 @@ fn parse_block_statement(p parser)! parser, ast.index {
         return p, -1
     }
     p = next_token(p)
-
     p, let blk = try add_extra(p, ast.tag.block_stmt, extra)
     return p, blk
 }
 
 fn find_next_valid_block_token(p parser)! parser {
     var p = p
+    var cnt = 0
     for !is_tag(p, lexer.tag.EOF) {
         match current_tag(p) {
         case lexer.tag.IF, lexer.tag.MATCH,
@@ -659,6 +672,19 @@ fn find_next_valid_block_token(p parser)! parser {
              lexer.tag.LET, lexer.tag.VAR,
              lexer.tag.IDENT:
             return p
+        // the idea is to "eat" well formed braces
+        // and stop as soon as an RBRACE is read
+        // from a higher scope to avoid the loop
+        // running loose until EOF
+        case lexer.tag.LBRACE:
+            p = next_token(p)
+            cnt++
+        case lexer.tag.RBRACE:
+            p = next_token(p)
+            if cnt == 0 {
+                return p
+            }
+            cnt--
         case _:
             p = next_token(p)
         }
@@ -666,14 +692,16 @@ fn find_next_valid_block_token(p parser)! parser {
     return p
 }
 
-
 // parse_statement_in_block parses statements within a
 fn parse_statement_in_block(p parser)! parser, ast.index {
     let tag = current_tag(p)
     return match tag {
-        case lexer.tag.LET, lexer.tag.VAR, lexer.tag.IDENT:
+        case lexer.tag.IDENT:
+            try parse_assign_or_call(p)
+        case lexer.tag.LET, lexer.tag.VAR:
             try parse_assignment_statement(p)
-        // case lexer.tag.IF:
+        case lexer.tag.IF:
+            try parse_if_statement(p)
         // case lexer.tag.FOR:
         // case lexer.tag.MATCH:
         // case lexer.tag.TRY:
@@ -683,8 +711,27 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
         // case lexer.tag.BREAK, lexer.tag.NEXT:
         // // function call
         // case lexer.tag.IDENT:
-        case _: raise unexpected_token{i: p.tkn_i}
+        case _:
+            var p = add_error(p, unexpected_statement{i: p.tkn_i})
+            p = next_token(p)
+            return p, -1
     }
+}
+
+// parse_assign_or_call disambiguates 'a,' / 'a =' and 'a()'
+fn parse_assign_or_call(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.IDENT), "expected ident")
+
+    if peek_tag(p) == lexer.tag.COMMA || peek_tag(p) == lexer.tag.ASSGN {
+        return try parse_assignment_statement(p)
+    } else if peek_tag(p) == lexer.tag.LPAREN {
+        var p, let ident = parse_literal(p)
+        return try parse_call_expression(p, ident)
+    }
+
+    var p = add_error(p, unexpected_statement{i: p.tkn_i})
+    p = next_token(p)
+    return p, -1
 }
 
 fn parse_assignment_statement(p parser)! parser, ast.index {
@@ -790,6 +837,87 @@ fn parse_decleration_statement(p parser)! parser, ast.index {
     return p, decl
 }
 
+fn parse_if_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.IF), "expected 'if'")
+
+    let op_tkn = p.tkn_i
+    // consume 'if'
+    var p = next_token(p)
+
+    var extra = make([]ast.index, 0, 2)
+    
+    // Parse if condition
+    p = p^{ p.ctx = context.brace }
+    p, let if_cond = try parse_expression(p, precedence.none)
+    p = p^{ p.ctx = context.none }
+    if if_cond == -1 {
+        return p, -1
+    }
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    
+    // Parse if block
+    p, let if_block = try parse_block_statement(p)
+    if if_block == -1 {
+        return p, -1
+    }
+    
+    extra = append(extra, [if_cond, if_block])
+    
+    // Parse optional else/else-if chain
+    for is_tag(p, lexer.tag.ELSE) {
+        // consume 'else'
+        p = next_token(p)
+        
+        if is_tag(p, lexer.tag.IF) {
+            // consume 'if'
+            p = next_token(p) 
+            p = p^{ p.ctx = context.brace }
+            p, let elif_cond = try parse_expression(p, precedence.none)
+            p = p^{ p.ctx = context.none }
+            if elif_cond == -1 {
+                return p, -1
+            }
+
+            if !is_tag(p, lexer.tag.LBRACE) {        
+                p = add_error(p, expected_brace{i: p.tkn_i})
+                return p, -1
+            }
+            p, let else_block = try parse_block_statement(p)
+            if else_block == -1 {
+                return p, -1
+            }
+            extra = append(extra, [elif_cond, else_block])
+        } else {
+            if !is_tag(p, lexer.tag.LBRACE) {
+                p = add_error(p, expected_brace{i: p.tkn_i})
+                return p, -1
+            }
+            p, let else_block = try parse_block_statement(p)
+            if else_block == -1 {
+                return p, -1
+            }
+            extra = append(extra, else_block)
+            break
+        }
+    }
+    let start = len(p.extras)
+    let end = start+len(extra)-1
+    var extras = append(p.extras, extra)
+    var p = p^{ p.extras = extras }
+
+    p, let if_stmt = add_node(p, {
+        tag: ast.tag.if_stmt,
+        token: op_tkn,
+        data: {x: start, y: end}
+    })
+        
+    return p, if_stmt
+}
+
 // ----------- //
 // Expressions //
 // ----------- //
@@ -849,7 +977,7 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
         return try parse_negate_expression(p)
     case _:
         var p = add_error(p, expected_expression{i: p.tkn_i})
-        p = next_token(p)  
+        // p = next_token(p)  
         return p, -1
     }
 }
@@ -1161,7 +1289,7 @@ fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
         // try parse_
     case _:
         var p = add_error(p, invalid_postfix_expression{i: p.tkn_i})
-        p = next_token(p)  
+        // p = next_token(p)  
         return p, -1
     }
 }
