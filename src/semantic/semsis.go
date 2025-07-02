@@ -1966,7 +1966,7 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			targetSign := types.GetSign(targetType)
 			intType := types.LowestFittingInt(lit.Value, targetSign == 1)
 			if !types.CanCoalesce(intType, targetType) {
-				s.addError(expr, errTypeMismatch(targetType.String(), expr.Type().String()))
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
 				return false
 			}
 			lit.SetType(intType)
