@@ -698,10 +698,11 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_if_statement(p)
         case lexer.tag.FOR:
             try parse_for_statement(p)
+        case lexer.tag.RETURN:
+            try parse_return_statement(p)
         // case lexer.tag.MATCH:
         // case lexer.tag.TRY:
         // case lexer.tag.RAISE:
-        // case lexer.tag.RETURN:
         // case lexer.tag.DEFER:
         // case lexer.tag.BREAK, lexer.tag.NEXT:
         // // function call
@@ -991,6 +992,57 @@ fn parse_for_statement(p parser)! parser, ast.index {
         token: op_tkn,
         data: {x: cond, y: block}
     })
+    return p, stmt
+}
+
+fn parse_return_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.RETURN), "expected 'return'")
+
+    let op_tkn = p.tkn_i
+    // consume 'return'
+    var p = next_token(p)
+    
+    // handle empty return
+    if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) {
+        p, let stmt = add_node(p, {
+            tag: ast.tag.return_stmt,
+            token: op_tkn,
+            data: {x: -1, y: -1}
+        })
+        return p, stmt
+    }
+    // NOTE: we could add special case for return1 and return2
+    // to avoid allocating indexes to extra?
+
+    var extra = make([]ast.index, 0, 2)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+        p, let node = parse_expression(p, precedence.none)
+        if node == -1 {
+            return p, -1
+        }
+        extra = append(extra, node)
+        
+        if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) {
+            break
+        }
+        if !is_tag(p, lexer.tag.COMMA) {
+            p = add_error(p, expected_comma{i: p.tkn_i})
+            return p, -1
+        }
+        // consume ','
+        p = next_token(p)
+    }
+    let start = len(p.extras)
+    let end = start+len(extra)-1
+    var extras = append(p.extras, extra)
+    var p = p^{ p.extras = extras }
+
+    p, let stmt = add_node(p, {
+        tag: ast.tag.return_stmt,
+        token: op_tkn, 
+        data: {x: start, y: end}
+    })
+
     return p, stmt
 }
 

@@ -458,6 +458,14 @@ fn test_parse_for_statement()! {
     // try assert_error("lib a fn a() { for b,c in d }", [expected_brace{i: 15}])
 }
 
+@test
+fn test_parse_return_statement()! {
+    try assert_canonical("lib a fn a() {return}")
+    try assert_canonical("lib a fn a() {return 1}")
+    try assert_canonical("lib a fn a() {return x,y,z}")
+    try assert_canonical("lib a fn a() {return a(),b(),z.a()}")
+    try assert_parse("lib a fn a() {return x,}", "lib a fn a() {return x}")
+}
 // ------- //
 // Helpers //
 // ------- //
