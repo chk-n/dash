@@ -1650,7 +1650,7 @@ fn add_extra(p parser, et ast.tag, e []ast.index) parser, ast.index {
 
     p, let node = add_node(p, {
         tag: et,
-        token: 0, // N/A
+        token: -1, // N/A
         data: {x: start, y: end}
     })
 
