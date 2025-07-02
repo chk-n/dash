@@ -41,6 +41,7 @@ enum context {
 // when parsing expressions
 enum precedence {
     none
+    assgn
     // bitwise or and logical or
     or
     xor
@@ -106,13 +107,6 @@ fn next_token(p parser) parser {
     }
     p = p^{ p.tkn_i = p.tkn_i + 1 }
     return p
-}
-
-fn peek_tag(p parser) lexer.tag {
-    if i64(p.tkn_i + 1) >= len(p.tkns) {
-        return lexer.tag.EOF
-    }
-    return p.tkns[p.tkn_i+1].tag
 }
 
 fn parse_library(p parser)! parser, ast.index {
@@ -702,7 +696,8 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_assignment_statement(p)
         case lexer.tag.IF:
             try parse_if_statement(p)
-        // case lexer.tag.FOR:
+        case lexer.tag.FOR:
+            try parse_for_statement(p)
         // case lexer.tag.MATCH:
         // case lexer.tag.TRY:
         // case lexer.tag.RAISE:
@@ -722,9 +717,9 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
 fn parse_assign_or_call(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.IDENT), "expected ident")
 
-    if peek_tag(p) == lexer.tag.COMMA || peek_tag(p) == lexer.tag.ASSGN {
+    if is_peek_tag(p, lexer.tag.COMMA) || is_peek_tag(p, lexer.tag.ASSGN) {
         return try parse_assignment_statement(p)
-    } else if peek_tag(p) == lexer.tag.LPAREN {
+    } else if is_peek_tag(p, lexer.tag.LPAREN) {
         var p, let ident = parse_literal(p)
         return try parse_call_expression(p, ident)
     }
@@ -916,6 +911,87 @@ fn parse_if_statement(p parser)! parser, ast.index {
     })
         
     return p, if_stmt
+}
+
+fn parse_for_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.FOR), "expected 'for'")
+
+    let op_tkn = p.tkn_i
+    // consume 'for'
+    var p = next_token(p)
+
+    // handle infinite for loop
+    if is_tag(p, lexer.tag.LBRACE) {
+        p, let block = try parse_block_statement(p)
+        if block == -1 {
+            return p, -1
+        }
+
+        p, let stmt = add_node(p, {
+            tag: ast.tag.for_infinite,
+            token: op_tkn,
+            data: {x: block, y: -1}
+        })
+        return p, stmt
+    }
+    p = p^{ p.ctx = context.brace }
+    p, let exp = try parse_expression(p, precedence.none)
+    p = p^{ p.ctx = context.none }
+
+    var cond = exp
+    var tag = ast.tag.for_bool
+    if is_tag(p, lexer.tag.SEMICOLON) {
+        // handle classic for loop
+        tag = ast.tag.for_classic
+
+        // consume ';'
+        p = next_token(p)
+        p, let bool_cond = try parse_expression(p, precedence.none)
+        if bool_cond == -1 {
+            return p, -1
+        }
+
+        if !is_tag(p, lexer.tag.SEMICOLON) {
+            p = add_error(p, expected_semicolon{i: p.tkn_i})
+            return p, -1
+        }
+        // consume ';'
+        p = next_token(p)
+
+        p = p^{ p.ctx = context.brace }
+        p, let incr = try parse_expression(p, precedence.none)
+        p = p^{ p.ctx = context.none }
+        if incr == -1 {
+            return p, -1
+        }
+
+        var extra = [exp, bool_cond, incr]
+        p, cond = add_extra(p, ast.tag.for_classic_cond, extra)
+        
+    } else if is_tag(p, lexer.tag.IN) {
+        raise unimplemented
+    } 
+        
+    if cond == -1 {
+        return p, -1
+    }
+        
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+
+    p, let block = try parse_block_statement(p)
+    if block == -1 {
+        return p, -1
+    }
+
+    p, let stmt = add_node(p, {
+        tag: tag,
+        token: op_tkn,
+        data: {x: cond, y: block}
+    })
+    return p, stmt
 }
 
 // ----------- //
@@ -1285,8 +1361,8 @@ fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
         return try parse_call_expression(p, prev)
     case lexer.tag.LBRACK:
         return try parse_index_expression(p, prev)
-    // case lexer.tag.ADDADD. lexer.tag.SUBSUB:
-        // try parse_
+    case lexer.tag.ADDADD, lexer.tag.SUBSUB:
+        return try parse_increment_expression(p, prev)
     case _:
         var p = add_error(p, invalid_postfix_expression{i: p.tkn_i})
         // p = next_token(p)  
@@ -1418,6 +1494,26 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
     return p, exp      
 }
 
+fn parse_increment_expression(p parser, prev ast.index)! parser, ast.index {
+    try assert(
+        is_tag(p, lexer.tag.ADDADD) || is_tag(p, lexer.tag.SUBSUB),
+        "expected '++' or '--'"
+    )
+
+    let op_tkn = p.tkn_i
+    // consume '++' or '--'
+    var p = next_token(p)
+    var tag = ast.tag.incr_decr
+
+    p, let exp = add_node(p, {
+        tag: ast.tag.incr_decr,
+        token: op_tkn,
+        data: {x: prev, y: -1}
+    })
+
+    return p, exp
+}
+
 // ------ //
 // Helper //
 // ------ //
@@ -1446,8 +1542,7 @@ fn maybe_column_type(p parser) bool {
     if tag != lexer.tag.LBRACE {
         return false
     }
-    let peek_tag = p.tkns[p.tkn_i+1].tag
-    if peek_tag != lexer.tag.RBRACE {
+    if !is_peek_tag(p, lexer.tag.RBRACE) {
         return false
     }
     let peek2_tag = p.tkns[p.tkn_i+2].tag
@@ -1505,6 +1600,8 @@ fn add_error(p parser, err error) parser {
 fn get_precedence(p parser) precedence {
     let tag = current_tag(p)
     match tag {
+    case lexer.tag.ASSGN:
+        return precedence.assgn
     case lexer.tag.OR, lexer.tag.LOR: 
         return precedence.or
     case lexer.tag.XOR: 
@@ -1552,7 +1649,8 @@ fn is_prefix(p parser) bool {
 fn is_infix(p parser) bool {
     let tag = current_tag(p)
     match tag {
-    case lexer.tag.OR, lexer.tag.LOR,
+    case lexer.tag.ASSGN,
+        lexer.tag.OR, lexer.tag.LOR,
         lexer.tag.XOR,
         lexer.tag.AND, lexer.tag.ANDNOT, lexer.tag.LAND,
         lexer.tag.LSH, lexer.tag.RSH,
@@ -1583,7 +1681,14 @@ fn is_postfix(p parser) bool {
 }
 
 fn is_tag(p parser, t lexer.tag) bool {
-    return p.tkns[p.tkn_i].tag == t
+     return p.tkns[p.tkn_i].tag == t
+}
+
+fn is_peek_tag(p parser, t lexer.tag) bool {
+    if i64(p.tkn_i + 1) >= len(p.tkns) {
+        return false
+    }
+    return p.tkns[p.tkn_i+1].tag == t
 }
 
 fn current_tag(p parser) lexer.tag {

@@ -36,6 +36,10 @@ error expected_colon {
     i ast.token_index
 }
 
+error expected_semicolon {
+    i ast.token_index
+}
+
 error expected_comma {
     i ast.token_index
 }
@@ -49,6 +53,10 @@ error expected_type {
 }
 
 error expected_string_literal {
+    i ast.token_index
+}
+
+error expected_in {
     i ast.token_index
 }
 
@@ -90,6 +98,8 @@ error unexpected_eof {
     i    ast.token_index
     want lexer.tag
 }
+
+error unimplemented
 
 // fn error_to_string(err error) string {
 //     match err = err {

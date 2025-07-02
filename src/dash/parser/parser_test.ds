@@ -236,7 +236,7 @@ fn test_parse_assignment()! {
     try assert_error("lib a let a", [expected_assign_or_comma{i: 4}])
     try assert_error("lib a let a,", [expected_assign_or_comma{i: 5}])
     try assert_error("lib a let a =", [expected_expression{i: 5}])
-    try assert_error("lib a let x = 1,,", [expected_expression{i: 7}])
+    try assert_error("lib a let x = 1,,", [expected_expression{i: 7}, invalid_statement{i: 7}])
     try assert_error("lib a let x, var = 1", [expected_identifier{i: 6}])
 }
 
@@ -303,6 +303,7 @@ fn test_struct_statement()! {
     try assert_canonical("lib a struct x {a i64}")
     try assert_canonical("lib a struct x {a y b string}")
     try assert_canonical("lib a struct x {a y.z}")
+    // try assert_canonical("lib a pub struct x {a i64}")
 
     try assert_error("lib a struct", [expected_identifier{i: 3}])
     try assert_error("lib a struct 1", [expected_identifier{i: 3}])
@@ -433,6 +434,30 @@ fn test_parse_if_statement()! {
     try assert_error("lib a fn a() { if a {} else {} else {} }", [unexpected_statement{i: 14}])
 }
 
+@test
+fn test_parse_for_statement()! {
+    try assert_canonical("lib a fn a() {for {}}")
+    try assert_canonical("lib a fn a() {for b {}}")
+    try assert_canonical("lib a fn a() {for (b > 2) {}}")
+    try assert_canonical("lib a fn a() {for b() {}}")
+    try assert_canonical("lib a fn a() {for i = 0;(i < len());i++ {}}")
+    try assert_canonical("lib a fn a() {for i = 0;(i < len());i = (i + 3) {}}")
+    // TODO: we still need to add support for partial classic loops
+    // try assert_canonical("lib a fn a() {for i < len(); i++ {}}")
+    // try assert_canonical("lib a fn a() {for a in arr {}}")
+    // try assert_canonical("lib a fn a() {for a,b in arr {}}")
+
+    try assert_error("lib a fn a() { for }", [expected_expression{i: 8}])
+    try assert_error("lib a fn a() { for { }", [expected_brace{i: 10}])
+    try assert_error("lib a fn a() { for b }", [expected_brace{i: 9}])
+    try assert_error("lib a fn a() { for b > 2) {}}", [expected_brace{i: 11}])
+    try assert_error("lib a fn a() { for b { }", [expected_brace{i: 11}])
+    // try assert_error("lib a fn a() { for b, }", [expected_identifier{i: 12}])
+    // try assert_error("lib a fn a() { for b,c }", [expected_in{i: 13}])
+    // try assert_error("lib a fn a() { for b,c in }", [expected_expression{i: 14}])
+    // try assert_error("lib a fn a() { for b,c in d }", [expected_brace{i: 15}])
+}
+
 // ------- //
 // Helpers //
 // ------- //
@@ -492,8 +517,8 @@ fn assert_parse_exp(input, want string)! {
 error expected_error
 
 error error_len_mismatch {
-    got_len  i64
-    want_len i64
+    got  []error
+    want []error
 }
 
 error error_mismatch {
@@ -508,7 +533,7 @@ fn assert_error(input string, want []error)! {
         raise expected_error
     }
     if len(a.errs) != len(want) {
-        raise error_len_mismatch{got_len: len(a.errs), want_len: len(want)}
+        raise error_len_mismatch{got: a.errs, want: want}
     }
     for i = 0; i < len(want); i++ {
         if want[i] != a.errs[i] {
@@ -524,7 +549,7 @@ fn assert_parse_error(input string, want []error)! {
         raise expected_error
     }
     if len(a.errs) != len(want) {
-        raise error_len_mismatch{got_len: len(a.errs), want_len: len(want)}
+        raise error_len_mismatch{got: a.errs, want: want}
     }
     for i = 0; i < len(want); i++ {
         if want[i] != a.errs[i] {
