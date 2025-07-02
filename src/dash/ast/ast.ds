@@ -80,6 +80,8 @@ pub enum tag {
     for_range_cond
     for_range2_cond
     return_stmt
+    break_stmt
+    next_stmt
 
     dot
     call
@@ -190,6 +192,14 @@ pub fn decl_to_tag(t lexer.tag) tag {
     return match t {
         case lexer.tag.LET: tag.let_decl
         case lexer.tag.VAR: tag.var_decl
+        case _: raise unexpected_tag
+    }
+}
+
+pub fn keyword_to_tag(t lexer.tag) tag {
+    return match t {
+        case lexer.tag.BREAK: tag.break_stmt
+        case lexer.tag.NEXT: tag.next_stmt
         case _: raise unexpected_tag
     }
 }
@@ -543,6 +553,11 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
 
+    case tag.break_stmt, tag.next_stmt:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+
     case _: raise unexpected_tag
     }
     return buf   
@@ -557,8 +572,8 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
     case tag.struct_def, tag.return_stmt: 6
-    case tag.union_def: 5
-    case tag.enum_def, tag.type_def: 4
+    case tag.union_def, tag.break_stmt: 5
+    case tag.enum_def, tag.type_def, tag.next_stmt: 4
     case tag.let_decl, tag.var_decl,
          tag.library, tag.use_def,
          tag.for_infinite, tag.for_bool,

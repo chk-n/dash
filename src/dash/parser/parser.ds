@@ -700,11 +700,12 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_for_statement(p)
         case lexer.tag.RETURN:
             try parse_return_statement(p)
+        case lexer.tag.BREAK, lexer.tag.NEXT:
+            try parse_keyword_statement(p)
         // case lexer.tag.MATCH:
         // case lexer.tag.TRY:
         // case lexer.tag.RAISE:
         // case lexer.tag.DEFER:
-        // case lexer.tag.BREAK, lexer.tag.NEXT:
         // // function call
         // case lexer.tag.IDENT:
         case _:
@@ -1041,6 +1042,29 @@ fn parse_return_statement(p parser)! parser, ast.index {
         tag: ast.tag.return_stmt,
         token: op_tkn, 
         data: {x: start, y: end}
+    })
+
+    return p, stmt
+}
+
+fn parse_keyword_statement(p parser)! parser, ast.index {
+    try assert(
+        is_tag(p, lexer.tag.BREAK) || is_tag(p, lexer.tag.NEXT),
+        "expected 'break' or 'next'"
+    )
+
+    let op_tkn = p.tkn_i
+    let op_tag = current_tag(p)
+    
+    // consume 'break' or 'next'
+    var p = next_token(p)
+    let tag = ast.keyword_to_tag(op_tag)
+    
+    
+    p, let stmt = add_node(p, {
+        tag: tag,
+        token: op_tkn,
+        data: {x: -1, y: -1}
     })
 
     return p, stmt

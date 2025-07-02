@@ -466,6 +466,13 @@ fn test_parse_return_statement()! {
     try assert_canonical("lib a fn a() {return a(),b(),z.a()}")
     try assert_parse("lib a fn a() {return x,}", "lib a fn a() {return x}")
 }
+
+@test
+fn test_parse_keyword_statement()! {
+    try assert_canonical("lib a fn a() {break}")
+    try assert_canonical("lib a fn a() {next}")
+}
+
 // ------- //
 // Helpers //
 // ------- //
