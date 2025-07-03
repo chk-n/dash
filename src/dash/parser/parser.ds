@@ -1028,10 +1028,15 @@ fn parse_return_statement(p parser)! parser, ast.index {
         }
         if !is_tag(p, lexer.tag.COMMA) {
             p = add_error(p, expected_comma{i: p.tkn_i})
+            p = next_token(p)
             return p, -1
         }
         // consume ','
         p = next_token(p)
+    }
+    if len(extra) == 0 {
+        p = add_error(p, expected_expression{i: p.tkn_i})
+        return p, -1
     }
     let start = len(p.extras)
     let end = start+len(extra)-1
