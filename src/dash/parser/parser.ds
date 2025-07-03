@@ -702,8 +702,9 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_return_statement(p)
         case lexer.tag.BREAK, lexer.tag.NEXT:
             try parse_keyword_statement(p)
+        case lexer.tag.TRY:
+            try parse_try_expression(p)
         // case lexer.tag.MATCH:
-        // case lexer.tag.TRY:
         // case lexer.tag.RAISE:
         // case lexer.tag.DEFER:
         // // function call
@@ -1132,6 +1133,8 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
         lexer.tag.LNOT, lexer.tag.QMARK,
         lexer.tag.AND, lexer.tag.MUL:
         return try parse_negate_expression(p)
+    case lexer.tag.TRY:
+        return try parse_try_expression(p)
     case _:
         var p = add_error(p, expected_expression{i: p.tkn_i})
         // p = next_token(p)  
@@ -1593,6 +1596,30 @@ fn parse_increment_expression(p parser, prev ast.index)! parser, ast.index {
     })
 
     return p, exp
+}
+
+fn parse_try_expression(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.TRY), "expected 'try'")
+
+    let op_tkn = p.tkn_i
+    // consume 'try'
+    var p = next_token(p)
+
+    // Parse the expression (which should be a function call)
+    p, let expr = try parse_expression(p, precedence.none)
+    if expr == -1 {
+        return p, -1
+    }
+
+    // TODO: validate expr is DOT wtih CALL or CALL
+
+    p, let try_exp = add_node(p, {
+        tag: ast.tag.try_expr,
+        token: op_tkn,
+        data: {x: expr, y: -1}
+    })
+
+    return p, try_exp
 }
 
 // ------ //

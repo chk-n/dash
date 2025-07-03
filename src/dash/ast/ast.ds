@@ -125,6 +125,7 @@ pub enum tag {
     lt
     lte
     incr_decr
+    try_expr
 
     type_lit
     array_type
@@ -528,6 +529,13 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
 
+    case tag.try_expr:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        buf = to_string(a, data.x, buf)
+
     case tag.array_type:
         buf = append(buf, '[')
         buf = append(buf, ']')
@@ -577,7 +585,8 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     case tag.let_decl, tag.var_decl,
          tag.library, tag.use_def,
          tag.for_infinite, tag.for_bool,
-         tag.for_classic, tag.for_range: 3
+         tag.for_classic, tag.for_range,
+         tag.try_expr: 3
     case tag.if_stmt, tag.incr_decr: 2
     case tag.fn_def, tag.fn_err_def,
          tag.lor, tag.land, tag.andnot, 

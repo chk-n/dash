@@ -473,6 +473,17 @@ fn test_parse_keyword_statement()! {
     try assert_canonical("lib a fn a() {next}")
 }
 
+@test
+fn test_parse_try_expression()! {
+    try assert_canonical("lib a fn a() {try x()}")
+    try assert_canonical("lib a fn a() {try a.b.c.d.e()}")
+    try assert_canonical("lib a fn a() {let x = try x()}")
+    try assert_canonical("lib a fn a() {x,y,z = x(),try y(),z()}")
+    try assert_canonical("lib a fn a() {try x() try y()}")
+
+    try assert_error("lib a fn a() {try}", [expected_expression{i: 8}])
+}
+
 // ------- //
 // Helpers //
 // ------- //
