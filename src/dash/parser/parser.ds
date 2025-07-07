@@ -735,6 +735,11 @@ fn parse_assign_or_call(p parser)! parser, ast.index {
 }
 
 fn parse_assignment_statement(p parser)! parser, ast.index {
+    try assert(
+        is_tag(p, lexer.tag.IDENT) || is_tag(p, lexer.tag.LET) || is_tag(p, lexer.tag.VAR),
+        "expected ident"
+    )
+    
     var p = p
     var extra = make([]ast.index, 0, 3)
 
