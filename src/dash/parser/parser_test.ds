@@ -484,6 +484,18 @@ fn test_parse_try_expression()! {
     try assert_error("lib a fn a() {try}", [expected_expression{i: 8}])
 }
 
+@test
+fn test_parse_catch_statement()! {
+    try assert_canonical("lib a fn a() {x() catch y {}}")
+    try assert_canonical("lib a fn a() {x() catch y {let x = 1}}")
+    try assert_canonical("lib a fn a() {x() catch y {let x = 1 for {}}}")
+    try assert_canonical("lib a fn a() {let x = x() catch y {}}")
+
+    try assert_error("lib a fn a() {x() catch}", [expected_identifier{i: 11}])
+    try assert_error("lib a fn a() {x() catch x}", [expected_brace{i: 12}])
+    try assert_error("lib a fn a() {x() catch x {}", [expected_brace{i: 14}])
+}
+
 // ------- //
 // Helpers //
 // ------- //

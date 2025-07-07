@@ -169,7 +169,7 @@ fn parse_library(p parser)! parser, ast.index {
         extra = append(extra, node)
     }
 
-    p, let stmts = add_extra(p, ast.tag.lib_stmts, extra)
+    p, let stmts = add_extra(p, ast.tag.lib_stmts, -1, extra)
 
     var nodes = append(p.nodes, {
         tag: ast.tag.library,
@@ -316,7 +316,7 @@ fn parse_struct_statement(p parser)! parser, ast.index {
     }
     p = next_token(p)
 
-    p, let fields = add_extra(p, ast.tag.struct_fields, extra)
+    p, let fields = add_extra(p, ast.tag.struct_fields, -1, extra)
 
     p, let strct = add_node(p,{
         tag: ast.tag.struct_def, 
@@ -370,7 +370,7 @@ fn parse_enum_statement(p parser)! parser, ast.index {
         return p, -1
     }
 
-    p, let fields = add_extra(p, ast.tag.enum_fields, extra)
+    p, let fields = add_extra(p, ast.tag.enum_fields, -1, extra)
 
     p, let enum_def = add_node(p, {
         tag: ast.tag.enum_def, 
@@ -432,7 +432,7 @@ fn parse_union_statement(p parser)! parser, ast.index {
     // consume '}'
     p = next_token(p)
 
-    p, let types = add_extra(p, ast.tag.union_types, extra)
+    p, let types = add_extra(p, ast.tag.union_types, -1, extra)
 
     p, let union_def = add_node(p, {
         tag: ast.tag.union_def, 
@@ -593,7 +593,7 @@ fn parse_function_argument_list(p parser)! parser, ast.index {
     // is not an ident? or should we just do this in
     // semsis
 
-    p, let args = add_extra(p, ast.tag.fn_arg_list, extra)
+    p, let args = add_extra(p, ast.tag.fn_arg_list, -1, extra)
     return p, args
 }
 
@@ -619,7 +619,7 @@ fn parse_function_return_list(p parser)! parser, ast.index {
         }
     }
 
-    p, let rets = add_extra(p, ast.tag.fn_ret_list, extra)
+    p, let rets = add_extra(p, ast.tag.fn_ret_list, -1 extra)
     return p, rets
 }
 
@@ -649,7 +649,7 @@ fn parse_block_statement(p parser)! parser, ast.index {
         return p, -1
     }
     p = next_token(p)
-    p, let blk = try add_extra(p, ast.tag.block_stmt, extra)
+    p, let blk = try add_extra(p, ast.tag.block_stmt, -1 extra)
     return p, blk
 }
 
@@ -723,8 +723,7 @@ fn parse_assign_or_call(p parser)! parser, ast.index {
     if is_peek_tag(p, lexer.tag.COMMA) || is_peek_tag(p, lexer.tag.ASSGN) {
         return try parse_assignment_statement(p)
     } else if is_peek_tag(p, lexer.tag.LPAREN) {
-        var p, let ident = parse_literal(p)
-        return try parse_call_expression(p, ident)
+        return try parse_expression(p, precedence.none)
     }
 
     var p = add_error(p, unexpected_statement{i: p.tkn_i})
@@ -769,7 +768,7 @@ fn parse_assignment_statement(p parser)! parser, ast.index {
     let op_tkn = p.tkn_i
     p = next_token(p)
 
-    p, let decls = add_extra(p, ast.tag.decl_list, extra)
+    p, let decls = add_extra(p, ast.tag.decl_list, -1, extra)
     
     // parse expression list but break once
     // no comma found
@@ -793,7 +792,7 @@ fn parse_assignment_statement(p parser)! parser, ast.index {
         return p, -1
     }
 
-    p, let exps = add_extra(p, ast.tag.expr_list, extra)
+    p, let exps = add_extra(p, ast.tag.expr_list, -1, extra)
 
     p, let assign = add_node(p, {
         tag: ast.tag.assignment,
@@ -902,16 +901,8 @@ fn parse_if_statement(p parser)! parser, ast.index {
             break
         }
     }
-    let start = len(p.extras)
-    let end = start+len(extra)-1
-    var extras = append(p.extras, extra)
-    var p = p^{ p.extras = extras }
 
-    p, let if_stmt = add_node(p, {
-        tag: ast.tag.if_stmt,
-        token: op_tkn,
-        data: {x: start, y: end}
-    })
+    p, let if_stmt = add_extra(p, ast.tag.if_stmt, op_tkn, extra)
         
     return p, if_stmt
 }
@@ -969,7 +960,7 @@ fn parse_for_statement(p parser)! parser, ast.index {
         }
 
         var extra = [exp, bool_cond, incr]
-        p, cond = add_extra(p, ast.tag.for_classic_cond, extra)
+        p, cond = add_extra(p, ast.tag.for_classic_cond, -1, extra)
         
     } else if is_tag(p, lexer.tag.IN) {
         raise unimplemented
@@ -1039,16 +1030,8 @@ fn parse_return_statement(p parser)! parser, ast.index {
         p = add_error(p, expected_expression{i: p.tkn_i})
         return p, -1
     }
-    let start = len(p.extras)
-    let end = start+len(extra)-1
-    var extras = append(p.extras, extra)
-    var p = p^{ p.extras = extras }
 
-    p, let stmt = add_node(p, {
-        tag: ast.tag.return_stmt,
-        token: op_tkn, 
-        data: {x: start, y: end}
-    })
+    p, let stmt = add_extra(p, ast.tag.return_stmt, op_tkn, extra)
 
     return p, stmt
 }
@@ -1312,7 +1295,7 @@ fn parse_struct_literal(p parser)! parser, ast.index {
     // consume '}'
     p = next_token(p)
 
-    p, let strct = add_extra(p, ast.tag.anon_struct_lit, extra)
+    p, let strct = add_extra(p, ast.tag.anon_struct_lit, -1, extra)
 
     return p, strct
 }
@@ -1353,7 +1336,7 @@ fn parse_array_literal(p parser)! parser, ast.index {
     // consume ']'
     p = next_token(p)
 
-    p, let arr = add_extra(p, ast.tag.array_lit, extra)
+    p, let arr = add_extra(p, ast.tag.array_lit, -1, extra)
 
     return p, arr
 }
@@ -1447,6 +1430,8 @@ fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
         return try parse_index_expression(p, prev)
     case lexer.tag.ADDADD, lexer.tag.SUBSUB:
         return try parse_increment_expression(p, prev)
+    case lexer.tag.CATCH:
+        return try parse_catch_expression(p, prev)
     case _:
         var p = add_error(p, invalid_postfix_expression{i: p.tkn_i})
         // p = next_token(p)  
@@ -1518,7 +1503,7 @@ fn parse_expression_list(p parser, end lexer.tag)! parser, ast.index {
         return p, -1
     }
 
-    p, let exps = add_extra(p, ast.tag.expr_list, extra)
+    p, let exps = add_extra(p, ast.tag.expr_list, -1, extra)
     
     return p, exps      
 }
@@ -1558,7 +1543,7 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
             }
         }
 
-        p, node = add_extra(p, ast.tag.slice_idxs, [node, end_idx])              
+        p, node = add_extra(p, ast.tag.slice_idxs, -1, [node, end_idx])              
     }
 
     if !is_tag(p, lexer.tag.RBRACK) {
@@ -1622,6 +1607,29 @@ fn parse_try_expression(p parser)! parser, ast.index {
     return p, try_exp
 }
 
+fn parse_catch_expression(p parser, prev ast.index)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.CATCH), "expected 'catch'")
+
+    let op_tkn = p.tkn_i
+    // consume 'catch'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = add_error(p, expected_identifier{i: p.tkn_i})
+        return p, -1
+    }
+    p, let ident = try parse_literal(p)
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p, let block = try parse_block_statement(p)
+
+    let extra = [prev, ident, block]
+    p, let exp = add_extra(p, ast.tag.catch_expr, op_tkn, extra)
+    return p, exp
+}
 // ------ //
 // Helper //
 // ------ //
@@ -1674,15 +1682,15 @@ fn is_scalar_type(p parser) bool {
 }
 
 // appends extra
-fn add_extra(p parser, et ast.tag, e []ast.index) parser, ast.index {
+fn add_extra(p parser, t ast.tag, tkn ast.token_index, e []ast.index) parser, ast.index {
     let start = len(p.extras)
     let end = start+len(e)-1
     var extras = append(p.extras, e)
     var p = p^{ p.extras = extras }
 
     p, let node = add_node(p, {
-        tag: et,
-        token: -1, // N/A
+        tag: t,
+        token: tkn, 
         data: {x: start, y: end}
     })
 
@@ -1781,7 +1789,8 @@ fn is_postfix(p parser) bool {
     let tag = current_tag(p)
     match tag {
     case lexer.tag.LPAREN, lexer.tag.LBRACK,
-         lexer.tag.ADDADD, lexer.tag.SUBSUB: 
+         lexer.tag.ADDADD, lexer.tag.SUBSUB,
+         lexer.tag.CATCH:
         return true
     case _:
         return false
