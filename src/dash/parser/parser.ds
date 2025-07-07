@@ -707,8 +707,9 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_try_expression(p)
         case lexer.tag.RAISE:
             try parse_raise_statement(p)
+        case lexer.tag.DEFER:
+            try parse_defer_statement(p)
         // case lexer.tag.MATCH:
-        // case lexer.tag.DEFER:
         // // function call
         // case lexer.tag.IDENT:
         case _:
@@ -1079,6 +1080,34 @@ fn parse_raise_statement(p parser)! parser, ast.index {
 
     p, let stmt = add_node(p, {
         tag: ast.tag.raise_stmt,
+        token: op_tkn,
+        data: {x: expr, y: -1}
+    })
+
+    return p, stmt
+}
+
+fn parse_defer_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.DEFER), "expected 'defer'")
+
+    let op_tkn = p.tkn_i
+    // consume 'defer'
+    var p = next_token(p)
+    
+    var expr = ast.index(-1)
+    if is_tag(p, lexer.tag.LBRACE) {
+        p, expr = try parse_block_statement(p)
+    } else {
+        p, expr = try parse_expression(p, precedence.none)
+        // TODO: assert expr is of type CALL
+    }
+    
+    if expr == -1 {
+        return p, -1
+    }
+
+    p, let stmt = add_node(p, {
+        tag: ast.tag.defer_stmt,
         token: op_tkn,
         data: {x: expr, y: -1}
     })

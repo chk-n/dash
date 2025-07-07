@@ -505,6 +505,19 @@ fn test_parse_raise_statement()! {
     try assert_error("lib a fn a() {raise}", [expected_expression{i: 8}])
 }
 
+@test
+fn test_parse_defer_statement()! {
+    try assert_canonical("lib a fn a() {defer x()}")
+    try assert_canonical("lib a fn a() {defer a.b()}")
+    try assert_canonical("lib a fn a() {defer {}}")
+    try assert_canonical("lib a fn a() {defer {var y = c() y = d()}}")
+
+    try assert_error("lib a fn a() {defer}", [expected_expression{i: 8}])
+    // try assert_error("lib a fn a() {defer x}", [expected_function_call{i: 8}])
+    try assert_error("lib a fn a() {defer {", [expected_brace{i: 9}, expected_brace{i: 9}])
+    try assert_error("lib a fn a() {defer {}", [expected_brace{i: 10}])
+}
+
 // ------- //
 // Helpers //
 // ------- //
