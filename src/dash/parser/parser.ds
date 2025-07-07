@@ -705,8 +705,9 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_keyword_statement(p)
         case lexer.tag.TRY:
             try parse_try_expression(p)
+        case lexer.tag.RAISE:
+            try parse_raise_statement(p)
         // case lexer.tag.MATCH:
-        // case lexer.tag.RAISE:
         // case lexer.tag.DEFER:
         // // function call
         // case lexer.tag.IDENT:
@@ -1058,6 +1059,28 @@ fn parse_keyword_statement(p parser)! parser, ast.index {
         tag: tag,
         token: op_tkn,
         data: {x: -1, y: -1}
+    })
+
+    return p, stmt
+}
+
+fn parse_raise_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.RAISE), "expected 'raise'")
+
+    let op_tkn = p.tkn_i
+    // consume 'raise'
+    var p = next_token(p)
+    
+    // Parse the expression that should be raised
+    p, let expr = try parse_expression(p, precedence.none)
+    if expr == -1 {
+        return p, -1
+    }
+
+    p, let stmt = add_node(p, {
+        tag: ast.tag.raise_stmt,
+        token: op_tkn,
+        data: {x: expr, y: -1}
     })
 
     return p, stmt

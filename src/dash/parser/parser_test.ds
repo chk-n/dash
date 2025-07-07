@@ -496,6 +496,15 @@ fn test_parse_catch_statement()! {
     try assert_error("lib a fn a() {x() catch x {}", [expected_brace{i: 14}])
 }
 
+@test
+fn test_parse_raise_statement()! {
+    try assert_canonical("lib a fn a() {raise x}")
+    try assert_canonical("lib a fn a() {raise x.y}")
+    try assert_canonical("lib a fn a() {raise x.y{a:1,b:b()}}")
+    
+    try assert_error("lib a fn a() {raise}", [expected_expression{i: 8}])
+}
+
 // ------- //
 // Helpers //
 // ------- //
