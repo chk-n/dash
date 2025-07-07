@@ -504,6 +504,7 @@ fn test_parse_catch_statement()! {
 // and converted to string to match want
 fn assert_parse(input, want string)! {
     let a = try parse([]byte(input), mode.lib)
+    try assert(len(a.errs) == 0, "expected no errors")
 
     let idx = ast.index(len(a.nodes)-1)
     let buf = make([]byte, 0, len(want))
@@ -519,6 +520,7 @@ fn assert_parse(input, want string)! {
 // by parser
 fn assert_canonical(input string)! {
     let a1 = try parse([]byte(input), mode.lib)
+    try assert(len(a1.errs) == 0, "expected no errors")
 
     let idx = ast.index(len(a1.nodes)-1)
     let buf = make([]byte, 0, len(input))
@@ -530,6 +532,8 @@ fn assert_canonical(input string)! {
 
     // re-parse 
     let a2 = try parse(got1, mode.lib)
+    try assert(len(a2.errs) == 0, "expected no errors")
+    
     let idx = ast.index(len(a2.nodes)-1)
     let buf = make([]byte, 0, len(input))
     let got2 = try ast.to_string(a2, idx, buf)
