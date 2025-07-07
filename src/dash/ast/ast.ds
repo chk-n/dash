@@ -371,13 +371,6 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             buf = to_string(a, idx, buf)
         }
 
-    case tag.for_infinite:
-        let src_idx = a.tkns[node.token].start
-        let kw = get_fixed_token(a.src, src_idx, node.tag)
-        buf = append(buf, kw)
-        buf = append(buf, ' ')
-        buf = to_string(a, data.x, buf)
-
     case tag.for_bool, tag.for_classic, tag.for_range:
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
@@ -412,7 +405,10 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
 
-    case tag.let_decl, tag.var_decl:
+    case tag.let_decl, tag.var_decl,
+         tag.for_infinite,
+         tag.try_expr, tag.raise_stmt,
+         tag.defer_stmt:
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -531,13 +527,6 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let src_idx = a.tkns[node.token].start
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
-
-    case tag.try_expr:
-        let src_idx = a.tkns[node.token].start
-        let kw = get_fixed_token(a.src, src_idx, node.tag)
-        buf = append(buf, kw)
-        buf = append(buf, ' ')
-        buf = to_string(a, data.x, buf)
         
     case tag.catch_expr:
         let call = a.extras[data.x]
@@ -582,13 +571,6 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
-
-    case tag.raise_stmt, tag.defer_stmt:
-        let src_idx = a.tkns[node.token].start
-        let kw = get_fixed_token(a.src, src_idx, node.tag)
-        buf = append(buf, kw)
-        buf = append(buf, ' ')
-        buf = to_string(a, data.x, buf)
 
     case _: raise unexpected_tag
     }
