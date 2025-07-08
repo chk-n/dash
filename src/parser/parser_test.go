@@ -556,6 +556,10 @@ func TestCharLiteral(t *testing.T) {
 			name:  "escape '",
 			input: `'\''`,
 		},
+		{
+			name:  "escape \\",
+			input: `'\\'`,
+		},
 		// 2, 4 and 8 hexadecimal code points e.g. \uE4
 	}
 

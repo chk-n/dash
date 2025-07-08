@@ -1644,6 +1644,8 @@ func (p *Parser) parseCharacterLiteral() ast.Expression {
 				lit.Value = '\t'
 			case '\'':
 				lit.Value = '\''
+			case '\\':
+				lit.Value = '\\'
 			}
 		} else {
 			panic("\\u literals not supported yet")

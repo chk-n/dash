@@ -307,11 +307,13 @@ func TestNextToken(t *testing.T) {
 				'a'
 				'\n'
 				'\''
+				'\\'
 			`,
 			tokens: []wantToken{
 				{"a", token.CHAR},
 				{`\n`, token.CHAR},
 				{`\'`, token.CHAR},
+				{`\\`, token.CHAR},
 			},
 		},
 	}

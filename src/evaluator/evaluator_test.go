@@ -173,6 +173,16 @@ func TestCharOperations(t *testing.T) {
 			prog: `'\n'`,
 			want: '\n',
 		},
+		{
+			name: "escape '",
+			prog: `'\''`,
+			want: '\'',
+		},
+		{
+			name: "escape \\",
+			prog: `'\\'`,
+			want: '\\',
+		},
 	}
 
 	for _, tt := range tests {
