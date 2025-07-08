@@ -381,17 +381,13 @@ func (l *Lexer) readNumber() token.Token {
 func (l *Lexer) readChar() string {
 	pos := l.prevPos + 1
 
-	n := 0
-	for {
+	// read '
+	l.next()
+	if l.ch == '\\' {
 		l.next()
-		if l.ch == '\'' || l.ch == 0 {
-			break
-		}
-		n++
 	}
-	if n != 1 {
-		l.addError(pos, "invalid char literal")
-	}
+	// read char
+	l.next()
 
 	return l.input[pos:l.prevPos]
 }

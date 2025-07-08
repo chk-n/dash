@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"dash-lang.io/src/lexer"
@@ -545,11 +546,15 @@ func TestCharLiteral(t *testing.T) {
 	}{
 		{
 			name:  "simple",
-			input: "'1'",
+			input: `'1'`,
 		},
 		{
 			name:  "newline",
-			input: "'\n'",
+			input: `'\n'`,
+		},
+		{
+			name:  "escape '",
+			input: `'\''`,
 		},
 		// 2, 4 and 8 hexadecimal code points e.g. \uE4
 	}
@@ -1379,7 +1384,7 @@ func TestAssignmentStatement(t *testing.T) {
 		},
 		{
 			name:  "match with expression",
-			input: "let res = match v { case a: v.i + v.j case _: 0 }",
+			input: `let res = match v { case a: v.i + v.j case _: 0 }`,
 			want:  "let res = match v { case a: (v.i + v.j) case _: 0 }",
 		},
 	}

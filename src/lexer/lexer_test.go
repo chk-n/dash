@@ -301,6 +301,19 @@ func TestNextToken(t *testing.T) {
 				{"// \"fn\"", token.COMMENT},
 			},
 		},
+		{
+			name: "char",
+			input: `
+				'a'
+				'\n'
+				'\''
+			`,
+			tokens: []wantToken{
+				{"a", token.CHAR},
+				{`\n`, token.CHAR},
+				{`\'`, token.CHAR},
+			},
+		},
 	}
 
 	for _, tc := range tests {
