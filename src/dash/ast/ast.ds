@@ -140,6 +140,7 @@ pub enum tag {
     type_lit
     array_type
     column_type
+    optional_type
 }
 
 pub fn literal_to_tag(t lexer.tag)! tag {
@@ -600,6 +601,12 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
     case tag.column_type:
         buf = append(buf, '{')
         buf = append(buf, '}')
+        buf = to_string(a, data.x, buf)
+
+    case tag.optional_type:
+        let src_idx = a.tkns[node.token].start
+        let op = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, op)
         buf = to_string(a, data.x, buf)
 
     case tag.return_stmt:

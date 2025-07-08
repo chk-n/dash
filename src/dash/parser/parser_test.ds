@@ -281,7 +281,15 @@ fn test_parse_type_statement()! {
     try assert_canonical("lib a type x []byte")
     try assert_canonical("lib a type x []y")
     try assert_canonical("lib a type x [][][][][]i64")
-    
+     
+    try assert_canonical("lib a type x ?byte")
+    try assert_canonical("lib a type x ?{}abc")
+    try assert_canonical("lib a type x ?[]byte")
+    try assert_canonical("lib a type x ?[]?byte")
+    try assert_canonical("lib a type x []?[]?[]?[]?[]?i64")
+    try assert_canonical("lib a type x ?y")
+    try assert_canonical("lib a type x ?x.y")
+
     try assert_canonical("lib a type x {}abc")
     try assert_canonical("lib a type x {}y.z")
 
