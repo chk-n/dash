@@ -572,6 +572,9 @@ fn assert_parse(input, want string)! {
 // by parser
 fn assert_canonical(input string)! {
     let a1 = try parse([]byte(input), mode.lib)
+    if len(a1.errs) != 0 {
+        println(a1.errs)
+    }
     try assert(len(a1.errs) == 0, "expected no errors")
 
     let idx = ast.index(len(a1.nodes)-1)
