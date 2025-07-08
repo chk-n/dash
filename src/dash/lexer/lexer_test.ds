@@ -158,6 +158,24 @@ fn test_number()! {
 }
 
 @test
+fn test_bool()! {
+    let tests = [
+        {"false", tag.BOOL, "false"},                      
+        {"true", tag.BOOL, "true"},                      
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
 fn test_comment()! {
     let tests = [
         {"// normal comment", tag.COMMENT},
@@ -228,4 +246,3 @@ fn test_sequential()! {
         }
     }
 }
-

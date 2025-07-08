@@ -1277,7 +1277,7 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
     case lexer.tag.IDENT:
         return try parse_ident_or_struct(p)
     case lexer.tag.INT, lexer.tag.FLOAT,
-         lexer.tag.STRING:
+         lexer.tag.STRING, lexer.tag.BOOL:
         return try parse_literal(p)
     case lexer.tag.LBRACE:
         return try parse_struct_literal(p)

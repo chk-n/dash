@@ -162,7 +162,9 @@ let keywords = [
     {"char", tag.CHAR_TYPE},
     {"string", tag.STRING_TYPE},
     {"bool", tag.BOOL_TYPE},
-    {"error", tag.ERROR}
+    {"error", tag.ERROR},
+    {"true", tag.BOOL},
+    {"false", tag.BOOL}
 ]
 
 pub fn get_tag_by_keyword(k string) tag {
