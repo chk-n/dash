@@ -518,6 +518,21 @@ fn test_parse_defer_statement()! {
     try assert_error("lib a fn a() {defer {}", [expected_brace{i: 10}])
 }
 
+@test
+fn test_parse_match_statement()! {
+    try assert_canonical("lib a fn a() {match x {}}")
+    try assert_canonical("lib a fn a() {match 1 {}}")
+    try assert_canonical("lib a fn a() {match a() {}}")
+    try assert_canonical("lib a fn a() {match y = x {}}")
+    try assert_canonical("lib a fn a() {match x {case _:}}")
+    try assert_canonical("lib a fn a() {match x {case _: let x = 2}}")
+    try assert_canonical("lib a fn a() {match x {case _: if y {} else {} x = a()}}")
+    try assert_canonical("lib a fn a() {match x {case 1,2:}}")
+    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f:}}")
+    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f: case _:}}")
+    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f: case 2: case 3: case 4: case 5:}}")
+}
+
 // ------- //
 // Helpers //
 // ------- //

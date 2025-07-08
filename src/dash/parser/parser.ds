@@ -709,9 +709,8 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_raise_statement(p)
         case lexer.tag.DEFER:
             try parse_defer_statement(p)
-        // case lexer.tag.MATCH:
-        // // function call
-        // case lexer.tag.IDENT:
+        case lexer.tag.MATCH:
+            try parse_match_statement(p)
         case _:
             var p = add_error(p, unexpected_statement{i: p.tkn_i})
             p = next_token(p)
@@ -1118,6 +1117,127 @@ fn parse_defer_statement(p parser)! parser, ast.index {
     })
 
     return p, stmt
+}
+
+fn parse_match_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.MATCH), "expected 'match'")
+
+    let op_tkn = p.tkn_i
+    // consume 'match'
+    var p = next_token(p)
+
+    p = p^{ p.ctx = context.brace }
+    p, let scrutinee = try parse_expression(p, precedence.none)
+    p = p^{ p.ctx = context.none }
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    var extra = make([]ast.index, 0, 2)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+        if !is_tag(p, lexer.tag.CASE) {
+            p = add_error(p, expected_case{i: p.tkn_i})
+            return p, -1
+        }
+        p, let c = try parse_case_statement(p)
+        extra = append(extra, c)
+    }
+
+    if !is_tag(p, lexer.tag.RBRACE) {
+        p = add_error(p, expected_brace{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    p, let block = add_extra(p, ast.tag.match_block, -1, extra)
+    
+    p, let stmt = add_node(p, {
+        tag: ast.tag.match_stmt,
+        token: op_tkn,
+        data: {x: scrutinee, y: block}
+    })
+    
+    return p, stmt
+}
+
+fn parse_case_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.CASE), "expected 'case'")
+    
+    let op_tkn = p.tkn_i
+    // consume 'case'
+    var p = next_token(p)
+
+    p, let exp = try parse_expression(p, precedence.none)
+    // TODO: assert IDENT or DOT of ident    
+    
+    if is_tag(p, lexer.tag.COLON) {
+        p = next_token(p)
+        p, let blk = try parse_case_block(p)
+        p, let c = add_node(p, {
+            tag: ast.tag.case_stmt,
+            token: op_tkn,
+            data: {x: exp, y: blk}
+        })
+        return p, c
+    }
+
+    var extra = make([]ast.index, 0, 2)
+    extra = append(extra, exp)
+    
+    for !is_tag(p, lexer.tag.COLON) && !is_tag(p, lexer.tag.EOF) {
+        if !is_tag(p, lexer.tag.COMMA) {
+            p = add_error(p, expected_comma{i: p.tkn_i})
+            return p, -1
+        }
+        p = next_token(p)
+        p, let exp = try parse_expression(p, precedence.none)
+        // TODO: assert IDENT or DOT of ident
+
+        extra = append(extra, exp)
+    }
+    if !is_tag(p, lexer.tag.COLON) {
+        p = add_error(p, expected_colon{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    p, let cases = add_extra(p, ast.tag.expr_list, op_tkn, extra)
+    p, let blk = try parse_case_block(p)
+
+    p, let c = add_node(p, {
+        tag: ast.tag.case_stmt,
+        token: op_tkn,
+        data: {x: cases, y: blk}
+    })
+
+    return p, c
+}
+
+fn parse_case_block(p parser)! parser, ast.index {
+    var p = p
+    var extra = make([]ast.index, 0, 2)
+    for !is_tag(p, lexer.tag.RBRACE) &&
+        !is_tag(p, lexer.tag.CASE) &&
+        !is_tag(p, lexer.tag.EOF) {
+        p, let stmt = try parse_statement_in_block(p)
+        
+        if stmt == -1 {
+            p = find_next_valid_block_token(p)
+            next
+        } else {           
+            extra = append(extra, stmt)
+        }
+    }
+    if len(extra) == 0 {
+        // we add no error as
+        // empty blocks allowed
+        return p, -1
+    }
+    p, let blk = try add_extra(p, ast.tag.case_block_stmt, -1, extra)
+    return p, blk
 }
 
 // ----------- //
