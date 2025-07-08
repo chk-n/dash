@@ -132,6 +132,8 @@ pub enum tag {
     lt
     lte
     incr_decr
+    // optional ops
+    null_coalesce
     try_expr
     catch_expr
 
@@ -194,6 +196,7 @@ pub fn infix_to_tag(t lexer.tag)! tag {
         case lexer.tag.NEQ: tag.neq
         case lexer.tag.DOT: tag.dot
         case lexer.tag.ASSGN: tag.assignment
+        case lexer.tag.QQMARK: tag.null_coalesce
         case _: raise unexpected_tag
     }
 }
@@ -507,7 +510,8 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
     case tag.add, tag.sub, tag.mul,
         tag.div, tag.mod, tag.or, tag.lor, tag.land,
         tag.xor, tag.and, tag.andnot, tag.lsh, tag.rsh,
-        tag.lt, tag.gt, tag.lte, tag.gte, tag.eq, tag.neq:
+        tag.lt, tag.gt, tag.lte, tag.gte, tag.eq, tag.neq,
+        tag.null_coalesce:
         buf = append(buf, '(')
 
         buf = to_string(a, data.x, buf)
@@ -631,24 +635,25 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
-    case tag.struct_def, tag.return_stmt: 6
-    case tag.union_def, tag.break_stmt,
-         tag.catch_expr, tag.raise_stmt,
-         tag.defer_stmt, tag.match_stmt: 5
-    case tag.enum_def, tag.type_def, tag.next_stmt,
-         tag.case_stmt: 4
-    case tag.let_decl, tag.var_decl,
-         tag.library, tag.use_def,
-         tag.for_infinite, tag.for_bool,
-         tag.for_classic, tag.for_range,
-         tag.try_expr: 3
-    case tag.if_stmt, tag.incr_decr: 2
-    case tag.fn_def, tag.fn_err_def,
-         tag.lor, tag.land, tag.andnot, 
-         tag.lsh, tag.rsh,
-         tag.lte, tag.gte,
-         tag.eq, tag.neq: 2
-    case _: 1
+        case tag.struct_def, tag.return_stmt: 6
+        case tag.union_def, tag.break_stmt,
+             tag.catch_expr, tag.raise_stmt,
+             tag.defer_stmt, tag.match_stmt: 5
+        case tag.enum_def, tag.type_def, tag.next_stmt,
+             tag.case_stmt: 4
+        case tag.let_decl, tag.var_decl,
+             tag.library, tag.use_def,
+             tag.for_infinite, tag.for_bool,
+             tag.for_classic, tag.for_range,
+             tag.try_expr: 3
+        case tag.if_stmt, tag.incr_decr,
+             tag.null_coalesce: 2
+        case tag.fn_def, tag.fn_err_def,
+             tag.lor, tag.land, tag.andnot, 
+             tag.lsh, tag.rsh,
+             tag.lte, tag.gte,
+             tag.eq, tag.neq: 2
+        case _: 1
     }
     let i = i64(idx)
     return src[i:i+size]

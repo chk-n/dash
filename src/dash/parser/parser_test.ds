@@ -121,6 +121,8 @@ fn test_parse_infix()! {
     try assert_parse_exp("a>=b", "(a >= b)")
     try assert_parse_exp("a<b", "(a < b)")
     try assert_parse_exp("a<=b", "(a <= b)")
+    // optional infix
+    try assert_parse_exp("x??1", "(x ?? 1)")
     
     try assert_parse_error("1 + 1_", [unexpected_token{i: 2}])
     try assert_parse_error("1+", [expected_expression{i: 2}])

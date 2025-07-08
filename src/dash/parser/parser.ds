@@ -42,6 +42,7 @@ enum context {
 enum precedence {
     none
     assgn
+    null_coalesce
     // bitwise or and logical or
     or
     xor
@@ -1889,6 +1890,8 @@ fn add_error(p parser, err error) parser {
 fn get_precedence(p parser) precedence {
     let tag = current_tag(p)
     match tag {
+    case lexer.tag.QQMARK:
+        return precedence.null_coalesce
     case lexer.tag.ASSGN:
         return precedence.assgn
     case lexer.tag.OR, lexer.tag.LOR: 
@@ -1949,7 +1952,8 @@ fn is_infix(p parser) bool {
         lexer.tag.EQ, lexer.tag.NEQ,
         lexer.tag.GT, lexer.tag.LT,
         lexer.tag.GTE, lexer.tag.LTE,
-        lexer.tag.DOT: 
+        lexer.tag.DOT,
+        lexer.tag.QQMARK: 
         return true
     case _:
         return false
