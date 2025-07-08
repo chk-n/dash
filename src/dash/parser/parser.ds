@@ -535,17 +535,9 @@ fn parse_function_statement(p parser)! parser, ast.index {
     if is_tag(p, lexer.tag.LBRACE) {
         p, body = try parse_block_statement(p)
     }
-    let extra = [ident, args, rets, body]
-    let start = len(p.extras)
-    let end = start+len(extra)-1
-    var extras = append(p.extras, extra)
-    var p = p^{ p.extras = extras }
 
-    p, let fn_def = add_node(p, {
-        tag: tag,
-        token: op_tkn,
-        data: {x: start, y: end}
-    })
+    let extra = [ident, args, rets, body]
+    p, let fn_def = add_extra(p, tag, op_tkn, extra)
 
     return p, fn_def
 }
@@ -650,7 +642,7 @@ fn parse_block_statement(p parser)! parser, ast.index {
         return p, -1
     }
     p = next_token(p)
-    p, let blk = try add_extra(p, ast.tag.block_stmt, -1 extra)
+    p, let blk = try add_extra(p, ast.tag.block_stmt, -1, extra)
     return p, blk
 }
 
