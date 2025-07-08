@@ -61,6 +61,7 @@ pub enum tag {
     STRING       // "abc"
     MULTI_STRING // `xyz`
     BOOL
+    MUT
 
     // type literals
     U8_TYPE
@@ -163,6 +164,7 @@ let keywords = [
     {"string", tag.STRING_TYPE},
     {"bool", tag.BOOL_TYPE},
     {"error", tag.ERROR},
+    {"mut", tag.MUT},
     {"true", tag.BOOL},
     {"false", tag.BOOL}
 ]

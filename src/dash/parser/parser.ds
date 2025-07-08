@@ -1341,8 +1341,10 @@ fn parse_type_literal(p parser)! parser, ast.index {
             try parse_column_type(p)
         case lexer.tag.QMARK:
             try parse_optional_type(p)
+        case lexer.tag.MUT:
+            try parse_mutable_type(p)
         case lexer.tag.IDENT:
-            try parse_expression(p, precedence.none)
+            try parse_expression(p, precedence.ltg)
         case _:
             try parse_literal(p)
     }   
@@ -1423,6 +1425,38 @@ fn parse_optional_type(p parser)! parser, ast.index {
     
     p, let typ = add_node(p, {
         tag: ast.tag.optional_type,
+        token: op_tkn,
+        data: {x: typ, y: -1}
+    })
+
+    return p, typ
+}
+
+fn parse_mutable_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.MUT), "expected 'mut'")
+    
+    let op_tkn = p.tkn_i
+    // consume 'mut'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.LT) {
+        p = add_error(p, expected_angle_bracket{i: p.tkn_i})
+        return p, -1
+    }
+    p = next_token(p)
+
+    p, let typ = try parse_type_literal(p)
+    if typ == -1 {
+        return p, -1
+    }
+
+    if !is_tag(p, lexer.tag.GT) {
+        p = add_error(p, expected_angle_bracket{i: p.tkn_i})
+        return p, -1
+    }    p = next_token(p)
+
+    p, let typ = add_node(p, {
+        tag: ast.tag.mutable_type,
         token: op_tkn,
         data: {x: typ, y: -1}
     })
@@ -1839,7 +1873,8 @@ fn is_type_literal(p parser) bool {
              lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
              lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
-             lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK: true
+             lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
+             lexer.tag.MUT: true
         case lexer.tag.LBRACE: maybe_column_type(p)
         case _: false
     }

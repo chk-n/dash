@@ -377,6 +377,7 @@ fn test_parse_function_statement()! {
     try assert_canonical("lib a fn abc(a,b,c,d,e,f,g,h i64)")
     try assert_canonical("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
     try assert_canonical("lib a fn abc(a string,b i64)")
+    try assert_canonical("lib a fn abc(a mut<[]abc>)")
 
     // NOTE: these issues will be caught by semsis
     try assert_canonical("lib a fn abc(a)")
@@ -402,7 +403,11 @@ fn test_parse_function_statement()! {
     try assert_error("lib a @ fn abc(", [expected_identifier{i: 3}, expected_parenthesis{i: 6}])
     try assert_error("lib a @abc(", [expected_expression{i: 5}])
     try assert_error("lib a @abc(a", [expected_parenthesis{i: 6}])
-    try assert_error("lib a @xyz fn abc(", [expected_parenthesis{i: 7}])  
+    try assert_error("lib a @xyz fn abc(", [expected_parenthesis{i: 7}])
+    // try assert_error("lib a fn abc(a mut<mut<[]u8>>)", [])
+    try assert_error("lib a fn abc(a mut)", [expected_angle_bracket{i: 7}])
+    try assert_error("lib a fn abc(a mut<)", [expected_type{i: 8}])
+    try assert_error("lib a fn abc(a mut<[]u8)", [expected_angle_bracket{i: 11}])
 }
 
 @test

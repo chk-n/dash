@@ -141,6 +141,7 @@ pub enum tag {
     array_type
     column_type
     optional_type
+    mutable_type
 }
 
 pub fn literal_to_tag(t lexer.tag)! tag {
@@ -608,6 +609,14 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
         buf = to_string(a, data.x, buf)
+        
+    case tag.mutable_type:
+        let src_idx = a.tkns[node.token].start
+        let op = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, op)
+        buf = append(buf, '<')
+        buf = to_string(a, data.x, buf)
+        buf = append(buf, '>')
 
     case tag.return_stmt:
         let src_idx = a.tkns[node.token].start
@@ -652,7 +661,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
              tag.library, tag.use_def,
              tag.for_infinite, tag.for_bool,
              tag.for_classic, tag.for_range,
-             tag.try_expr: 3
+             tag.try_expr, tag.mutable_type: 3
         case tag.if_stmt, tag.incr_decr,
              tag.null_coalesce: 2
         case tag.fn_def, tag.fn_err_def,

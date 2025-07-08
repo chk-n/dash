@@ -64,6 +64,10 @@ error expected_case {
     i ast.token_index
 }
 
+error expected_angle_bracket {
+    i ast.token_index
+}
+
 error invalid_library_name {
     i ast.token_index
 }

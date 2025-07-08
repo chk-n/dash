@@ -64,6 +64,7 @@ fn test_next_token()! {
         {"string", tag.STRING_TYPE},
         {"bool", tag.BOOL_TYPE},
         {"error", tag.ERROR},
+        {"mut", tag.MUT},
         // keywords
         {"pub", tag.PUB},
         {"lib", tag.LIB},
