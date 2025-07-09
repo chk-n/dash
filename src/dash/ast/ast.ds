@@ -114,6 +114,7 @@ pub enum tag {
     mul
     div
     mod
+    incr_decr
     // binary ops
     negate_byte
     or
@@ -132,9 +133,9 @@ pub enum tag {
     gte
     lt
     lte
-    incr_decr
     // optional ops
     null_coalesce
+    
     try_expr
     catch_expr
 
