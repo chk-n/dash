@@ -12,7 +12,7 @@ fn test_parse_scalar_literals()! {
     // try assert_parse_exp(`"a\"b"`, `"a\"b"`) // TODO: this is lexer issue
     try assert_parse_exp(`"hello"`, `"hello"`)
     // TODO: add char literal
-    // try assert_parse_exp(`'h'`, `'h'`) 
+    try assert_parse_exp(`'h'`, `'h'`) 
 
     try assert_parse_error("1_000_", [unexpected_token{i: 0}])
     try assert_parse_error(`", world`, [unexpected_token{i: 0}])

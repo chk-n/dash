@@ -61,6 +61,7 @@ pub enum tag {
     STRING       // "abc"
     MULTI_STRING // `xyz`
     BOOL
+    CHAR
     MUT
 
     // type literals

@@ -35,7 +35,6 @@ pub fn next_tkn(l *lexer) *lexer, token {
     case ',': tkn = token{tag: tag.COMMA,     start: l.idx, end: l.idx}
     case '@': tkn = token{tag: tag.AT,        start: l.idx, end: l.idx}
     case '.': tkn = token{tag: tag.DOT,       start: l.idx, end: l.idx}
-    case '"': return read_string(l)
     case '+':
         if peek_ch(l) == '+' {
             tkn = token{tag: tag.ADDADD, start: l.idx, end: l.idx+1}
@@ -104,6 +103,8 @@ pub fn next_tkn(l *lexer) *lexer, token {
         } else {
             tkn = token{tag: tag.QMARK, start: l.idx, end: l.idx}
         } 
+    case '"': return read_string(l)
+    case '\'': return read_char(l)
     case _:
         if is_letter(ch) {      
             let l, let tkn = read_identifier(l)
@@ -118,6 +119,9 @@ pub fn next_tkn(l *lexer) *lexer, token {
 }
 
 fn next_ch(l *lexer) *lexer {
+    if l.idx >= len(l.buf) {
+        return l
+    }
     return &lexer{buf: l.buf, idx: l.idx+1}
 }
 
@@ -133,8 +137,15 @@ fn skip_whitespace(l *lexer) *lexer {
     return &lexer{buf: l.buf, idx: idx}
 }
 
+fn cur_ch(l *lexer) byte {
+	if l.idx <= len(l.buf)-1 {
+		return l.buf[l.idx]
+	}
+	return 0
+}
+
 fn peek_ch(l *lexer) byte {
-	if l.idx+1 < len(l.buf) {
+	if l.idx < len(l.buf)-1 {
 		return l.buf[l.idx+1]
 	}
 	return 0
@@ -169,6 +180,32 @@ fn read_string(l *lexer) *lexer, token {
 fn read_multi_string(l *lexer) *lexer, token {
     // TODO:
     return l, token{tag: tag.ILLEGAL, start: l.idx, end: l.idx}
+}
+
+fn read_char(l *lexer) *lexer, token {
+    var l = l
+    let idx = l.idx
+
+    // consume '
+    l = next_ch(l)
+    if cur_ch(l) == '\\' {
+        l = next_ch(l)
+    }
+
+    // TODO: handle unicode code point
+    // if l.buf[l.idx] == 'u' {
+        // l = next_ch(l)
+    // }
+    
+    // consume character
+    l = next_ch(l)
+    if cur_ch(l) != '\'' {
+        return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
+    }
+    // consume '
+    l = next_ch(l)
+
+    return l, token{tag: tag.CHAR, start: idx, end: l.idx-1}
 }
 
 fn read_comment(l *lexer) *lexer, token {

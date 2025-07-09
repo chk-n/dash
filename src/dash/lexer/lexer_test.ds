@@ -177,6 +177,29 @@ fn test_bool()! {
     }
 }
 
+@test
+fn test_char()! {
+    let tests = [
+        {`'a'`, tag.CHAR},        
+        {`'\n'`, tag.CHAR},       
+        {`'`, tag.ILLEGAL},                   
+        {`''`, tag.ILLEGAL},                   
+        {`'a`, tag.ILLEGAL},                   
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = tests[i]
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = next_tkn(l)
+        
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = get_literal(l, tkn)
+        try assert(lit == tc.0, "literal mismatch")
+    }
+}
+
+@test
 fn test_comment()! {
     let tests = [
         {"// normal comment", tag.COMMENT},
@@ -247,3 +270,4 @@ fn test_sequential()! {
         }
     }
 }
+
