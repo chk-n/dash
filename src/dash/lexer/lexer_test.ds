@@ -44,6 +44,7 @@ fn test_next_token()! {
         {";", tag.SEMICOLON},
         {"@", tag.AT},
         // identifiers
+        {"_", tag.IDENT},
         {"abc", tag.IDENT},
         {"ifelse", tag.IDENT},
         // type literals
