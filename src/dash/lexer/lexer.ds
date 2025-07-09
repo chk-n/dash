@@ -168,7 +168,7 @@ fn read_string(l *lexer) *lexer, token {
             return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
         }
 
-        let ch = l.buf[l.idx]
+        let ch = cur_ch(l)
         if ch == '"' {
             l = next_ch(l)
             break
@@ -217,7 +217,7 @@ fn read_comment(l *lexer) *lexer, token {
     if l.buf[l.idx+1] == '/' {
         cnt = 1
      	for l.idx < len(l.buf) {
-            let ch = l.buf[l.idx]   
+            let ch = cur_ch(l)   
             if ch == '\n' {
                 break
             }
@@ -226,7 +226,7 @@ fn read_comment(l *lexer) *lexer, token {
     // case: multi line comment
     } else { 
 	    for l.idx < len(l.buf) {
-            let ch1 = l.buf[l.idx]
+            let ch1 = cur_ch(l)
             let ch2 = peek_ch(l)   
             if ch1 == '*' && ch2 == '/' {
                 cnt = cnt + 1
@@ -245,8 +245,10 @@ fn read_identifier(l *lexer) *lexer, token {
     var l = l
     let idx = l.idx
   	for l.idx < len(l.buf) {
-        let ch = l.buf[l.idx]     
-        if !is_letter(ch) && !is_digit(ch) { break }
+        let ch = cur_ch(l)     
+        if !is_letter(ch) && !is_digit(ch) {
+            break
+        }
 		l = next_ch(l)
 	}
    return l, token{tag: tag.IDENT, start: idx, end: l.idx-1} 
@@ -264,7 +266,7 @@ fn read_number(l *lexer) *lexer, token {
     l = next_ch(l)
     var cnt = 0
     for l.idx < len(l.buf) && cnt <= 1 {
-        let ch = l.buf[l.idx]    
+        let ch = cur_ch(l)    
         
         if is_digit(ch) {
             l = next_ch(l)
