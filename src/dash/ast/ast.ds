@@ -4,7 +4,7 @@ lib ast
 
 use "dash/lexer"
 
-pub let NULL_DATA = data{x: 0, y: 0}
+pub let NULL_DATA = data{x: -1, y: -1}
 
 // TODO: replace with column list
 pub struct ast {
