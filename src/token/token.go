@@ -197,8 +197,6 @@ const (
 	PUBLIC
 	// struct
 	STRUCT
-	// gen
-	GENERIC
 	// enum
 	ENUM
 	// type
@@ -260,7 +258,6 @@ var keywords = map[string]Type{
 	"lib":    LIBRARY,
 	"main":   MAIN,
 	"struct": STRUCT,
-	"gen":    GENERIC,
 	"enum":   ENUM,
 	"type":   TYPE,
 	"alias":  ALIAS,

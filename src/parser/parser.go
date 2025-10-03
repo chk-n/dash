@@ -318,8 +318,6 @@ func (p *Parser) ParseREPL() *ast.Library {
 			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
 			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
-		case token.GENERIC:
-			lib.Nodes = append(lib.Nodes, p.parseGenericStructStatement())
 		case token.STRUCT:
 			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
@@ -445,28 +443,6 @@ func (p *Parser) parseTypeAliasStatement() *ast.TypeAliasStatement {
 	}
 
 	return stmt
-}
-
-func (p *Parser) parseGenericStructStatement() *ast.GenericStructStatement {
-	public := false
-	if p.prevTokenIs(token.PUBLIC) {
-		public = true
-	}
-	// eat "gen" token
-	p.nextToken()
-	if !p.curTokenIs(token.STRUCT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	stmt := p.parseStructStatement()
-	stmt.Public = public
-	gen := &ast.GenericStructStatement{
-		Public: stmt.Public,
-		Token:  stmt.Token,
-		Name:   stmt.Name,
-		Fields: stmt.Fields,
-	}
-	return gen
 }
 
 func (p *Parser) parseStructStatement() *ast.StructStatement {

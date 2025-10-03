@@ -190,36 +190,6 @@ func (s *TypeAliasStatement) String() string {
 	return out.String()
 }
 
-type GenericStructStatement struct {
-	Public bool
-	Token  token.Token
-	Name   *Identifier
-	Fields []*StructFieldStatement
-	T      *types.AbstractStruct
-}
-
-func (s *GenericStructStatement) statementNode()       {}
-func (s *GenericStructStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *GenericStructStatement) Type() types.Type {
-	return s.T
-}
-func (s *GenericStructStatement) String() string {
-	var out bytes.Buffer
-	if s.Public {
-		out.WriteString("pub ")
-	}
-	out.WriteString("gen " + s.TokenLiteral() + " ")
-	out.WriteString(s.Name.TokenLiteral() + " {")
-	for i, field := range s.Fields {
-		out.WriteString(field.String())
-		if i != len(s.Fields)-1 {
-			out.WriteString(", ")
-		}
-	}
-	out.WriteString("}")
-	return out.String()
-}
-
 // struct <name> { }
 type StructStatement struct {
 	Public bool
@@ -1528,10 +1498,6 @@ func (s *TypeDefinitionStatement) Pos() token.Pos {
 }
 
 func (s *TypeAliasStatement) Pos() token.Pos {
-	return s.Token.Position
-}
-
-func (s *GenericStructStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 
