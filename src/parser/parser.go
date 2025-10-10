@@ -77,11 +77,10 @@ const (
 )
 
 type Parser struct {
+	tknIdx            int
+	tkns              []token.Token
 	l                 *lexer.Lexer
-	prevToken         token.Token
 	curToken          token.Token
-	peekToken         token.Token
-	warnings          []string
 	errors            []string
 	prefixParseFns    map[token.Type]prefixParseFn
 	infixParseFns     map[token.Type]infixParseFn
@@ -97,10 +96,6 @@ func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l: l,
 	}
-
-	// Read two tokens, so curToken and peekToken are both set
-	p.nextToken()
-	p.nextToken()
 
 	p.prefixParseFns = make(map[token.Type]prefixParseFn)
 	p.registerPrefix(token.COMMENT, p.parseComment)
@@ -192,6 +187,20 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerAttribute("inline", p.parseInlineAttribute)
 	p.registerAttribute("test", p.parseBasicAttribute)
 
+	// scan all tokens
+	var tkns []token.Token
+	for {
+		tkn := l.NextToken()
+		tkns = append(tkns, tkn)
+		if tkn.Type == token.EOF {
+			break
+		}
+	}
+	p.tkns = tkns
+	// tkns will never be empty as there will
+	// be at least one EOF token
+	p.curToken = tkns[0]
+
 	return p
 }
 
@@ -200,9 +209,18 @@ func (p *Parser) Errors() []string {
 }
 
 func (p *Parser) nextToken() {
-	p.prevToken = p.curToken
-	p.curToken = p.peekToken
-	p.peekToken = p.l.NextToken()
+	if p.tknIdx+1 >= len(p.tkns) {
+		return
+	}
+	p.tknIdx++
+	p.curToken = p.tkns[p.tknIdx]
+}
+
+func (p *Parser) peekToken() token.Token {
+	if p.tknIdx+1 >= len(p.tkns) {
+		return p.tkns[len(p.tkns)-1]
+	}
+	return p.tkns[p.tknIdx+1]
 }
 
 func (p *Parser) ParseLibrary() *ast.Library {
@@ -2157,7 +2175,10 @@ func (p *Parser) curPrecedence() int {
 }
 
 func (p *Parser) prevTokenIs(t token.Type) bool {
-	return p.prevToken.Type == t
+	if p.tknIdx-1 <= 0 {
+		return false
+	}
+	return p.tkns[p.tknIdx-1].Type == t
 }
 
 func (p *Parser) curTokenIs(t token.Type) bool {
@@ -2165,7 +2186,14 @@ func (p *Parser) curTokenIs(t token.Type) bool {
 }
 
 func (p *Parser) peekTokenIs(t token.Type) bool {
-	return p.peekToken.Type == t
+	return p.peekNTokenIs(1, t)
+}
+
+func (p *Parser) peekNTokenIs(n int, t token.Type) bool {
+	if p.tknIdx+n >= len(p.tkns) {
+		return false
+	}
+	return p.tkns[p.tknIdx+n].Type == t
 }
 
 func (p *Parser) curTokenIsOperator() bool {
@@ -2217,7 +2245,7 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.BYTETYPE ||
 		p.curToken.Type == token.CHARTYPE ||
 		p.curToken.Type == token.LBRACK ||
-		(p.curToken.Type == token.FUNCTION && p.peekToken.Type == token.LPAREN) ||
+		(p.curToken.Type == token.FUNCTION && p.peekToken().Type == token.LPAREN) ||
 		p.curToken.Type == token.ASTERISK ||
 		p.curToken.Type == token.MUTABLETYPE ||
 		p.curToken.Type == token.IDENT ||
