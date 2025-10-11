@@ -211,7 +211,6 @@ func TestNextToken(t *testing.T) {
 				lib
 				pub
 				struct
-				gen
 				enum
 				type
 				fn
@@ -239,7 +238,6 @@ func TestNextToken(t *testing.T) {
 				{"lib", token.LIBRARY},
 				{"pub", token.PUBLIC},
 				{"struct", token.STRUCT},
-				{"gen", token.GENERIC},
 				{"enum", token.ENUM},
 				{"type", token.TYPE},
 				{"fn", token.FUNCTION},
