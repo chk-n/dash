@@ -144,6 +144,9 @@ pub enum tag {
     column_type
     optional_type
     mutable_type
+
+    // only for usage within 'ast' lib
+    pub
 }
 
 pub fn literal_to_tag(t lexer.tag)! tag {
@@ -230,10 +233,21 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
     var buf = buf
     let node = a.nodes[idx]
     let data = node.data
+
+    // we assume parser handles invalid 'pub'
+    // keywords and dont add them to a.nodes list
+    if is_public(a, node.token) {
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx-4, tag.pub)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+    }
+
     match node.tag {
     case tag.library, tag.type_def,
          tag.struct_def, tag.enum_def,
          tag.union_def:
+    
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -661,7 +675,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
              tag.defer_stmt, tag.match_stmt: 5
         case tag.enum_def, tag.type_def, tag.next_stmt,
              tag.case_stmt: 4
-        case tag.let_decl, tag.var_decl,
+        case tag.pub, tag.let_decl, tag.var_decl,
              tag.library, tag.use_def,
              tag.for_infinite, tag.for_bool,
              tag.for_classic, tag.for_range,
@@ -677,4 +691,12 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     }
     let i = i64(idx)
     return src[i:i+size]
+}
+
+// checks whether AST node was marked as public
+fn is_public(a ast, idx token_index) bool {
+    if idx <= 0 {
+        return false
+    }
+    return a.tkns[idx-1].tag == lexer.tag.PUB 
 }

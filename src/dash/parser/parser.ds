@@ -134,6 +134,9 @@ fn parse_library(p parser)! parser, ast.index {
         var node = ast.index(-1)
         match current_tag(p) {
         case lexer.tag.USE:
+            if p.tkns[p.tkn_i-1].tag == lexer.tag.PUB {
+                p = add_error(p, invalid_public_decleration{i: p.tkn_i-1})
+            }
             p, node = try parse_use_statement(p)
         case lexer.tag.PUB:
             // statements check previous token
