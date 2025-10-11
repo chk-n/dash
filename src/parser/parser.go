@@ -2011,26 +2011,6 @@ func (p *Parser) parseArrayType() types.Type {
 	return typ
 }
 
-// ngl this feels like a really dirty fix to stay LL(1) and all because
-// we want array literals like this '[1,1,2]'
-func (p *Parser) parseArrayTypeSkipFirst() types.Type {
-	typ := &types.Array{}
-
-	if p.curTokenIs(token.INT) {
-		typ.Size = int(p.parseIntegerLiteral().(*ast.IntegerLiteral).Value)
-	}
-
-	if !p.curTokenIs(token.RBRACK) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	p.nextToken()
-
-	typ.T = p.parseType()
-
-	return typ
-}
-
 // fn(i64) i64 or fn()
 func (p *Parser) parseFunctionType() *types.Function {
 	typ := &types.Function{}
