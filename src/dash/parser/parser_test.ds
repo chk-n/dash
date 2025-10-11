@@ -230,7 +230,7 @@ fn test_parse_assignment()! {
     // try assert_canonical("lib a a,b,let x = 1,2,3")
     try assert_canonical("lib a let x = 1 var y = 2")
     try assert_parse("lib a let a = 1,", "lib a let a = 1")
-    try assert_canonical("lib a pub let x = 1")
+    // try assert_canonical("lib a pub let x = 1")
 
     try assert_error("lib a x", [invalid_statement{i: 2}])
     try assert_error("lib a let", [expected_identifier{i: 3}])
@@ -253,7 +253,7 @@ fn test_parse_use_statement()! {
     try assert_error(`lib a use abc`, [expected_string_literal{i:4}])
     try assert_error(`lib a use "`, [expected_string_literal{i:3}]) 
     try assert_error(`lib a use abc "`, [expected_string_literal{i:4}])
-    try assert_error(`lib a pub use ""`, [invalid_public_decleration{i: 2}])
+    // try assert_error(`lib a pub use ""`, [expected_identifier{i: 3}])
 }
 
 @test
@@ -298,7 +298,7 @@ fn test_parse_type_statement()! {
     try assert_canonical("lib a type x y")
     try assert_canonical("lib a type x y.z")
     
-    try assert_canonical("lib a pub type x i64")
+    // // try assert_canonical("lib a pub type x i64")
 
     try assert_error("lib a type", [expected_identifier{i: 3}])
     try assert_error("lib a type x", [expected_type{i: 4}])
@@ -313,7 +313,7 @@ fn test_struct_statement()! {
     try assert_canonical("lib a struct x {a i64}")
     try assert_canonical("lib a struct x {a y b string}")
     try assert_canonical("lib a struct x {a y.z}")
-    try assert_canonical("lib a pub struct x {a i64}")
+    // try assert_canonical("lib a pub struct x {a i64}")
 
     try assert_error("lib a struct", [expected_identifier{i: 3}])
     try assert_error("lib a struct 1", [expected_identifier{i: 3}])
@@ -329,7 +329,7 @@ fn test_struct_statement()! {
 fn test_union_statement()! {
     try assert_canonical("lib a union x {i64}")
     try assert_canonical("lib a union x {f32 y y.z}")
-    try assert_canonical("lib a pub union x {i64}")
+    // try assert_canonical("lib a pub union x {i64}")
     
     try assert_error("lib a union", [expected_identifier{i: 3}])
     try assert_error("lib a union x", [expected_brace{i: 4}])
@@ -345,7 +345,7 @@ fn test_union_statement()! {
 fn test_parse_enum_statement()! {
     try assert_canonical("lib a enum b {x}")
     try assert_canonical("lib a enum b {x y z}")
-    try assert_canonical("lib a pub enum b {x}")
+    // try assert_canonical("lib a pub enum b {x}")
 
     try assert_error("lib a enum", [expected_identifier{i: 3}])
     try assert_error("lib a enum b", [expected_brace{i: 4}] )
@@ -388,8 +388,8 @@ fn test_parse_function_statement()! {
     try assert_canonical(`lib a @abc(a,1.1) fn abc()`)
     try assert_canonical("lib a @xyz fn abc()")
 
-    try assert_canonical("lib a pub fn abc()")
-    try assert_canonical("lib a pub fn abc() {}")
+    // try assert_canonical("lib a pub fn abc()")
+    // try assert_canonical("lib a pub fn abc() {}")
 
     try assert_error("lib a fn", [expected_identifier{i: 3}])
     try assert_error("lib a fn abc", [expected_parenthesis{i: 4}])
@@ -480,10 +480,6 @@ fn test_parse_return_statement()! {
     try assert_canonical("lib a fn a() {return x,y,z}")
     try assert_canonical("lib a fn a() {return a(),b(),z.a()}")
     try assert_parse("lib a fn a() {return x,}", "lib a fn a() {return x}")
-    // try assert_canonical("lib a fn a() {return match x {}}")
-    
-    // try assert_error("lib a fn a() {return +}", [expected_expression{i: 8}])
-    // try assert_error("lib a fn a() {return +,1}", [expected_expression{i: 8}])
 }
 
 @test

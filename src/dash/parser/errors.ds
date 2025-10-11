@@ -88,10 +88,6 @@ error invalid_postfix_expression {
     i ast.token_index
 }
 
-error invalid_public_decleration {
-    i ast.token_index
-}
-
 // unexpected_expression should be used
 // when a previously parsed node does
 // not match what is expected in the
