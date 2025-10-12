@@ -190,13 +190,14 @@ func (s *TypeAliasStatement) String() string {
 	return out.String()
 }
 
-// struct <name> { }
+// struct[name] { }
 type StructStatement struct {
-	Public bool
-	Token  token.Token
-	Name   *Identifier
-	Fields []*StructFieldStatement
-	T      *types.Struct
+	Public            bool
+	Token             token.Token
+	Name              *Identifier
+	GenericParameters []*GenericParameter
+	Fields            []*StructFieldStatement
+	T                 *types.Struct
 }
 
 func (s *StructStatement) statementNode()       {}
@@ -210,7 +211,19 @@ func (s *StructStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString(s.TokenLiteral() + " ")
-	out.WriteString(s.Name.TokenLiteral() + " {")
+	out.WriteString(s.Name.TokenLiteral())
+	// print generic parameters
+	if len(s.GenericParameters) > 0 {
+		out.WriteString("[")
+		for i, gp := range s.GenericParameters {
+			out.WriteString(gp.String())
+			if i != len(s.GenericParameters)-1 {
+				out.WriteString(", ")
+			}
+		}
+		out.WriteString("]")
+	}
+	out.WriteString(" {")
 	for i, field := range s.Fields {
 		out.WriteString(field.String())
 		if i != len(s.Fields)-1 {
@@ -744,6 +757,23 @@ func (s *RaiseStatement) String() string {
 	if s.Error != nil {
 		out.WriteString(s.Error.String())
 	}
+	return out.String()
+}
+
+type GenericParameter struct {
+	Name       *Identifier
+	Constraint types.Type
+}
+
+func (g *GenericParameter) String() string {
+	var out bytes.Buffer
+
+	out.WriteString(g.Name.String())
+	if g.Constraint != nil {
+		out.WriteString(" ")
+		out.WriteString(g.Constraint.String())
+	}
+
 	return out.String()
 }
 

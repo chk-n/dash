@@ -475,6 +475,17 @@ func (p *Parser) parseStructStatement() *ast.StructStatement {
 	}
 	stmt.Name = p.parseIdentifier()
 
+	// handle optional parametrised type
+	if p.curTokenIs(token.LBRACK) {
+		p.nextToken()
+		stmt.GenericParameters = p.parseGenericParameters()
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
 	if !p.curTokenIs(token.LBRACE) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -1956,6 +1967,70 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	}
 
 	return lit
+}
+
+// parseGenericParameters parses generic parameter lists like:
+// T any
+// T, E any (creates T and E with 'any' constraint)
+// T any, E int
+func (p *Parser) parseGenericParameters() []*ast.GenericParameter {
+	var params []*ast.GenericParameter
+	var pendingNames []*ast.Identifier
+
+	for !p.curTokenIs(token.RBRACK) && !p.curTokenIs(token.EOF) {
+
+		if !p.curTokenIs(token.IDENT) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		name := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+
+		// case 1: short hand (constraint defined later)
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+			pendingNames = append(pendingNames, name)
+			continue
+		}
+
+		// case 2: parse constraint if there is one
+		if !p.curTokenIsType() && !p.curTokenIsIdent() {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		constraint := p.parseType()
+
+		// fist we set all pendingNames to same constraint
+		// as parsed now
+		for _, pendingName := range pendingNames {
+			param := &ast.GenericParameter{
+				Name:       pendingName,
+				Constraint: constraint,
+			}
+			params = append(params, param)
+		}
+		pendingNames = nil
+
+		param := &ast.GenericParameter{
+			Name:       name,
+			Constraint: constraint,
+		}
+		params = append(params, param)
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+			continue
+		}
+	}
+
+	if len(pendingNames) > 0 {
+		p.addError(p.curToken, errMissingGenericConstraint(pendingNames[0].Value))
+		return nil
+	}
+
+	return params
 }
 
 // ----- //

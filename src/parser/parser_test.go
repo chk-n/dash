@@ -1217,6 +1217,45 @@ func TestStructDefinition(t *testing.T) {
 	}
 }
 
+func TestGenericStructDefinition(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "single generic parameter",
+			input: "struct foo[T any] {a T, b i64}",
+			want:  "struct foo[T any] {a unknown[T], b i64}",
+		},
+		{
+			name:  "multiple generic parameters with same constraint",
+			input: "struct bar[K, V any] {x K, y V}",
+			want:  "struct bar[K any, V any] {x unknown[K], y unknown[V]}",
+		},
+		{
+			name:  "multiple generic parameters with different constraints",
+			input: "struct baz[T any, E error] {a T, b E}",
+			want:  "struct baz[T any, E error] {a unknown[T], b unknown[E]}",
+		},
+		{
+			name:  "generic struct with no fields",
+			input: "struct empty[T any] {}",
+			want:  "struct empty[T any] {}",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseStructStatement()
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
 func TestStructLiteral(t *testing.T) {
 	tests := []struct {
 		name  string

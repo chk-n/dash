@@ -18,3 +18,9 @@ var (
 		return fmt.Errorf("invalid argument '%s' for attribute @%s", attribute, annotation)
 	}
 )
+
+var (
+	errMissingGenericConstraint = func(name string) error {
+		return fmt.Errorf("generic constraint for type '%s' missing", name)
+	}
+)
