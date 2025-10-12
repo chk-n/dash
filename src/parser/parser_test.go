@@ -46,7 +46,7 @@ func TestType(t *testing.T) {
 		{
 			name:  "array imported type",
 			input: "[]ast.token",
-			want:  "[]ast.unknown<token>",
+			want:  "[]ast.unknown[token]",
 		},
 		{
 			name:  "function empty",
@@ -85,13 +85,13 @@ func TestType(t *testing.T) {
 		},
 		{
 			name:  "memory",
-			input: "mut<string>",
-			want:  "mut<string>",
+			input: "mut[string]",
+			want:  "mut[string]",
 		},
 		{
 			name:  "memory nested",
-			input: "mut<[]i64>",
-			want:  "mut<[]i64>",
+			input: "mut[[]i64]",
+			want:  "mut[[]i64]",
 		},
 		{
 			name:  "char",
@@ -1061,7 +1061,7 @@ func TestTypeDefinitionStatement(t *testing.T) {
 		{
 			name:  "nested type def",
 			input: "type user abc",
-			want:  "type user unknown<abc>",
+			want:  "type user unknown[abc]",
 		},
 		{
 			name:  "with predicate",
@@ -1135,12 +1135,12 @@ func TestUnionDefinition(t *testing.T) {
 		{
 			name:  "one type",
 			input: "union abc { type_a }",
-			want:  "union abc {unknown<type_a>}",
+			want:  "union abc {unknown[type_a]}",
 		},
 		{
 			name:  "multiple types",
 			input: "union abc { type_a, type_b }",
-			want:  "union abc {unknown<type_a>, unknown<type_b>}",
+			want:  "union abc {unknown[type_a], unknown[type_b]}",
 		},
 	}
 	for _, tc := range tests {
@@ -1174,7 +1174,7 @@ func TestStructDefinition(t *testing.T) {
 		{
 			name:  "nested struct",
 			input: "struct user {x f64, friend user}",
-			want:  "struct user {x f64, friend unknown<user>}",
+			want:  "struct user {x f64, friend unknown[user]}",
 		},
 		{
 			name:  "struct - fields can use type keywords as names",

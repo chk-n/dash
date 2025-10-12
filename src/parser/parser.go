@@ -2179,7 +2179,7 @@ func (p *Parser) parseMutableType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Mutable)
 	p.nextToken()
 
-	if !p.curTokenIs(token.LT) {
+	if !p.curTokenIs(token.LBRACK) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
@@ -2187,7 +2187,7 @@ func (p *Parser) parseMutableType() types.Type {
 
 	typ.T = p.parseType()
 
-	if !p.curTokenIs(token.GT) {
+	if !p.curTokenIs(token.RBRACK) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}

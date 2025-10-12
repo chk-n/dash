@@ -625,7 +625,7 @@ func (t *Mutable) Ident() string {
 	return t.String()
 }
 func (t *Mutable) String() string {
-	return "mut<" + t.T.String() + ">"
+	return "mut[" + t.T.String() + "]"
 }
 func (t *Mutable) Equal(other Type) bool {
 	otherMem, ok := other.(*Mutable)
@@ -752,7 +752,7 @@ func (t *UnknownNamed) Ident() string {
 	return t.Name
 }
 func (t *UnknownNamed) String() string {
-	return "unknown<" + t.Name + ">"
+	return "unknown[" + t.Name + "]"
 }
 func (t *UnknownNamed) Equal(other Type) bool {
 	otherUn, ok := other.(*UnknownNamed)
