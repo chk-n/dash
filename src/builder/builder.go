@@ -199,6 +199,9 @@ func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]
 			if err != nil {
 				return nil, err
 			}
+			if lib == nil {
+				continue
+			}
 
 			if libName == "" {
 				libName = fmt.Sprintf("%s/%s", b.projectName, lib.Name.String())
@@ -227,6 +230,9 @@ func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]
 		for _, imp := range imps {
 			child, ok := nodes[imp]
 			if !ok {
+				// NOTE: this can be caused by an import being
+				// defined but not found. Obviously this should
+				// be handled earlier
 				panic("empty")
 			}
 			imports = append(imports, child)
