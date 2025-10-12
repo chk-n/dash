@@ -1726,6 +1726,52 @@ fn test() {}
 	}
 }
 
+func TestGenericFunctionDefinition(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		error []string
+	}{
+		{
+			name:  "single generic type with constraint",
+			input: "fn func[T any](x T) T {}",
+			want:  "fn func[T any](x unknown[T]) unknown[T] { }",
+		},
+		{
+			name:  "multiple generic types with same constraint",
+			input: "fn func[T, E any](x T, y E) {}",
+			want:  "fn func[T any, E any](x unknown[T],y unknown[E]) { }",
+		},
+		{
+			name:  "multiple generic types with different constraints",
+			input: "fn func[T any, E abc](x T, y E) {}",
+			want:  "fn func[T any, E unknown[abc]](x unknown[T],y unknown[E]) { }",
+		},
+		// {
+		// 	name:  "missing generic constraint",
+		// 	input: "lib test fn func[T](x T) T {}",
+		// 	error: []string{},
+		// },
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			mod := p.parseFunctionExpression()
+
+			if len(p.Errors()) != 0 {
+				t.Errorf("unexpected parsing errors: %v", p.Errors())
+				return
+			}
+
+			if tc.want != mod.String() {
+				t.Errorf("want %s but got %s", tc.want, mod.String())
+			}
+		})
+	}
+}
+
 //------------------//
 // Helper functions //
 //------------------//

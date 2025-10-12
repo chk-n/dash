@@ -1929,6 +1929,17 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 		lit.IsAnonymous = true
 	}
 
+	// Parse generic parameters if present
+	if p.curTokenIs(token.LBRACK) {
+		p.nextToken()
+		lit.GenericParameters = p.parseGenericParameters()
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
 	if !p.curTokenIs(token.LPAREN) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil

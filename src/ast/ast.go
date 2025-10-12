@@ -785,13 +785,14 @@ func (g *GenericParameter) String() string {
 //		return a + b
 //	}
 type FunctionExpression struct {
-	Attributes   []Attribute
-	Public       bool        // pub fn
-	Token        token.Token // The 'fn' token
-	Name         *Identifier
-	Arguments    []*ParameterStatement
-	ErrorProne   bool
-	ReturnValues []*TypeLiteral
+	Attributes        []Attribute
+	Public            bool        // pub fn
+	Token             token.Token // The 'fn' token
+	Name              *Identifier
+	GenericParameters []*GenericParameter
+	Arguments         []*ParameterStatement
+	ErrorProne        bool
+	ReturnValues      []*TypeLiteral
 
 	Body *BlockStatement
 
@@ -829,6 +830,19 @@ func (fl *FunctionExpression) String() string {
 	if !fl.IsAnonymous {
 		out.WriteString(" " + fl.Name.TokenLiteral())
 	}
+
+	// print generic parameters
+	if len(fl.GenericParameters) > 0 {
+		out.WriteString("[")
+		for i, gp := range fl.GenericParameters {
+			out.WriteString(gp.String())
+			if i != len(fl.GenericParameters)-1 {
+				out.WriteString(", ")
+			}
+		}
+		out.WriteString("]")
+	}
+
 	// print arguments
 	args := make([]string, 0, len(fl.Arguments))
 	out.WriteString("(")
