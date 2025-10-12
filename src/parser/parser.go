@@ -2156,7 +2156,7 @@ func (p *Parser) curPrecedence() int {
 }
 
 func (p *Parser) prevTokenIs(t token.Type) bool {
-	if p.tknIdx-1 <= 0 {
+	if p.tknIdx-1 < 0 {
 		return false
 	}
 	return p.tkns[p.tknIdx-1].Type == t
