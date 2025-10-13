@@ -1477,13 +1477,11 @@ func (p *Parser) parseDeferExpression() ast.Expression {
 
 	if p.curTokenIs(token.LBRACE) {
 		exp.Node = p.parseBlockStatement()
-	} else if p.peekTokenIs(token.DOT) {
-		exp.Node = p.parseExpression(LOWEST)
-	} else if p.peekTokenIs(token.LPAREN) {
-		exp.Node = p.parseFunctionCallExpression()
 	} else {
-		return nil
+		exp.Node = p.parseExpression(LOWEST)
 	}
+
+	// TODO: validate exp.Node is valid e.g. function call
 
 	return exp
 }
