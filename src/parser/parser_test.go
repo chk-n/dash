@@ -1745,11 +1745,11 @@ func TestLibrary(t *testing.T) {
 			name: "issue 62",
 			input: `lib main
 
-@extern(c)
-pub fn exit(c i64)
+		@extern(c)
+		pub fn exit(c i64)
 
-fn test() {}
-`,
+		fn test() {}
+		`,
 			want: "lib main @extern(c) pub fn exit(c i64) fn test() { }",
 		},
 	}
