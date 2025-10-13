@@ -924,9 +924,10 @@ func (e *ConditionalExpression) String() string {
 }
 
 type FunctionCallExpression struct {
-	Token       token.Token // The function identifier
-	Arguments   []Expression
-	ReturnTypes []types.Type
+	Token          token.Token // The function identifier
+	TypeParameters []types.Type
+	Arguments      []Expression
+	ReturnTypes    []types.Type
 
 	// Set by semantic analysis
 	T             types.Type
@@ -942,6 +943,17 @@ func (e *FunctionCallExpression) TokenLiteral() string { return e.Token.Literal 
 func (e *FunctionCallExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(e.Token.Literal)
+
+	// Print type parameters if present
+	if len(e.TypeParameters) > 0 {
+		out.WriteString("[")
+		typeParams := make([]string, 0, len(e.TypeParameters))
+		for _, tp := range e.TypeParameters {
+			typeParams = append(typeParams, tp.String())
+		}
+		out.WriteString(strings.Join(typeParams, ", "))
+		out.WriteString("]")
+	}
 
 	args := make([]string, 0, len(e.Arguments))
 	for _, arg := range e.Arguments {
@@ -1393,8 +1405,9 @@ type StructLiteral struct {
 	Token token.Token
 	// Same name as in struct statement.
 	// Can be nil if anonymous struct.
-	Name   Expression // can be Identifier or DotExpression
-	Fields []*StructFieldLiteral
+	Name           Expression // can be Identifier or DotExpression
+	TypeParameters []types.Type
+	Fields         []*StructFieldLiteral
 
 	// Set by semantic analysis
 	T       types.Type
@@ -1412,6 +1425,18 @@ func (s *StructLiteral) String() string {
 	if s.Name != nil {
 		out.WriteString(s.Name.String())
 	}
+
+	// Print type parameters if present
+	if len(s.TypeParameters) > 0 {
+		out.WriteString("[")
+		typeParams := make([]string, 0, len(s.TypeParameters))
+		for _, tp := range s.TypeParameters {
+			typeParams = append(typeParams, tp.String())
+		}
+		out.WriteString(strings.Join(typeParams, ", "))
+		out.WriteString("]")
+	}
+
 	out.WriteString("{")
 	for i, f := range s.Fields {
 		out.WriteString(f.String())

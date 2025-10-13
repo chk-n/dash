@@ -744,7 +744,8 @@ func (t *ImportedNamed) Equal(other Type) bool {
 // when parsing or analysing.
 
 type UnknownNamed struct {
-	Name string
+	Name           string
+	TypeParameters []Type // Type parameters for generic types like vec[i64]
 }
 
 func (t *UnknownNamed) Type() Type { return t }
@@ -752,11 +753,38 @@ func (t *UnknownNamed) Ident() string {
 	return t.Name
 }
 func (t *UnknownNamed) String() string {
-	return "unknown[" + t.Name + "]"
+	var out bytes.Buffer
+	out.WriteString("unknown[")
+	out.WriteString(t.Name)
+	if len(t.TypeParameters) > 0 {
+		out.WriteString("[")
+		paramStrs := make([]string, len(t.TypeParameters))
+		for i, param := range t.TypeParameters {
+			paramStrs[i] = param.String()
+			out.WriteString(param.String())
+			if i != len(t.TypeParameters)-1 {
+				out.WriteString(",")
+			}
+		}
+		out.WriteString("]")
+	}
+	out.WriteString("]")
+	return out.String()
 }
 func (t *UnknownNamed) Equal(other Type) bool {
 	otherUn, ok := other.(*UnknownNamed)
-	return ok && t.Name == otherUn.Name
+	if !ok || t.Name != otherUn.Name {
+		return false
+	}
+	if len(t.TypeParameters) != len(otherUn.TypeParameters) {
+		return false
+	}
+	for i, param := range t.TypeParameters {
+		if !param.Equal(otherUn.TypeParameters[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 type Multi struct {

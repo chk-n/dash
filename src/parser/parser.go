@@ -223,6 +223,13 @@ func (p *Parser) peekToken() token.Token {
 	return p.tkns[p.tknIdx+1]
 }
 
+func (p *Parser) peekNToken(n int) token.Token {
+	if p.tknIdx+n >= len(p.tkns) {
+		return p.tkns[len(p.tkns)-1]
+	}
+	return p.tkns[p.tknIdx+n]
+}
+
 func (p *Parser) ParseLibrary() *ast.Library {
 	if !p.curTokenIs(token.LIBRARY) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -1246,24 +1253,89 @@ func (p *Parser) parseRaiseStatement() ast.Statement {
 // Expressions //
 // ----------- //
 
+// isGenericExpression checks if the current position indicates a generic type parameter
+// usage (e.g., vec[i64] or map[K, V]). Returns true if generic, false otherwise.
+// This function only peeks ahead and does not consume tokens.
+func (p *Parser) isGenericExpression() bool {
+	if !p.peekTokenIs(token.LBRACK) {
+		return false
+	}
+
+	if p.peekNTokenIsType(2) && !p.peekNTokenIs(2, token.IDENT) {
+		// Definitely generic: vec[int
+		// as types cant be used as identifiers
+		return true
+	}
+
+	if p.peekNTokenIs(2, token.IDENT) {
+		// Could be: 'map[K,' 'vec[T](' 'vec[T]{' 'a[b' 'if a[b] {' 'match a[b] {'
+		// Note: struct literals cant be defined within if and match cond
+		if p.peekNTokenIs(3, token.COMMA) ||
+			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LPAREN)) ||
+			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LBRACE) &&
+				p.context != IF_ELSE && p.context != MATCH) {
+			return true
+		}
+	}
+
+	if p.peekNTokenIs(2, token.RBRACK) {
+		// e.g. vec[] (missing type)
+		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
+		return false
+	}
+
+	if p.peekNTokenIs(2, token.COMMA) {
+		// e.g. vec[, (malformed but parameterized)
+		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
+		return false
+	}
+
+	return false
+}
+
 func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
-		return p.parseFunctionCallExpression()
+		tkn := p.curToken
+		p.nextToken()
+		return p.parseFunctionCallExpression(tkn, nil)
 	}
 
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	// in this edge case we need to check context
-	// to understand whether we are parsing struct
-	// literal
+	// We use a simple decision tree with peeking to
+	// disamiguate between:
+	// - Generic function call: identity[i32](...)
+	// - Generic struct literal: vec[i64]{...}
+	// - Array indexing/slicing: a[0], a[b:c]
+	// - Arrax indexing/slicing within if/else & match condition
+	if p.isGenericExpression() {
+		// Parse as generic function call or struct instantiation
+		p.nextToken() // consume ident
+		typeParams := p.parseTypeParameters()
+
+		if p.curTokenIs(token.LPAREN) {
+			return p.parseFunctionCallExpression(ident.Token, typeParams)
+		} else if p.curTokenIs(token.LBRACE) {
+			if p.context == IF_ELSE || p.context == MATCH {
+				p.nextToken()
+				return ident
+			}
+			return p.parseStructLiteral(ident, typeParams)
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+	}
+
+	// Handle normal struct literal, dot expression, or plain identifier
 	if p.peekTokenIs(token.LBRACE) {
 		if p.context == IF_ELSE || p.context == MATCH {
 			p.nextToken()
 			return ident
 		}
 		p.nextToken()
-		return p.parseStructLiteral(ident)
+		return p.parseStructLiteral(ident, nil)
 
 	} else if p.peekTokenIs(token.DOT) {
 		p.nextToken()
@@ -1272,7 +1344,7 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 			return exp
 		}
 		if p.curTokenIs(token.LBRACE) {
-			return p.parseStructLiteral(exp)
+			return p.parseStructLiteral(exp, nil)
 		}
 		return exp
 	}
@@ -1424,10 +1496,28 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	exp := &ast.DotExpression{Token: p.curToken, Left: left}
 	p.nextToken()
 
-	if p.peekTokenIs(token.LPAREN) {
-		exp.Right = p.parseFunctionCallExpression()
-	} else if p.curTokenIsIdent() {
-		exp.Right = p.parseIdentifierOrKeyword()
+	if p.curTokenIsIdent() {
+		// Use the helper to check for generic expressions
+		if p.isGenericExpression() {
+			ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+			p.nextToken() // consume ident
+			typeParams := p.parseTypeParameters()
+
+			if p.curTokenIs(token.LPAREN) {
+				exp.Right = p.parseFunctionCallExpression(ident.Token, typeParams)
+			} else if p.curTokenIs(token.LBRACE) {
+				exp.Right = p.parseStructLiteral(ident, typeParams)
+			} else {
+				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+				return nil
+			}
+		} else if p.peekTokenIs(token.LPAREN) {
+			tkn := p.curToken
+			p.nextToken()
+			exp.Right = p.parseFunctionCallExpression(tkn, nil)
+		} else {
+			exp.Right = p.parseIdentifierOrKeyword()
+		}
 	} else if p.curTokenIs(token.INT) {
 		exp.Right = p.parseIntegerLiteral()
 	} else {
@@ -1437,19 +1527,14 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	return exp
 }
 
-// e.g. do_something("123")
-func (p *Parser) parseFunctionCallExpression() ast.Expression {
-	if !p.curTokenIsIdent() && !p.curTokenIs(token.FUNCTION) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
+// parseFunctionCallExpression parses a generic function call
+// Assumes current token is LPAREN (after type parameters have been parsed)
+func (p *Parser) parseFunctionCallExpression(tkn token.Token, typeParams []types.Type) ast.Expression {
+	exp := &ast.FunctionCallExpression{
+		Token:          tkn,
+		TypeParameters: typeParams,
 	}
-	exp := &ast.FunctionCallExpression{Token: p.curToken}
-	// |> do_smth |> ...
-	if p.prevTokenIs(token.PIPE) && !p.peekTokenIs(token.LPAREN) {
-		p.nextToken()
-		return exp
-	}
-	p.nextToken()
+
 	if !p.curTokenIs(token.LPAREN) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -1680,11 +1765,17 @@ func (p *Parser) parseNullLiteral() ast.Expression {
 }
 
 func (p *Parser) parseAnonymousStructLiteral() ast.Expression {
-	return p.parseStructLiteral(nil)
+	return p.parseStructLiteral(nil, nil)
 }
 
-func (p *Parser) parseStructLiteral(exp ast.Expression) ast.Expression {
-	lit := &ast.StructLiteral{Token: p.curToken, Name: exp}
+// parseStructLiteral parses a struct literal with optional type parameters
+// Assumes current token is LBRACE
+func (p *Parser) parseStructLiteral(exp ast.Expression, typeParams []types.Type) ast.Expression {
+	lit := &ast.StructLiteral{
+		Token:          p.curToken,
+		Name:           exp,
+		TypeParameters: typeParams,
+	}
 	if !p.curTokenIs(token.LBRACE) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -2168,9 +2259,23 @@ func (p *Parser) parseImportedNamedType() types.Type {
 }
 
 func (p *Parser) parseUnknownNamedType() types.Type {
-	typ := &types.UnknownNamed{Name: p.curToken.Literal}
-
+	name := p.curToken.Literal
 	p.nextToken()
+
+	// Check for generic type parameters
+	if p.curTokenIs(token.LBRACK) {
+		params := p.parseTypeParameters()
+		// parseTypeParameters consumes the ']', so we're past it now
+
+		typ := &types.UnknownNamed{Name: name, TypeParameters: params}
+		if p.curTokenIs(token.OPTIONAL) {
+			p.nextToken()
+			return &types.Optional{T: typ}
+		}
+		return typ
+	}
+
+	typ := &types.UnknownNamed{Name: name}
 	if p.curTokenIs(token.OPTIONAL) {
 		p.nextToken()
 		return &types.Optional{T: typ}
@@ -2222,6 +2327,32 @@ func (p *Parser) parseDirtyType() types.Type {
 		return nil
 	}
 	return typ
+}
+
+// parseTypeParameters parses comma-separated types inside brackets
+func (p *Parser) parseTypeParameters() []types.Type {
+	if !p.curTokenIs(token.LBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	var params []types.Type
+	for !p.curTokenIs(token.RBRACK) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		param := p.parseType()
+		params = append(params, param)
+	}
+
+	if !p.curTokenIs(token.RBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken() // consume ']'
+
+	return params
 }
 
 func (p *Parser) addError(tkn token.Token, err error) {
@@ -2320,6 +2451,33 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.DIRTYTYPE ||
 		p.curToken.Type == token.ERROR ||
 		p.curToken.Type == token.ANYTYPE
+}
+
+func (p *Parser) peekNTokenIsType(n int) bool {
+	peekTkn := p.peekNToken(n)
+	return peekTkn.Type == token.BOOLTYPE ||
+		peekTkn.Type == token.I8TYPE ||
+		peekTkn.Type == token.U8TYPE ||
+		peekTkn.Type == token.I16TYPE ||
+		peekTkn.Type == token.U16TYPE ||
+		peekTkn.Type == token.I32TYPE ||
+		peekTkn.Type == token.U32TYPE ||
+		peekTkn.Type == token.I64TYPE ||
+		peekTkn.Type == token.U64TYPE ||
+		peekTkn.Type == token.F32TYPE ||
+		peekTkn.Type == token.F64TYPE ||
+		peekTkn.Type == token.STRINGTYPE ||
+		peekTkn.Type == token.BYTETYPE ||
+		peekTkn.Type == token.CHARTYPE ||
+		peekTkn.Type == token.LBRACK ||
+		(peekTkn.Type == token.FUNCTION && p.peekNTokenIs(2, token.LPAREN)) ||
+		peekTkn.Type == token.ASTERISK ||
+		peekTkn.Type == token.MUTABLETYPE ||
+		peekTkn.Type == token.IDENT ||
+		peekTkn.Type == token.OPTIONAL ||
+		peekTkn.Type == token.DIRTYTYPE ||
+		peekTkn.Type == token.ERROR ||
+		peekTkn.Type == token.ANYTYPE
 }
 
 func (p *Parser) curTokenIsConditionalStatement() bool {

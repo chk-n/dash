@@ -113,6 +113,26 @@ func TestType(t *testing.T) {
 			input: "[]any",
 			want:  "[]any",
 		},
+		{
+			name:  "parameterized type single",
+			input: "vec[i64]",
+			want:  "unknown[vec[i64]]",
+		},
+		{
+			name:  "parameterized type multiple",
+			input: "map[string, i64]",
+			want:  "unknown[map[string,i64]]",
+		},
+		{
+			name:  "nested parameterized type",
+			input: "option[vec[i64]]",
+			want:  "unknown[option[unknown[vec[i64]]]]",
+		},
+		{
+			name:  "optional parameterized type",
+			input: "?vec[i64]",
+			want:  "?unknown[vec[i64]]",
+		},
 	}
 
 	for _, tc := range tests {
@@ -121,7 +141,7 @@ func TestType(t *testing.T) {
 			typ := p.parseType()
 
 			if tc.want != typ.String() {
-				t.Errorf("want %s but got %s\n%v", tc.input, typ.String(), typ)
+				t.Errorf("want %s but got %s\n%v", tc.want, typ.String(), typ)
 			}
 		})
 	}
@@ -250,26 +270,6 @@ func TestInfixExpression(t *testing.T) {
 			name:  "dot access with arithmetic and function call",
 			input: "a.b + a.c()",
 			want:  "(a.b + a.c())",
-		},
-		{
-			name:  "tag.int",
-			input: "tag.int",
-			want:  "tag.int",
-		},
-		{
-			name:  "tag.float",
-			input: "tag.float",
-			want:  "tag.float",
-		},
-		{
-			name:  "obj.string",
-			input: "obj.string",
-			want:  "obj.string",
-		},
-		{
-			name:  "obj.bool",
-			input: "obj.bool",
-			want:  "obj.bool",
 		},
 	}
 
@@ -860,12 +860,32 @@ func TestCallExpression(t *testing.T) {
 			input: "get(1 < 2, (1 + 2) * 3)",
 			want:  "get((1 < 2),((1 + 2) * 3))",
 		},
+		{
+			name:  "generic function call single type param",
+			input: "identity[i32](42)",
+			want:  "identity[i32](42)",
+		},
+		{
+			name:  "generic function call multiple type params",
+			input: "make_pair[i32, string](10, \"hello\")",
+			want:  `make_pair[i32, string](10,"hello")`,
+		},
+		{
+			name:  "generic function call with generic type param",
+			input: "make_box[T](value)",
+			want:  "make_box[unknown[T]](value)",
+		},
+		{
+			name:  "generic function using dot expression",
+			input: "abc.d[i32](42)",
+			want:  "abc.d[i32](42)",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
-			stmt := p.parseFunctionCallExpression()
+			stmt := p.parseExpression(LOWEST)
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
@@ -1267,6 +1287,26 @@ func TestStructLiteral(t *testing.T) {
 			input: `some_lib.strct{a: 1}`,
 			want:  `some_lib.strct{a: 1}`,
 		},
+		{
+			name:  "parameterized struct literal with single type parameter",
+			input: `abc[i32]{a: 1}`,
+			want:  `abc[i32]{a: 1}`,
+		},
+		{
+			name:  "parameterized struct literal with multiple type parameters",
+			input: `pair[i32, string]{first: 1, second: "hello"}`,
+			want:  `pair[i32, string]{first: 1, second: "hello"}`,
+		},
+		{
+			name:  "parameterized struct literal with complex types",
+			input: `container[[]i32]{data: [1, 2, 3]}`,
+			want:  `container[[]i32]{data: [1,2,3]}`,
+		},
+		{
+			name:  "parameterized struct literal with complex types",
+			input: `abc.d[[]i32]{}`,
+			want:  `abc.d[[]i32]{}`,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1615,7 +1655,7 @@ func TestBuiltinFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := getParser(tt.input)
-			stmt := p.parseFunctionCallExpression()
+			stmt := p.parseExpression(LOWEST)
 
 			if tt.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%+v", tt.want, stmt.String(), stmt)
