@@ -567,17 +567,7 @@ func (t *Generic) Type() Type    { return t }
 func (t *Generic) Ident() string { return t.Name }
 func (t *Generic) String() string {
 	var out bytes.Buffer
-
 	out.WriteString(t.Name)
-	if len(t.Constraints) != 0 {
-		out.WriteString(" | ")
-	}
-	for i, cnstr := range t.Constraints {
-		out.WriteString(cnstr.String())
-		if i != len(t.Constraints)-1 {
-			out.WriteString(", ")
-		}
-	}
 	return out.String()
 }
 func (t *Generic) Equal(other Type) bool {

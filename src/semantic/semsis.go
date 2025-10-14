@@ -143,6 +143,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.FunctionExpression:
 		// scope within function
 		s.varSt.Scope()
+		s.typeSt.Scope()
+		// Add generic parameters to type symbol table (only in analyse, not resolveAllTypeReferences)
+		s.analyseGenericParameters(n)
 		s.analyseFunctionExpression(n, name)
 		fnType := n.Type()
 		if n.ErrorProne {
@@ -158,6 +161,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		defer func() {
 			s.fnScope.Pop()
 			s.varSt.Unscope()
+			s.typeSt.Unscope()
 		}()
 
 		if n.Body == nil {
@@ -1648,11 +1652,21 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
 			s.typeSt.Set(n.Name.String(), n.Type())
 		case *ast.FunctionExpression:
-			// TODO: add any remaining handling here
+			// NOTE: we dont validate generic parameters here to
+			// avoid duplicate error messages and also to be able
+			// to include anonymous generic functions as those
+			// are also handled within 'analyse()'
+
+			// However, we DO need to add them to typeSt so they can be
+			// resolved when processing function arguments/returns
+			s.typeSt.Scope()
+			s.addGenericParametersToSymbolTable(n)
 
 			// We dont need to scope the symbol table as all function literals
 			// encountered here are global within library
 			s.analyseFunctionExpression(n, "")
+
+			s.typeSt.Unscope()
 		}
 	}
 }
@@ -1787,6 +1801,47 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 	}
 }
 
+// addGenericParametersToSymbolTable adds generic parameters to the type symbol table
+// without validation. Used in resolveAllTypeReferences to make generic types available
+// for type resolution.
+func (s *Semantics) addGenericParametersToSymbolTable(n *ast.FunctionExpression) {
+	for _, gp := range n.GenericParameters {
+		genericType := &types.Generic{
+			Name: gp.Name.TokenLiteral(),
+		}
+		if gp.Constraint != nil {
+			genericType.Constraints = []types.Type{gp.Constraint}
+		}
+		s.typeSt.Set(gp.Name.TokenLiteral(), genericType)
+	}
+}
+
+// analyseGenericParameters validates and adds generic parameters to the type symbol table.
+// Used in analyse() to validate constraints and report errors.
+func (s *Semantics) analyseGenericParameters(n *ast.FunctionExpression) {
+	for _, gp := range n.GenericParameters {
+		if gp.Constraint != nil {
+			typ := s.inferUnknownNamedType(gp.Constraint)
+			if typ == nil {
+				constraintName := gp.Constraint.Ident()
+				s.addError(n, errTypeNotFound(constraintName))
+				// Continue adding the generic parameter even if constraint is invalid
+				// to avoid cascading errors
+			} else {
+				gp.Constraint = typ
+			}
+		}
+
+		genericType := &types.Generic{
+			Name: gp.Name.TokenLiteral(),
+		}
+		if gp.Constraint != nil {
+			genericType.Constraints = []types.Type{gp.Constraint}
+		}
+		s.typeSt.Set(gp.Name.TokenLiteral(), genericType)
+	}
+}
+
 // Analyses function literl:
 // - infers types for arguments e.g. (x, y i64)
 // - validates named types exist in current scope
@@ -1836,7 +1891,10 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 	for i, ret := range n.ReturnValues {
 		typ := s.inferUnknownNamedType(ret.T)
 		if typ == nil {
-			s.addError(ret, errTypeNotFound(ret.T.Ident()))
+			// Keep the unresolved type so we can still analyze the return statement
+			// and provide a meaningful type mismatch error. Don't report the error here
+			// as it would be reported twice (once in resolveAllTypeReferences and once in analyse)
+			retTypes[i] = ret.T
 			continue
 		}
 		ret.T = typ
@@ -1868,6 +1926,13 @@ func (s *Semantics) isReassignable(ident string) bool {
 // Validates whether expr can be coerced into the targetType in the case
 // of literals or if there is an exact match for the remaining expressions
 func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetType types.Type) bool {
+
+	// Handle undefined types - these types could not be resolved
+	// We still want to generate a type mismatch error for better debugging
+	if _, ok := targetType.(*types.UnknownNamed); ok {
+		s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+		return false
+	}
 
 	// special case handling for error and union types
 	switch targetType.(type) {
@@ -2164,6 +2229,11 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		}
 
 	case *types.UnknownNamed:
+		// First check typeSt for generic parameters
+		if typ, ok := s.typeSt.Get(t.Ident()); ok {
+			return typ
+		}
+		// Then check varSt for regular types
 		typeInfo, ok := s.varSt.Get(t.Ident())
 		if !ok {
 			return nil
