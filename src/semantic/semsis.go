@@ -145,7 +145,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.varSt.Scope()
 		s.typeSt.Scope()
 		// Add generic parameters to type symbol table (only in analyse, not resolveAllTypeReferences)
-		s.analyseGenericParameters(n)
+		s.analyseGenericParameters(n.GenericParameters, n)
 		s.analyseFunctionExpression(n, name)
 		fnType := n.Type()
 		if n.ErrorProne {
@@ -1660,7 +1660,7 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			// However, we DO need to add them to typeSt so they can be
 			// resolved when processing function arguments/returns
 			s.typeSt.Scope()
-			s.addGenericParametersToSymbolTable(n)
+			s.addGenericParametersToSymbolTable(n.GenericParameters)
 
 			// We dont need to scope the symbol table as all function literals
 			// encountered here are global within library
@@ -1804,8 +1804,8 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 // addGenericParametersToSymbolTable adds generic parameters to the type symbol table
 // without validation. Used in resolveAllTypeReferences to make generic types available
 // for type resolution.
-func (s *Semantics) addGenericParametersToSymbolTable(n *ast.FunctionExpression) {
-	for _, gp := range n.GenericParameters {
+func (s *Semantics) addGenericParametersToSymbolTable(genericParams []*ast.GenericParameter) {
+	for _, gp := range genericParams {
 		genericType := &types.Generic{
 			Name: gp.Name.TokenLiteral(),
 		}
@@ -1817,14 +1817,14 @@ func (s *Semantics) addGenericParametersToSymbolTable(n *ast.FunctionExpression)
 }
 
 // analyseGenericParameters validates and adds generic parameters to the type symbol table.
-// Used in analyse() to validate constraints and report errors.
-func (s *Semantics) analyseGenericParameters(n *ast.FunctionExpression) {
-	for _, gp := range n.GenericParameters {
+// Used in analyse() and analyseTypes() to validate constraints and report errors.
+func (s *Semantics) analyseGenericParameters(genericParams []*ast.GenericParameter, node ast.Node) {
+	for _, gp := range genericParams {
 		if gp.Constraint != nil {
 			typ := s.inferUnknownNamedType(gp.Constraint)
 			if typ == nil {
-				constraintName := gp.Constraint.Ident()
-				s.addError(n, errTypeNotFound(constraintName))
+				constraintName := gp.Constraint.String()
+				s.addError(node, errTypeNotFound(constraintName))
 				// Continue adding the generic parameter even if constraint is invalid
 				// to avoid cascading errors
 			} else {
