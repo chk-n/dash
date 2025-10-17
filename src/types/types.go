@@ -248,8 +248,9 @@ func (t *Array) Equal(other Type) bool {
 }
 
 type Struct struct {
-	Name string
-	Ts   []StructField
+	Name       string
+	TypeParams []Type
+	Ts         []StructField
 }
 
 func (t *Struct) Type() Type { return t }
@@ -297,9 +298,21 @@ func (t *Struct) String() string {
 		}
 		out.WriteString(">")
 		return out.String()
+	} else if len(t.TypeParams) == 0 {
+		return t.Name
 	}
+	var out bytes.Buffer
+	out.WriteString(t.Name)
+	out.WriteString("[")
+	for i, tp := range t.TypeParams {
+		out.WriteString(tp.String())
+		if i != len(t.TypeParams)-1 {
+			out.WriteString(",")
+		}
+	}
+	out.WriteString("]")
 
-	return t.Name
+	return out.String()
 }
 func (t *Struct) Equal(other Type) bool {
 	o, ok := other.(*Struct)

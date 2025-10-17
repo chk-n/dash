@@ -66,6 +66,12 @@ var (
 	errInvalidTry = func() error {
 		return fmt.Errorf("invalid use of 'try' with a non error-prone function")
 	}
+	errCannotInferTypeParameter = func(name string) error {
+		return fmt.Errorf("cannot infer type parameter '%s'", name)
+	}
+	errTypeParameterCountMismatch = func(want, got int) error {
+		return fmt.Errorf("expected %d type parameters, got %d", want, got)
+	}
 )
 
 // ---------------- //

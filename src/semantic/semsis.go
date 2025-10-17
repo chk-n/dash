@@ -26,6 +26,9 @@ const (
 type FnInfo struct {
 	Type          *types.Function
 	IsAnonymousFn bool // TODO: remove
+	// TODO: refactor GenericParams away and
+	// store it in type.Function
+	GenericParameters []*ast.GenericParameter
 }
 
 type VarInfo struct {
@@ -258,9 +261,23 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				return
 			}
 
-			s.analyseCallArguments(n, rts.Type.Arg)
+			// Handle generic function instantiation
+			var argTypes []types.Type
+			var retTypes []types.Type
+			if len(rts.GenericParameters) > 0 {
+				argTypes, retTypes = s.instantiateGenericFunction(n, rts)
+				if argTypes == nil || retTypes == nil {
+					// Instantiation failed, don't continue analyzing this call
+					return
+				}
+				s.analyseCallArguments(n, argTypes)
+			} else {
+				argTypes = rts.Type.Arg
+				retTypes = rts.Type.Ret
+				s.analyseCallArguments(n, argTypes)
+			}
 
-			n.ReturnTypes = rts.Type.Ret
+			n.ReturnTypes = retTypes
 			n.IsAnonymousFn = rts.IsAnonymousFn
 		}
 		if len(n.ReturnTypes) == 0 {
@@ -1911,7 +1928,10 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 	}
 	fnType := &types.Function{Arg: argTypes, Ret: retTypes}
 	n.T = fnType
-	s.fnSt.Set(n.Name.TokenLiteral(), &FnInfo{Type: fnType})
+	s.fnSt.Set(n.Name.TokenLiteral(), &FnInfo{
+		Type:              fnType,
+		GenericParameters: n.GenericParameters,
+	})
 
 }
 
@@ -2229,16 +2249,45 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		}
 
 	case *types.UnknownNamed:
-		// First check typeSt for generic parameters
-		if typ, ok := s.typeSt.Get(t.Ident()); ok {
-			return typ
-		}
-		// Then check varSt for regular types
-		typeInfo, ok := s.varSt.Get(t.Ident())
-		if !ok {
+		// resolve base type
+		var baseType types.Type
+		if typ, ok := s.typeSt.Get(t.Name); ok {
+			baseType = typ
+		} else if typeInfo, ok := s.varSt.Get(t.Name); ok {
+			baseType = typeInfo.Type
+		} else {
 			return nil
 		}
-		return typeInfo.Type
+		if len(t.TypeParameters) > 0 {
+
+			// resolve the type parameters
+			resolvedParams := make([]types.Type, len(t.TypeParameters))
+			for i, param := range t.TypeParameters {
+				resolvedParam := s.inferUnknownNamedType(param)
+				if resolvedParam == nil {
+					resolvedParams[i] = param
+				} else {
+					resolvedParams[i] = resolvedParam
+				}
+			}
+
+			genericNames := s.extractGenericNames(baseType)
+
+			// build type map
+			typeMap := make(map[string]types.Type)
+			for i, name := range genericNames {
+				if i < len(resolvedParams) {
+					typeMap[name] = resolvedParams[i]
+				}
+			}
+
+			substituted := s.substituteTypeParameters(baseType, typeMap)
+			if structType, ok := substituted.(*types.Struct); ok {
+				structType.TypeParams = resolvedParams
+			}
+			return substituted
+		}
+		return baseType
 	case *types.ImportedNamed:
 		// resolve imported type
 		typ, ok := s.importedSt[t.Lib][t.Typ.Ident()]
@@ -2442,4 +2491,218 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 	n.SetType(n.Arguments[0].Type())
 
 	return true
+}
+
+// instantiateGenericFunction infers type parameters from arguments or uses explicit type parameters,
+// then substitutes them in both argument and return types
+func (s *Semantics) instantiateGenericFunction(n *ast.FunctionCallExpression, fnInfo *FnInfo) ([]types.Type, []types.Type) {
+	typeMap := make(map[string]types.Type)
+
+	// case 1: resolve explicit type parameters (e.g. identity[i32](42))
+	if len(n.TypeParameters) > 0 {
+		if len(n.TypeParameters) != len(fnInfo.GenericParameters) {
+			s.addError(n, errTypeParameterCountMismatch(len(fnInfo.GenericParameters), len(n.TypeParameters)))
+			return nil, nil
+		}
+		for i, gp := range fnInfo.GenericParameters {
+			resolvedType := s.inferUnknownNamedType(n.TypeParameters[i])
+			if resolvedType == nil {
+				resolvedType = n.TypeParameters[i]
+			}
+			n.TypeParameters[i] = resolvedType
+			typeMap[gp.Name.TokenLiteral()] = resolvedType
+		}
+	} else {
+		// case 2: infer type parameters from arguments (e.g. identity(42))
+		if len(n.Arguments) != len(fnInfo.Type.Arg) {
+			return nil, nil
+		}
+
+		for i, arg := range n.Arguments {
+			paramType := fnInfo.Type.Arg[i]
+			argType := arg.Type()
+
+			if argType == nil {
+				continue
+			}
+
+			s.matchTypes(paramType, argType, typeMap)
+		}
+		// validate type parameters inferred
+		for _, gp := range fnInfo.GenericParameters {
+			if _, ok := typeMap[gp.Name.TokenLiteral()]; !ok {
+				s.addError(n, errCannotInferTypeParameter(gp.Name.TokenLiteral()))
+			}
+		}
+	}
+
+	instantiatedArgs := make([]types.Type, len(fnInfo.Type.Arg))
+	for i, argType := range fnInfo.Type.Arg {
+		instantiatedArgs[i] = s.substituteTypeParameters(argType, typeMap)
+	}
+
+	instantiatedRets := make([]types.Type, len(fnInfo.Type.Ret))
+	for i, retType := range fnInfo.Type.Ret {
+		instantiatedRets[i] = s.substituteTypeParameters(retType, typeMap)
+	}
+
+	return instantiatedArgs, instantiatedRets
+}
+
+// matchTypes attempts to match two types and extract generic type bindings
+func (s *Semantics) matchTypes(paramType types.Type, argType types.Type, typeMap map[string]types.Type) {
+	switch pt := paramType.(type) {
+	case *types.Generic:
+		if existing, ok := typeMap[pt.Name]; ok {
+			if !existing.Equal(argType) {
+				// NOTE: we cant addError here as we have no node
+				// but it should be caught by caller when validating
+				// inference
+				return
+			}
+		} else {
+			typeMap[pt.Name] = argType
+		}
+	case *types.Array:
+		if at, ok := argType.(*types.Array); ok {
+			s.matchTypes(pt.T, at.T, typeMap)
+		}
+	case *types.Pointer:
+		if pt2, ok := argType.(*types.Pointer); ok {
+			s.matchTypes(pt.T, pt2.T, typeMap)
+		}
+	case *types.Optional:
+		if ot, ok := argType.(*types.Optional); ok {
+			s.matchTypes(pt.T, ot.T, typeMap)
+		}
+	default:
+		panic("add more cases for compound type: " + pt.String())
+	}
+}
+
+// extractGenericNames extracts all generic type parameter names from a type
+func (s *Semantics) extractGenericNames(t types.Type) []string {
+	seen := make(map[string]bool)
+	names := []string{}
+	s.collectGenericNames(t, seen, &names)
+	return names
+}
+
+func (s *Semantics) collectGenericNames(t types.Type, seen map[string]bool, names *[]string) {
+	switch typ := t.(type) {
+	case *types.Generic:
+		if !seen[typ.Name] {
+			seen[typ.Name] = true
+			*names = append(*names, typ.Name)
+		}
+	case *types.Struct:
+		for _, field := range typ.Ts {
+			s.collectGenericNames(field.T, seen, names)
+		}
+	case *types.Array:
+		s.collectGenericNames(typ.T, seen, names)
+	case *types.Pointer:
+		s.collectGenericNames(typ.T, seen, names)
+	case *types.Optional:
+		s.collectGenericNames(typ.T, seen, names)
+	case *types.Function:
+		for _, arg := range typ.Arg {
+			s.collectGenericNames(arg, seen, names)
+		}
+		for _, ret := range typ.Ret {
+			s.collectGenericNames(ret, seen, names)
+		}
+	default:
+		panic("add more cases for compound type: " + typ.String())
+	}
+}
+
+// substituteTypeParameters replaces generic type parameters with concrete types
+func (s *Semantics) substituteTypeParameters(t types.Type, typeMap map[string]types.Type) types.Type {
+	switch typ := t.(type) {
+	case *types.Generic:
+		if concrete, ok := typeMap[typ.Name]; ok {
+			return concrete
+		}
+		return typ
+	case *types.Array:
+		return &types.Array{
+			T:    s.substituteTypeParameters(typ.T, typeMap),
+			Size: typ.Size,
+		}
+	case *types.Pointer:
+		return &types.Pointer{
+			T: s.substituteTypeParameters(typ.T, typeMap),
+		}
+	case *types.Optional:
+		return &types.Optional{
+			T: s.substituteTypeParameters(typ.T, typeMap),
+		}
+	case *types.Function:
+		newArgs := make([]types.Type, len(typ.Arg))
+		for i, arg := range typ.Arg {
+			newArgs[i] = s.substituteTypeParameters(arg, typeMap)
+		}
+		newRets := make([]types.Type, len(typ.Ret))
+		for i, ret := range typ.Ret {
+			newRets[i] = s.substituteTypeParameters(ret, typeMap)
+		}
+		return &types.Function{
+			Arg:          newArgs,
+			Ret:          newRets,
+			IsErrorProne: typ.IsErrorProne,
+			IsVariadic:   typ.IsVariadic,
+		}
+	case *types.Struct:
+		newFields := make([]types.StructField, len(typ.Ts))
+		for i, field := range typ.Ts {
+			newFields[i] = types.StructField{
+				Name: field.Name,
+				T:    s.substituteTypeParameters(field.T, typeMap),
+			}
+		}
+		newTypeParams := make([]types.Type, len(typ.TypeParams))
+		for i, tp := range typ.TypeParams {
+			newTypeParams[i] = s.substituteTypeParameters(tp, typeMap)
+		}
+		return &types.Struct{
+			Name:       typ.Name,
+			TypeParams: newTypeParams,
+			Ts:         newFields,
+		}
+	case *types.UnknownNamed:
+		if len(typ.TypeParameters) > 0 {
+			var baseType types.Type
+			if t, ok := s.typeSt.Get(typ.Name); ok {
+				baseType = t
+			} else if typeInfo, ok := s.varSt.Get(typ.Name); ok {
+				baseType = typeInfo.Type
+			} else {
+				return typ
+			}
+
+			newParams := make([]types.Type, len(typ.TypeParameters))
+			for i, param := range typ.TypeParameters {
+				newParams[i] = s.substituteTypeParameters(param, typeMap)
+			}
+
+			genericNames := s.extractGenericNames(baseType)
+			newTypeMap := make(map[string]types.Type)
+			for i, name := range genericNames {
+				if i < len(newParams) {
+					newTypeMap[name] = newParams[i]
+				}
+			}
+
+			// Substitute in the base type and set TypeParams
+			substituted := s.substituteTypeParameters(baseType, newTypeMap)
+			if structType, ok := substituted.(*types.Struct); ok {
+				structType.TypeParams = newParams
+			}
+			return substituted
+		}
+		return typ
+	default:
+		return t
+	}
 }

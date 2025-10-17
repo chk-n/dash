@@ -1702,6 +1702,32 @@ func TestGenericFunctions(t *testing.T) {
 			input: "fn identity[T any](x T) T { return x }",
 			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { }",
 		},
+		{
+			name:  "generic function call with type parameter infers return type",
+			input: "fn identity[T any](x T) T { return x } let r = identity[i32](42)",
+			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i32 = identity[i32](42) }",
+		},
+		{
+			name:  "generic function call infer type for instantiation",
+			input: "fn identity[T any](x T) T { return x } let r = identity(42)",
+			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i64 = identity(42) }",
+		},
+		{
+			name:  "generic recursive function call",
+			input: "fn identity[T any](x T) T { let r = identity[T](x) }",
+			want:  "lib main fn identity[T any](x T) T { let r T = identity[T](x) } pub fn main() { }",
+		},
+		{
+			name:   "generic function call infer type for instantiation",
+			input:  "fn identity[T, E any](x T) E { return x } let r = identity(42)",
+			errors: []string{"type mistmatch, expected type 'E' but got 'T'", "cannot infer type parameter 'E'"},
+		},
+		// // NOTE: 'constraint' not supported yet
+		// // {
+		// // 		name:  "multiple generic parameters with different constraints",
+		// // 		input: "constraint MyConstr { u32 } fn test[T any, E MyConstr](x T, y E) {}",
+		// // 		want:  "lib main constraint MyConstr { u32 } fn test[T any, E MyConstr](x T,y E) { } pub fn main() { }",
+		// // 	},
 	}
 	runAnalysisTests(t, tests)
 }
