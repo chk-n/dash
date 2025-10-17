@@ -571,6 +571,12 @@ func (t *Generic) String() string {
 	return out.String()
 }
 func (t *Generic) Equal(other Type) bool {
+	// If comparing with another Generic type, check if names match
+	if otherGeneric, ok := other.(*Generic); ok {
+		return t.Name == otherGeneric.Name
+	}
+
+	// If no constraints, any concrete type is acceptable
 	if len(t.Constraints) == 0 {
 		return true
 	}
