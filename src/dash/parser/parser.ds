@@ -1343,7 +1343,7 @@ fn parse_type_literal(p parser)! parser, ast.index {
             try parse_column_type(p)
         case lexer.tag.QMARK:
             try parse_optional_type(p)
-        case lexer.tag.MUT:
+        case lexer.tag.MUT_TYPE:
             try parse_mutable_type(p)
         case lexer.tag.IDENT:
             try parse_expression(p, precedence.ltg)
@@ -1435,7 +1435,7 @@ fn parse_optional_type(p parser)! parser, ast.index {
 }
 
 fn parse_mutable_type(p parser)! parser, ast.index {
-    try assert(is_tag(p, lexer.tag.MUT), "expected 'mut'")
+    try assert(is_tag(p, lexer.tag.MUT_TYPE), "expected 'mut'")
     
     let op_tkn = p.tkn_i
     // consume 'mut'

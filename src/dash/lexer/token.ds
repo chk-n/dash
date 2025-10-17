@@ -62,7 +62,6 @@ pub enum tag {
     MULTI_STRING // `xyz`
     BOOL
     CHAR
-    MUT
 
     // type literals
     U8_TYPE
@@ -80,6 +79,7 @@ pub enum tag {
     CHAR_TYPE
     STRING_TYPE
     BOOL_TYPE
+    MUT_TYPE
     ANY_TYPE
     
     // keywords
@@ -163,9 +163,9 @@ let keywords = [
     {"char", tag.CHAR_TYPE},
     {"string", tag.STRING_TYPE},
     {"bool", tag.BOOL_TYPE},
+    {"mut", tag.MUT_TYPE},
     {"any", tag.ANY_TYPE},
     {"error", tag.ERROR},
-    {"mut", tag.MUT},
     {"true", tag.BOOL},
     {"false", tag.BOOL}
 ]
