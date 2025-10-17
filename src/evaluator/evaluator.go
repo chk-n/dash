@@ -14,6 +14,8 @@ import (
 	"dash-lang.io/src/types"
 )
 
+// NOTE: evaluator treats all integers as i64
+
 // TODO: adjust evaluator to check symbol tables when dot expression used
 // on non struct or enum variable
 type keyword uint8
@@ -318,6 +320,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 // to be able to bootstrap the compiler in dash
 func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Context) any {
 	val := e.Eval(n.Argument, stk)
+	val = unwrapFunctionResult(val, 0)
 	switch t := n.Typ.(type) {
 	case *types.Int:
 		return e.evalIntCast(t, val)
@@ -340,13 +343,19 @@ func (e *Evaluator) evalIntCast(t *types.Int, v any) any {
 	switch t.Signed + t.Width {
 	// 8, 9
 	case 8:
+		fallthrough
 		// return toUint8(v)
 	case 16:
+		fallthrough
 	case 17:
+		fallthrough
 	case 32:
-		return e.toUint32(v)
+		fallthrough
+		// return e.toUint32(v)
 	case 33:
+		fallthrough
 	case 64:
+		fallthrough
 		// toUint64()
 	case 65:
 		return e.toInt64(v)

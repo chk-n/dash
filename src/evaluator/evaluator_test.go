@@ -1794,18 +1794,18 @@ func TestAppend(t *testing.T) {
 			want: &Return{[]any{[]any{int64(1), int64(2), int64(42)}}},
 		},
 		{
-			name: "append single element to array wihout len",
+			name: "append single element to array without len",
 			prog: `
 			let arr = make([]byte, 2)
 			append(arr, 3)`,
-			want: &Return{[]any{[]any{nil, nil, byte(3)}}},
+			want: &Return{[]any{[]any{nil, nil, int64(3)}}},
 		},
 		{
 			name: "append single element to array",
 			prog: `
 			let arr = make([]byte, 0, 2)
 			append(arr, 3)`,
-			want: &Return{[]any{[]any{byte(3)}}},
+			want: &Return{[]any{[]any{int64(3)}}},
 		},
 	}
 
@@ -1925,11 +1925,12 @@ func TestAnyType(t *testing.T) {
 			prog: `
 				fn test(x any) i64 {
 					return match x {
-						case u32: 1
+						case string: 2
+						case i64: 1
 						case _: 0
 					}
 				}
-				test(u32(10))`,
+				test(2)`,
 			want: &Return{Values: []any{int64(1)}},
 		},
 	}
