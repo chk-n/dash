@@ -5,7 +5,6 @@ use "dash/ast"
 use "dash/lexer"
 
 struct parser {
-    src    []byte
     // TODO: replace with column list
     tkns   []ast.token
     nodes  []ast.node
@@ -77,7 +76,6 @@ pub fn parse(src []byte, m mode)! ast.ast {
     }
 
     var p = parser{
-        src: src,
         tkns: tkns,
         nodes: [],
         tkn_i: 0,
