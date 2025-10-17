@@ -60,7 +60,6 @@ fn test_next_token()! {
         {"f32", tag.F32_TYPE},
         {"f64", tag.F64_TYPE},
         {"float", tag.FLOAT_TYPE},
-        {"byte", tag.BYTE_TYPE},
         {"char", tag.CHAR_TYPE},
         {"string", tag.STRING_TYPE},
         {"bool", tag.BOOL_TYPE},

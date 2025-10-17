@@ -1871,9 +1871,8 @@ fn is_type_literal(p parser) bool {
     return match current_tag(p) {
         case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
              lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
-             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,
-             lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
-             lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
+             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
+             lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
              lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE: true
@@ -1905,10 +1904,9 @@ fn is_scalar_type(p parser) bool {
     return match current_tag(p) {
         case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
              lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
-             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,
-             lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
-             lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
-             lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR: true
+             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE, lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
+             lexer.tag.CHAR_TYPE, lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR:
+            true
         case _: false
     }
 }

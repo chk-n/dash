@@ -77,7 +77,6 @@ pub enum tag {
     F32_TYPE
     F64_TYPE
     FLOAT_TYPE
-    BYTE_TYPE
     CHAR_TYPE
     STRING_TYPE
     BOOL_TYPE
@@ -161,7 +160,6 @@ let keywords = [
     {"f32", tag.F32_TYPE},
     {"f64", tag.F64_TYPE},
     {"float", tag.FLOAT_TYPE},
-    {"byte", tag.BYTE_TYPE},
     {"char", tag.CHAR_TYPE},
     {"string", tag.STRING_TYPE},
     {"bool", tag.BOOL_TYPE},

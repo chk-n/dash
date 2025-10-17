@@ -139,8 +139,23 @@ pub enum tag {
     try_expr
     catch_expr
 
-    type_lit
     any_type
+    u8_type
+    u16_type
+    u32_type
+    u64_type
+    i8_type
+    i16_type
+    i32_type
+    i64_type
+    int_type
+    f32_type
+    f64_type
+    float_type
+    char_type
+    string_type
+    bool_type
+    error_type
     array_type
     column_type
     optional_type
@@ -159,13 +174,22 @@ pub fn literal_to_tag(t lexer.tag)! tag {
         case lexer.tag.BOOL: tag.bool
         case lexer.tag.CHAR: tag.char
         case lexer.tag.ANY_TYPE: tag.any_type
-        case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
-             lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
-             lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
-             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE,
-             lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
-             lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR:
-            tag.type_lit
+        case lexer.tag.U8_TYPE: tag.u8_type
+        case lexer.tag.U16_TYPE: tag.u16_type
+        case lexer.tag.U32_TYPE: tag.u32_type
+        case lexer.tag.U64_TYPE: tag.u64_type
+        case lexer.tag.I8_TYPE: tag.i8_type
+        case lexer.tag.I16_TYPE: tag.i16_type
+        case lexer.tag.I32_TYPE: tag.i32_type
+        case lexer.tag.I64_TYPE: tag.i64_type
+        case lexer.tag.INT_TYPE: tag.int_type
+        case lexer.tag.F32_TYPE: tag.f32_type
+        case lexer.tag.F64_TYPE: tag.f64_type
+        case lexer.tag.FLOAT_TYPE: tag.float_type
+        case lexer.tag.CHAR_TYPE: tag.char_type
+        case lexer.tag.STRING_TYPE: tag.string_type
+        case lexer.tag.BOOL_TYPE: tag.bool_type
+        case lexer.tag.ERROR: tag.error_type
         case _:
             raise unexpected_tag
     }
@@ -482,8 +506,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = to_string(a, data.x, buf)
 
     case tag.ident, tag.int, tag.float,
-         tag.string, tag.bool, tag.char,
-         tag.type_lit:
+         tag.string, tag.bool, tag.char:
         let src_idx = a.tkns[node.token].start
         let lit = get_variable_token(a.src, src_idx)
         buf = append(buf, lit)
@@ -610,11 +633,15 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let block = a.extras[data.x+2]
         buf = to_string(a, block, buf)
 
-    case tag.any_type:
+    case tag.any_type, tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+         tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type,
+         tag.int_type, tag.f32_type, tag.f64_type, tag.float_type,
+         tag.char_type, tag.string_type, tag.bool_type,
+         tag.error_type:
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
-        
+
     case tag.array_type:
         buf = append(buf, '[')
         buf = append(buf, ']')
@@ -672,22 +699,25 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
-        case tag.struct_def, tag.return_stmt: 6
+        case tag.struct_def, tag.return_stmt, tag.string_type: 6
         case tag.union_def, tag.break_stmt,
              tag.catch_expr, tag.raise_stmt,
-             tag.defer_stmt, tag.match_stmt: 5
+             tag.defer_stmt, tag.match_stmt,
+             tag.float_type, tag.error_type: 5
         case tag.enum_def, tag.type_def, tag.next_stmt,
-             tag.case_stmt: 4
+             tag.case_stmt, tag.char_type, tag.bool_type: 4
         case tag.pub, tag.let_decl, tag.var_decl,
              tag.library, tag.use_def,
              tag.for_infinite, tag.for_bool,
              tag.for_classic, tag.for_range,
              tag.try_expr, tag.mutable_type,
-             tag.any_type: 3
+             tag.any_type, tag.u16_type, tag.u32_type, tag.u64_type,
+             tag.i16_type, tag.i32_type, tag.i64_type,
+             tag.int_type, tag.f32_type, tag.f64_type: 3
         case tag.if_stmt, tag.incr_decr,
-             tag.null_coalesce: 2
+             tag.null_coalesce, tag.u8_type, tag.i8_type: 2
         case tag.fn_def, tag.fn_err_def,
-             tag.lor, tag.land, tag.andnot, 
+             tag.lor, tag.land, tag.andnot,
              tag.lsh, tag.rsh,
              tag.lte, tag.gte,
              tag.eq, tag.neq: 2
