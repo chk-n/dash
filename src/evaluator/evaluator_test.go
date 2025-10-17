@@ -1951,6 +1951,40 @@ func TestAnyType(t *testing.T) {
 	}
 }
 
+func TestGenerics(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "generic struct",
+			prog: "struct abc[T any]{ x T } let a = abc[i32]{x: 1} a.x",
+			want: int64(1),
+		},
+		{
+			name: "generic function",
+			prog: `fn test[T any](x T) T { return x } let r = test[string]("hello") r`,
+			want: "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // ------ //
 // Helper //
 // ------ //
