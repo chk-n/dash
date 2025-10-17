@@ -743,7 +743,7 @@ func TestTryExpression(t *testing.T) {
 	            return 0
 	        }
 	        safe_divide(10, 0)`,
-			want: &Return{Values: []any{&Error{Err: "divide_by_zero"}}},
+			want: &Return{Values: []any{&Error{Err: "main.divide_by_zero"}}},
 		},
 		{
 			name: "try with multiple return values",
@@ -1366,7 +1366,7 @@ func TestMatchStatement(t *testing.T) {
 				}
 				test()
 			`,
-			want: &Return{Values: []any{&Error{Err: "some_err"}}},
+			want: &Return{Values: []any{&Error{Err: "main.some_err"}}},
 		},
 		{
 			name: "match error",
