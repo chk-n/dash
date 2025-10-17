@@ -66,6 +66,7 @@ fn test_next_token()! {
         {"bool", tag.BOOL_TYPE},
         {"error", tag.ERROR},
         {"mut", tag.MUT},
+        {"any", tag.ANY_TYPE},
         // keywords
         {"pub", tag.PUB},
         {"lib", tag.LIB},
@@ -271,4 +272,3 @@ fn test_sequential()! {
         }
     }
 }
-

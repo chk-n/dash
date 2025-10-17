@@ -140,6 +140,7 @@ pub enum tag {
     catch_expr
 
     type_lit
+    any_type
     array_type
     column_type
     optional_type
@@ -157,6 +158,7 @@ pub fn literal_to_tag(t lexer.tag)! tag {
         case lexer.tag.STRING: tag.string
         case lexer.tag.BOOL: tag.bool
         case lexer.tag.CHAR: tag.char
+        case lexer.tag.ANY_TYPE: tag.any_type
         case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
              lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
              lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
@@ -608,6 +610,11 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let block = a.extras[data.x+2]
         buf = to_string(a, block, buf)
 
+    case tag.any_type:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        
     case tag.array_type:
         buf = append(buf, '[')
         buf = append(buf, ']')
@@ -675,7 +682,8 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
              tag.library, tag.use_def,
              tag.for_infinite, tag.for_bool,
              tag.for_classic, tag.for_range,
-             tag.try_expr, tag.mutable_type: 3
+             tag.try_expr, tag.mutable_type,
+             tag.any_type: 3
         case tag.if_stmt, tag.incr_decr,
              tag.null_coalesce: 2
         case tag.fn_def, tag.fn_err_def,

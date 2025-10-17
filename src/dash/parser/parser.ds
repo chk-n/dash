@@ -1876,7 +1876,7 @@ fn is_type_literal(p parser) bool {
              lexer.tag.BYTE_TYPE, lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
-             lexer.tag.MUT: true
+             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE: true
         case lexer.tag.LBRACE: maybe_column_type(p)
         case _: false
     }
