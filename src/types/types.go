@@ -43,15 +43,15 @@ var (
 	ConstU256 = Int{Width: 256, Signed: 0}
 	// ConstUint = Int{Width: 1, Signed: 0}
 
+	// ConstInt  = Int{Width: 0, Signed: 1}
 	ConstI8   = Int{Width: 8, Signed: 1}
 	ConstI16  = Int{Width: 16, Signed: 1}
 	ConstI32  = Int{Width: 32, Signed: 1}
 	ConstI64  = Int{Width: 64, Signed: 1}
 	ConstI128 = Int{Width: 128, Signed: 1}
 	ConstI256 = Int{Width: 256, Signed: 1}
-	// ConstInt  = Int{Width: 1, Signed: 1}
 
-	// ConstFloat  = Basic{t: Float}
+	// ConstFloat   = Float{Width: 0}
 	ConstF32    = Float{Width: 32}
 	ConstF64    = Float{Width: 64}
 	ConstBool   = Bool{}

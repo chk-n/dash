@@ -2241,9 +2241,9 @@ func (p *Parser) parsePrimitiveType() types.Type {
 		return nil
 	}
 
-	defer p.nextToken()
-
-	return types.TokenToType(p.curToken)
+	tkn := types.TokenToType(p.curToken)
+	p.nextToken()
+	return tkn
 }
 
 func (p *Parser) parseImportedNamedType() types.Type {
