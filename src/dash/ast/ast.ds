@@ -662,7 +662,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
 }
 
 fn get_variable_token(src []byte, idx source_index) []byte {
-    var l = lexer.new(src, i64(idx))
+    var l = lexer.new(src, u32(idx))
     l, let tkn = lexer.next_tkn(l)
     return src[tkn.start:tkn.end+1]
 }
