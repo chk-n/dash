@@ -4,7 +4,7 @@ lib ast
 
 use "dash/lexer"
 
-pub let NULL_DATA = data{x: -1, y: -1}
+pub let NULL_DATA = data{x: 0, y: 0}
 
 // TODO: replace with column list
 pub struct ast {
@@ -226,10 +226,6 @@ pub fn keyword_to_tag(t lexer.tag) tag {
 }
 
 pub fn to_string(a ast, idx index, buf []byte)! []byte {
-    if idx == -1 {
-        return []
-    }
-
     var buf = buf
     let node = a.nodes[idx]
     let data = node.data
