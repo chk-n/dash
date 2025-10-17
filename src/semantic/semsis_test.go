@@ -1708,6 +1708,11 @@ func TestGenericFunctions(t *testing.T) {
 			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i32 = identity[i32](42) }",
 		},
 		{
+			name:  "generic function with struct return type",
+			input: "struct box[T any] { val T } fn make_box[T any](x T) box[T] { return box[T]{val: x} } let b = make_box[i32](10)",
+			want:  "lib main struct box[T any] {val T} fn make_box[T any](x T) box[T] { return box[T]{val T: x} } pub fn main() { let b box[i32] = make_box[i32](10) }",
+		},
+		{
 			name:  "generic function call infer type for instantiation",
 			input: "fn identity[T any](x T) T { return x } let r = identity(42)",
 			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i64 = identity(42) }",
@@ -1728,6 +1733,131 @@ func TestGenericFunctions(t *testing.T) {
 		// // 		input: "constraint MyConstr { u32 } fn test[T any, E MyConstr](x T, y E) {}",
 		// // 		want:  "lib main constraint MyConstr { u32 } fn test[T any, E MyConstr](x T,y E) { } pub fn main() { }",
 		// // 	},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestGenericMatch(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "concrete match result type",
+			input: "fn test[T any](x T) T { let r = match x { case i32: 0 case _: 1 } } ",
+			want:  "lib main fn test[T any](x T) T { let r i64 = match x { case i32: 0 case _: 1 } } pub fn main() { }",
+		},
+		{
+			name:  "generic match result type",
+			input: "fn test[T any](x T) T { let r = match x { case i32: x case _: x } } ",
+			want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+		},
+		// BUG: variable 'r' is inferred as i64 but it should remain T
+		// due to the fact that x can be a result
+		// {
+		// 	name:  "generic match result type",
+		// 	input: "fn test[T any](x T) T { let r = match x { case i32: x case _: 0 } } ",
+		// 	want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+		// },
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestGenericStructs(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "single type parameter",
+			input: "struct foo[T any] {value T}",
+			want:  "lib main struct foo[T any] {value T} pub fn main() { }",
+		},
+		{
+			name:  "multiple type parameters",
+			input: "struct pair[T, U any] {first T, second U}",
+			want:  "lib main struct pair[T any, U any] {first T, second U} pub fn main() { }",
+		},
+		{
+			name:  "different constraints",
+			input: "struct result[T any, E error] {value T, err E}",
+			want:  "lib main struct result[T any, E error] {value T, err E} pub fn main() { }",
+		},
+		{
+			name:   "undefined constraint",
+			input:  "struct test[T UnknownType] {value T}",
+			errors: []string{"type 'unknown[UnknownType]' not found"},
+		},
+		{
+			name:  "instantiation with literal",
+			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1}",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} }",
+		},
+		{
+			name:  "instantiation with variable",
+			input: "struct abc[T any] { a T } let y = 2 let x = abc[i64]{a: y}",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let y i64 = 2 let x abc[i64] = abc[i64]{a i64: y} }",
+		},
+		{
+			name:  "field access from generic struct evaluates to correct type",
+			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1} let y = x.a",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} let y i32 = x.a }",
+		},
+		// {
+		// 	name:  "instantiation without type parameters",
+		// 	input: "struct abc[T any] { a T } let x = abc{a: 1}",
+		// 	want:  "struct abc[T any] { a T } let x abc[i64] = abc{a i64: 1}",
+		// },
+		{
+			name:  "array of generic type",
+			input: "struct container[T any] { items []T } let c = container[i32]{items: [1, 2, 3]}",
+			want:  "lib main struct container[T any] {items []T} pub fn main() { let c container[i32] = container[i32]{items []i32: [1,2,3]} }",
+		},
+		{
+			name:  "pointer to generic type",
+			input: "struct box[T any] { value *T } let x = 5 let b = box[i64]{value: &x}",
+			want:  "lib main struct box[T any] {value *T} pub fn main() { let x i64 = 5 let b box[i64] = box[i64]{value *i64: &x} }",
+		},
+		{
+			name:  "optional generic type",
+			input: "struct maybe[T any] { value ?T } let m = maybe[i32]{value: null}",
+			want:  "lib main struct maybe[T any] {value ?T} pub fn main() { let m maybe[i32] = maybe[i32]{value ?i32: null} }",
+		},
+		{
+			name:  "nested field access on generic struct",
+			input: "struct inner[T any] { val T } struct outer[U any] { data inner[U] } let o = outer[i32]{data: inner[i32]{val: 42}} let v = o.data.val",
+			want:  "lib main struct inner[T any] {val T} struct outer[U any] {data inner[U]} pub fn main() { let o outer[i32] = outer[i32]{data inner[i32]: inner[i32]{val i32: 42}} let v i32 = o.data.val }",
+		},
+		{
+			name:  "pass generic struct to function",
+			input: "struct box[T any] { val T } fn get_val(b box[i32]) i32 { return b.val } let b = box[i32]{val: 10} let x = get_val(b)",
+			want:  "lib main struct box[T any] {val T} fn get_val(b box[i32]) i32 { return b.val } pub fn main() { let b box[i32] = box[i32]{val i32: 10} let x i32 = get_val(b) }",
+		},
+		{
+			name:  "array of parameterized structs",
+			input: "struct point[T any] { x T, y T } let points = [point[i32]{x: 1, y: 2}, point[i32]{x: 3, y: 4}]",
+			want:  "lib main struct point[T any] {x T, y T} pub fn main() { let points []point[i32] = [point[i32]{x i32: 1, y i32: 2},point[i32]{x i32: 3, y i32: 4}] }",
+		},
+		{
+			name:  "multiple occurrences of same type parameter",
+			input: "struct triple[T any] { a T, b T, c T } let t = triple[i32]{a: 1, b: 2, c: 3} let sum = t.a + t.b + t.c",
+			want:  "lib main struct triple[T any] {a T, b T, c T} pub fn main() { let t triple[i32] = triple[i32]{a i32: 1, b i32: 2, c i32: 3} let sum i32 = ((t.a + t.b) + t.c) }",
+		},
+		{
+			name:   "parameterized struct with wrong field type raises error",
+			input:  `struct abc[T any] { a T } let x = abc[i32]{a: "hello"}`,
+			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
+		},
+		{
+			name:   "parameterized struct with mismatched types in fields",
+			input:  "struct pair[T any] { a T, b T } let p = pair[i32]{a: 1, b: \"hello\"}",
+			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
+		},
+		// BUG: this is not caught yet but requires fixing another issue
+		// where library name missing in type causing e.g. []token to be inferred
+		// while it should be []ast.token (when running dash compiler tests)
+		// {
+		// name:   "instantiation with variable of wrong type",
+		// input:  "struct abc[T any] { a T } let y = 2 let x = abc[i32]{a: y}",
+		// errors: []string{"type mistmatch, expected type 'i32' but got 'i64'"},
+		// },
+		// TODO: add error case where generic struct not instantiated with a type
+		// TODO: add tests where constraint violated
+
 	}
 	runAnalysisTests(t, tests)
 }

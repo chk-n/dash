@@ -473,6 +473,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					panic("this is a compiler error. please report")
 				}
 			}
+
 			// validate struct exists
 			typ := n.Name.Type()
 
@@ -507,6 +508,12 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				return
 
 			}
+			instantiatedType := s.instantiateGenericStruct(n, structType)
+			if instantiatedType != nil {
+				n.SetType(instantiatedType)
+				structType = instantiatedType
+			}
+
 			namedFields := 0
 			for _, f := range n.Fields {
 				if f.Name != nil {
@@ -607,8 +614,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					s.analyseExpressionType(f.Value, f.Value.Type(), fieldType)
 				default:
 					// verify type of field matches type in struct definition
-					if fieldType.String() != f.Type().String() {
-						s.addError(n, errTypeMismatch(fieldType.String(), f.Type().String()))
+					// BUG: we need to compare against f.Value.Type() here
+					// but there is another issue
+					if !fieldType.Equal(f.Type()) {
+						fmt.Println(fieldType, f.Value.Type(), f.T)
+						s.addError(n, errTypeMismatch(fieldType.String(), f.Value.Type().String()))
 						continue
 					}
 				}
@@ -932,9 +942,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				}
 				// As the types match, we can replace type of predicate.
 				// This is required to be able to, for example, match byte
-				// with char literals
+				// with char literals. However, don't replace if scrutinee is
+				// a generic type, as we want to keep the concrete type.
 				_, isUnion := n.Scrutinee.Type().(*types.Union)
-				if !isUnion {
+				_, isGeneric := sT.(*types.Generic)
+				if !isUnion && !isGeneric {
 					pred.SetType(sT)
 				}
 				// Keep track of the first matching type for scrutinee type assignment
@@ -1587,6 +1599,28 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 	for _, n := range nodes {
 		switch n := n.(type) {
 		case *ast.StructStatement:
+			// We need to scope typeSt as analyseGenericParameters
+			// adds type parameters to scope so that it can be found
+			// by inferUnknownNamedType. We later need to unscope before
+			// setting struct type to global symbol table
+			s.typeSt.Scope()
+			s.analyseGenericParameters(n.GenericParameters, n)
+
+			// Add TypeParams to struct type from generic parameters
+			if len(n.GenericParameters) > 0 {
+				typeParams := make([]types.Type, len(n.GenericParameters))
+				for i, gp := range n.GenericParameters {
+					genericType := &types.Generic{
+						Name: gp.Name.TokenLiteral(),
+					}
+					if gp.Constraint != nil {
+						genericType.Constraints = []types.Type{gp.Constraint}
+					}
+					typeParams[i] = genericType
+				}
+				n.T.TypeParams = typeParams
+			}
+
 			for i, field := range n.Fields {
 				typ := s.inferUnknownNamedType(field.Type)
 				if typ == nil {
@@ -1596,7 +1630,7 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 				n.T.Ts[i].T = typ
 				field.Type = typ
 			}
-
+			s.typeSt.Unscope()
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
 			s.typeSt.Set(n.Name.String(), n.Type())
 		case *ast.TypeDefinitionStatement:
@@ -1954,7 +1988,7 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return false
 	}
 
-	// special case handling for error and union types
+	// special case handling for error and union
 	switch targetType.(type) {
 	case *types.Error, *types.Union:
 		if !types.CanCoalesce(exprType, targetType) {
@@ -2131,6 +2165,16 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	default:
+		// For generic types, use targetType.Equal(exprType) instead of exprType.Equal(targetType)
+		// because generic.Equal() is designed to accept any type matching its constraints
+		if _, ok := targetType.(*types.Generic); ok {
+			if !targetType.Equal(exprType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+			return true
+		}
+
 		if !exprType.Equal(targetType) {
 			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
 			return false
@@ -2389,7 +2433,7 @@ func getIdentifier(n ast.Node) string {
 	return name
 }
 
-// Very easy cycle detection alg. Returns on first cycle
+// Very simple cycle detection alg. Returns on first cycle
 func isCyclic(adj [][]uint16) ([]uint16, bool) {
 	vertices := len(adj)
 	paths := make([][]uint16, vertices)
@@ -2416,35 +2460,6 @@ func _isCyclic(i uint16, adj [][]uint16, path []uint16) ([]uint16, bool) {
 
 	return nil, false
 
-}
-
-// typesEqual compares two types for equality, handling mutable types properly
-func (s *Semantics) typesEqual(expected, actual types.Type) bool {
-	if expected.Equal(actual) {
-		return true
-	}
-
-	// Special case: any custom error type can be assigned to generic error type
-	if expectedErr, ok := expected.(*types.Error); ok && expectedErr.Name == "error" {
-		if _, ok := actual.(*types.Error); ok {
-			return true
-		}
-	}
-
-	// as mutable types can be considered equal as their
-	// underlying type we need to unwrap first
-	expectedUnwrapped := s.unwrapMutable(expected)
-	actualUnwrapped := s.unwrapMutable(actual)
-
-	return expectedUnwrapped.Equal(actualUnwrapped)
-}
-
-// unwrapMutable unwraps Mutable types to their underlying types
-func (s *Semantics) unwrapMutable(t types.Type) types.Type {
-	if mutable, ok := t.(*types.Mutable); ok {
-		return mutable.T
-	}
-	return t
 }
 
 func getTypesFromExpressions(exps []ast.Expression) []types.Type {
@@ -2547,6 +2562,52 @@ func (s *Semantics) instantiateGenericFunction(n *ast.FunctionCallExpression, fn
 	}
 
 	return instantiatedArgs, instantiatedRets
+}
+
+func (s *Semantics) instantiateGenericStruct(n *ast.StructLiteral, t *types.Struct) *types.Struct {
+	if len(t.TypeParams) == 0 {
+		return t
+	}
+	typeMap := make(map[string]types.Type)
+
+	// case 1: resolve explicit type parameters
+	if len(n.TypeParameters) > 0 {
+		if len(n.TypeParameters) != len(t.TypeParams) {
+			s.addError(n, errTypeParameterCountMismatch(len(t.TypeParams), len(n.TypeParameters)))
+			return nil
+		}
+		for i, tp := range t.TypeParams {
+			resolvedType := s.inferUnknownNamedType(n.TypeParameters[i])
+			if resolvedType == nil {
+				resolvedType = n.TypeParameters[i]
+			}
+			n.TypeParameters[i] = resolvedType
+			typeMap[tp.Ident()] = resolvedType
+		}
+	} else {
+		// case 2: infer type parameters from fields
+		for i, f := range n.Fields {
+			paramType := t.TypeParams[i]
+			argType := f.Type()
+			if argType == nil {
+				continue
+			}
+
+			s.matchTypes(paramType, argType, typeMap)
+		}
+
+		s.validateTypeParameterInferred(n, t.TypeParams, typeMap)
+	}
+
+	return s.substituteTypeParameters(t, typeMap).(*types.Struct)
+}
+
+func (s *Semantics) validateTypeParameterInferred(n ast.Node, tps []types.Type, typeMap map[string]types.Type) {
+	for _, tp := range tps {
+		if _, ok := typeMap[tp.Ident()]; !ok {
+			s.addError(n, errCannotInferTypeParameter(tp.Ident()))
+		}
+	}
 }
 
 // matchTypes attempts to match two types and extract generic type bindings
