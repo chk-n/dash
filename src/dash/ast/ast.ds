@@ -56,6 +56,7 @@ pub enum tag {
     use_def
     type_def
     struct_def
+    struct_gen_def
     struct_fields
     enum_def
     enum_fields
@@ -279,6 +280,23 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = to_string(a, data.x, buf)
         buf = append(buf, ' ')
         buf = to_string(a, data.y, buf)
+
+    case tag.struct_gen_def:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        let ident = a.extras[data.x]
+        buf = to_string(a, ident, buf)
+
+        buf = append(buf, '[')
+        let gen_params = a.extras[data.x+1]
+        buf = to_string(a, gen_params, buf)
+        buf = append(buf, ']')
+
+        buf = append(buf, ' ')
+        let fields = a.extras[data.x+2]
+        buf = to_string(a, fields, buf)
 
     case tag.lib_stmts:
         for i = data.x; i <= data.y; i++ {
@@ -739,7 +757,7 @@ fn get_variable_token(src []byte, idx source_index) []byte {
 
 fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     let size = match t {
-        case tag.struct_def, tag.return_stmt, tag.string_type: 6
+        case tag.struct_def, tag.struct_gen_def, tag.return_stmt, tag.string_type: 6
         case tag.union_def, tag.break_stmt,
              tag.catch_expr, tag.raise_stmt,
              tag.defer_stmt, tag.match_stmt,

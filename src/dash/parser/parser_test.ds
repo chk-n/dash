@@ -314,6 +314,13 @@ fn test_struct_statement()! {
     try assert_canonical("lib a struct x {a y b string}")
     try assert_canonical("lib a struct x {a y.z}")
     try assert_canonical("lib a pub struct x {a i64}")
+    
+    try assert_canonical("lib a struct x[T any] {a T}")
+    try assert_canonical("lib a struct x[T,U any] {a T}")
+    try assert_canonical("lib a struct x[T any,U any,E any] {a T}")
+
+    // note, this error is caught in semsis
+    try assert_canonical("lib a struct x[T] {a T}")
 
     try assert_error("lib a struct", [expected_identifier{i: 3}])
     try assert_error("lib a struct 1", [expected_identifier{i: 3}])
@@ -323,6 +330,7 @@ fn test_struct_statement()! {
     try assert_error("lib a struct a { x", [expected_type{i: 6}])
     try assert_error("lib a struct a { x +", [expected_type{i: 6}])
     try assert_error("lib a struct a { x i64", [expected_brace{i: 7}])
+    try assert_error("lib a struct x[ {a T}", [expected_identifier{i: 5}])
 }
 
 @test
