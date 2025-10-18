@@ -4,7 +4,12 @@ lib ast
 
 use "dash/lexer"
 
-pub let NULL_DATA = data{x: 0, y: 0}
+pub let NULL_IDX = index(4_294_967_295)
+pub let NULL_DATA = data{x: NULL_IDX, y: NULL_IDX}
+// should be used when token not needed e.g. when
+// adding nodes that dont have a defining token
+// such as lib_stmts, struct/enum/union fields etc.
+pub let NULL_TKN = token_index(4_294_967_295)
 
 // TODO: replace with column list
 pub struct ast {
@@ -255,24 +260,21 @@ pub fn keyword_to_tag(t lexer.tag) tag {
 }
 
 pub fn to_string(a ast, idx index, buf []byte)! []byte {
+    if idx == NULL_IDX {
+        return []
+    }    
+    // TODO: if len(nodes)-1 == NULL_IDX raise error
+
     var buf = buf
     let node = a.nodes[idx]
     let data = node.data
-
-    // we assume parser handles invalid 'pub'
-    // keywords and dont add them to a.nodes list
-    if is_public(a, node.token) {
-        let src_idx = a.tkns[node.token].start
-        let kw = get_fixed_token(a.src, src_idx-4, tag.pub)
-        buf = append(buf, kw)
-        buf = append(buf, ' ')
-    }
 
     match node.tag {
     case tag.library, tag.type_def,
          tag.struct_def, tag.enum_def,
          tag.union_def:
-    
+
+        buf = add_pub(a, idx, buf)
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -282,6 +284,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = to_string(a, data.y, buf)
 
     case tag.struct_gen_def:
+        buf = add_pub(a, idx, buf)
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -313,7 +316,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
-        if data.x != -1 {
+        if data.x != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, data.x, buf)
         }
@@ -325,7 +328,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
         buf = to_string(a, data.x, buf)
-        if data.y != -1 {
+        if data.y != NULL_IDX {
             buf = append(buf, '(')
             buf = to_string(a, data.y, buf)
             buf = append(buf, ')')
@@ -359,16 +362,17 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = append(buf, '}')
     
     case tag.fn_def, tag.fn_err_def:
+        buf = add_pub(a, idx, buf)
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
         buf = append(buf, ' ')
         let ident = a.extras[data.x]
         buf = to_string(a, ident, buf)
-        
+
         buf = append(buf, '(')
         let args = a.extras[data.x+1]
-        if args != -1 {
+        if args != NULL_IDX {
             buf = to_string(a, args, buf)
         }
         buf = append(buf, ')')
@@ -378,18 +382,19 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         }
 
         let rets = a.extras[data.x+2]
-        if rets != -1 {
+        if rets != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, rets, buf)
         }
 
         let body = a.extras[data.x+3]
-        if body != -1 {
+        if body != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, body, buf)
         }
 
     case tag.fn_gen_def, tag.fn_gen_err_def:
+        buf = add_pub(a, idx, buf)
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
@@ -399,14 +404,14 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
 
         buf = append(buf, '[')
         let gen_params = a.extras[data.x+1]
-        if gen_params != -1 {
+        if gen_params != NULL_IDX {
             buf = to_string(a, gen_params, buf)
         }
         buf = append(buf, ']')
 
         buf = append(buf, '(')
         let args = a.extras[data.x+2]
-        if args != -1 {
+        if args != NULL_IDX {
             buf = to_string(a, args, buf)
         }
         buf = append(buf, ')')
@@ -416,13 +421,13 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         }
 
         let rets = a.extras[data.x+3]
-        if rets != -1 {
+        if rets != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, rets, buf)
         }
 
         let body = a.extras[data.x+4]
-        if body != -1 {
+        if body != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, body, buf)
         }
@@ -432,7 +437,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             let ident = a.extras[i]
             buf = to_string(a, ident, buf)
             let typ = a.extras[i+1]
-            if typ != -1 {
+            if typ != NULL_IDX {
                 buf = append(buf, ' ')
                 buf = to_string(a, typ, buf)
             }
@@ -490,17 +495,17 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
 
     case tag.for_classic_cond:
         let assign = a.extras[data.x]
-        if assign != -1 {
+        if assign != NULL_IDX {
             buf = to_string(a, assign, buf)
             buf = append(buf, ';')
         }
         let cond = a.extras[data.x+1]
-        if cond != -1 {
+        if cond != NULL_IDX {
             buf = to_string(a, cond, buf)
             buf = append(buf, ';')
         }
         let incr = a.extras[data.x+2]
-        if incr != -1 {
+        if incr != NULL_IDX {
             buf = to_string(a, incr, buf)
         }
     case tag.match_stmt:
@@ -530,7 +535,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = append(buf, ' ')
         buf = to_string(a, data.x, buf)
         buf = append(buf, ':')
-        if data.y != -1 {
+        if data.y != NULL_IDX {
             buf = append(buf, ' ')
             buf = to_string(a, data.y, buf)
         }
@@ -553,8 +558,15 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
 
-    case tag.let_decl, tag.var_decl,
-         tag.for_infinite,
+    case tag.let_decl, tag.var_decl:
+        buf = add_pub(a, idx, buf)
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        buf = to_string(a, data.x, buf)
+
+    case tag.for_infinite,
          tag.try_expr, tag.raise_stmt,
          tag.defer_stmt:
         let src_idx = a.tkns[node.token].start
@@ -634,7 +646,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
     case tag.call:
         buf = to_string(a, data.x, buf)   
         buf = append(buf, '(')
-        if data.y != -1 {
+        if data.y != NULL_IDX {
             buf = to_string(a, data.y, buf)
         } 
         buf = append(buf, ')')
@@ -662,12 +674,12 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
 
     case tag.slice_idxs:
         var idx = a.extras[data.x]
-        if idx != -1 {
+        if idx != NULL_IDX {
             buf = to_string(a, idx, buf)
         }
         buf = append(buf, ':')
         idx = a.extras[data.y]
-        if idx != -1 {
+        if idx != NULL_IDX {
             buf = to_string(a, idx, buf)
         }
 
@@ -728,7 +740,7 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         let src_idx = a.tkns[node.token].start
         let kw = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, kw)
-        if data.x != -1 {
+        if data.x != NULL_IDX {
             buf = append(buf, ' ')
             for i = data.x; i <= data.y; i++ {
                 let idx = a.extras[i]
@@ -785,10 +797,23 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
     return src[i:i+size]
 }
 
-// checks whether AST node was marked as public
-fn is_public(a ast, idx token_index) bool {
-    if idx <= 0 {
-        return false
+// optionally adds the 'pub' keyword to buf should be called
+// when at a token that could have 'pub' BEFORE it e.g. 'fn'
+fn add_pub(a ast, idx index, buf []byte) []byte  {
+    let node = a.nodes[idx]
+    // 
+    if node.token == 0 || node.token == NULL_TKN {
+        return buf
     }
-    return a.tkns[idx-1].tag == lexer.tag.PUB 
+    var buf = buf
+
+    // we assume parser handles invalid 'pub'
+    // keywords and dont add them to a.nodes list
+    if a.tkns[node.token-1].tag == lexer.tag.PUB {
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx-4, tag.pub)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+    }
+    return buf
 }
