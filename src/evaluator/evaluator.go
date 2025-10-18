@@ -98,7 +98,8 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 		}
 	}
 
-	// initialise types
+	// Pass 1: initialise types, functions, enums, etc.
+	// This must happen before assignments so type casts work correctly
 	for _, n := range lib.Nodes {
 		switch n := n.(type) {
 		case *ast.UnionStatement:
@@ -119,8 +120,6 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 				Err:        typeName,
 			}
 			ctx.Set(n.Name.String(), err)
-		case *ast.AssignmentStatement:
-			e.evalAssignmentStatement(n, ctx)
 		case *ast.FunctionExpression:
 			fn := &Function{
 				arguments: n.Arguments,
@@ -128,6 +127,13 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 				ctx:       ctx,
 			}
 			ctx.Set(n.Name.Value, fn)
+		}
+	}
+
+	// Pass 2: evaluate assignments after all types are registered
+	for _, n := range lib.Nodes {
+		if assgn, ok := n.(*ast.AssignmentStatement); ok {
+			e.evalAssignmentStatement(assgn, ctx)
 		}
 	}
 }
@@ -1005,7 +1011,6 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) an
 		}
 		indices[i] = int(idx)
 	}
-
 	// perform indexing and handle multiple dimensions
 	curr := arr
 	for _, idx := range indices {
