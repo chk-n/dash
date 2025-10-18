@@ -243,7 +243,7 @@ pub fn infix_to_tag(t lexer.tag)! tag {
     }
 }
 
-pub fn decl_to_tag(t lexer.tag) tag {
+pub fn decl_to_tag(t lexer.tag)! tag {
     return match t {
         case lexer.tag.LET: tag.let_decl
         case lexer.tag.VAR: tag.var_decl
@@ -251,7 +251,7 @@ pub fn decl_to_tag(t lexer.tag) tag {
     }
 }
 
-pub fn keyword_to_tag(t lexer.tag) tag {
+pub fn keyword_to_tag(t lexer.tag)! tag {
     return match t {
         case lexer.tag.BREAK: tag.break_stmt
         case lexer.tag.NEXT: tag.next_stmt
