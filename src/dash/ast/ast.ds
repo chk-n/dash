@@ -63,8 +63,10 @@ pub enum tag {
     union_types
     attribute
     fn_def
+    fn_gen_def
     fn_err_def
-    fn_arg_list
+    fn_gen_err_def
+    param_list
     fn_ret_list
     block_stmt
     assignment
@@ -356,25 +358,63 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         if node.tag == tag.fn_err_def {
             buf = append(buf, '!')
         }
-        
+
         let rets = a.extras[data.x+2]
         if rets != -1 {
             buf = append(buf, ' ')
             buf = to_string(a, rets, buf)
         }
-        
+
         let body = a.extras[data.x+3]
         if body != -1 {
             buf = append(buf, ' ')
             buf = to_string(a, body, buf)
         }
+
+    case tag.fn_gen_def, tag.fn_gen_err_def:
+        let src_idx = a.tkns[node.token].start
+        let kw = get_fixed_token(a.src, src_idx, node.tag)
+        buf = append(buf, kw)
+        buf = append(buf, ' ')
+        let ident = a.extras[data.x]
+        buf = to_string(a, ident, buf)
+
+        buf = append(buf, '[')
+        let gen_params = a.extras[data.x+1]
+        if gen_params != -1 {
+            buf = to_string(a, gen_params, buf)
+        }
+        buf = append(buf, ']')
+
+        buf = append(buf, '(')
+        let args = a.extras[data.x+2]
+        if args != -1 {
+            buf = to_string(a, args, buf)
+        }
+        buf = append(buf, ')')
+
+        if node.tag == tag.fn_gen_err_def {
+            buf = append(buf, '!')
+        }
+
+        let rets = a.extras[data.x+3]
+        if rets != -1 {
+            buf = append(buf, ' ')
+            buf = to_string(a, rets, buf)
+        }
+
+        let body = a.extras[data.x+4]
+        if body != -1 {
+            buf = append(buf, ' ')
+            buf = to_string(a, body, buf)
+        }
         
-    case tag.fn_arg_list:
+    case tag.param_list:
         for i = data.x; i <= data.y; i = i+2 {
             let ident = a.extras[i]
             buf = to_string(a, ident, buf)
             let typ = a.extras[i+1]
-            if typ != -1 {              
+            if typ != -1 {
                 buf = append(buf, ' ')
                 buf = to_string(a, typ, buf)
             }
@@ -716,7 +756,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag) []byte {
              tag.int_type, tag.f32_type, tag.f64_type: 3
         case tag.if_stmt, tag.incr_decr,
              tag.null_coalesce, tag.u8_type, tag.i8_type: 2
-        case tag.fn_def, tag.fn_err_def,
+        case tag.fn_def, tag.fn_err_def, tag.fn_gen_def, tag.fn_gen_err_def,
              tag.lor, tag.land, tag.andnot,
              tag.lsh, tag.rsh,
              tag.lte, tag.gte,

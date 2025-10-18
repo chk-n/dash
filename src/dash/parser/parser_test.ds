@@ -389,8 +389,15 @@ fn test_parse_function_statement()! {
     try assert_canonical("lib a @xyz fn abc()")
 
     try assert_canonical("lib a pub fn abc()")
-    try assert_canonical("lib a pub fn abc() {}")
+    
+    try assert_canonical("lib a pub fn abc[T any]() {}")
+    try assert_canonical("lib a pub fn abc[T,E,U any]() {}")
+    try assert_canonical("lib a pub fn abc[T,E any,U any]() {}")
+    try assert_canonical("lib a pub fn abc[T any]()! {}")
 
+    try assert_error("lib a fn abc[() {}", [expected_identifier{i: 5}])
+    try assert_error("lib a fn abc[T() {}", [expected_comma{i: 6}])
+    try assert_error("lib a fn abc[T,() {}", [expected_identifier{i: 7}])
     try assert_error("lib a fn", [expected_identifier{i: 3}])
     try assert_error("lib a fn abc", [expected_parenthesis{i: 4}])
     try assert_error("lib a fn abc(", [expected_parenthesis{i: 5}])

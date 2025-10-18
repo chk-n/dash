@@ -31,8 +31,8 @@ enum context {
     none
     // whether parser should interpret
     // ident followed by '{' as struct
-    // literal or identifier and e.g.
-    // start of block
+    // literal or identifier or block
+    // start
     brace
 }
 
@@ -86,8 +86,8 @@ pub fn parse(src []byte, m mode)! ast.ast {
 
     var root_idx = ast.index(0)
     p, root_idx = match m {
-    case mode.lib: try parse_library(p)
-    case mode.exp: try parse_expression(p, precedence.none)
+        case mode.lib: try parse_library(p)
+        case mode.exp: try parse_expression(p, precedence.none)
     } 
 
     return ast.ast{
@@ -484,10 +484,11 @@ fn parse_attribute_statement(p parser)! parser, ast.index {
 }
 
 // parse_function_statement parses a function definition and
-// stores the following in extra: [fn_ident, fn_args, fn_rets, fn_body]
-// fn_args, fn_rets and fn_body (assuming neither index is -1)
-// points to nodes with start and end indices that point to
-// extra array
+// stores the following in extra:
+//   - regular: [fn_ident, fn_args, fn_rets, fn_body]
+//   - generic: [fn_ident, fn_gen_params, fn_args, fn_rets, fn_body]
+// fn_gen_params, fn_args, fn_rets and fn_body (assuming neither index is -1)
+// points to nodes with start and end indices that point to extra array
 fn parse_function_statement(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.FN), "expected 'fn'")
 
@@ -501,6 +502,21 @@ fn parse_function_statement(p parser)! parser, ast.index {
     }
     p, let ident = parse_literal(p)
 
+    // parse optional generic type parameters
+    var type_params = ast.index(-1)
+    if is_tag(p, lexer.tag.LBRACK) {
+        p = next_token(p)
+        p, type_params = try parse_parameter_list(p, lexer.tag.RBRACK)
+        if type_params == -1 {
+            return p, -1
+        }
+        if !is_tag(p, lexer.tag.RBRACK) {
+            p = add_error(p, expected_bracket{i: p.tkn_i})
+            return p, -1
+        }
+        p = next_token(p)
+    }
+
     if !is_tag(p, lexer.tag.LPAREN) {
         p = add_error(p, expected_parenthesis{i: p.tkn_i})
         return p, -1
@@ -510,7 +526,10 @@ fn parse_function_statement(p parser)! parser, ast.index {
     // parse optional argument list
     var args = ast.index(-1)
     if !is_tag(p, lexer.tag.RPAREN) {
-        p, args = try parse_function_argument_list(p)
+        p, args = try parse_parameter_list(p, lexer.tag.RPAREN)
+        if args == -1 {
+            return p, -1
+        }
     }
 
     if !is_tag(p, lexer.tag.RPAREN) {
@@ -525,6 +544,7 @@ fn parse_function_statement(p parser)! parser, ast.index {
         tag = ast.tag.fn_err_def
         p = next_token(p)
     }
+
     // parse optional return type list
     var rets = ast.index(-1)
     if is_type_literal(p) {
@@ -538,36 +558,48 @@ fn parse_function_statement(p parser)! parser, ast.index {
         p, body = try parse_block_statement(p)
     }
 
-    let extra = [ident, args, rets, body]
+    // if generic, update tag and include gen_params in extra
+    var extra = []ast.index{}
+    if type_params != -1 {
+        tag = match tag {
+            case ast.tag.fn_def: ast.tag.fn_gen_def
+            case ast.tag.fn_err_def: ast.tag.fn_gen_err_def
+            case _: tag // TODO: raise error
+        }
+        extra = [ident, type_params, args, rets, body]
+    } else {
+        extra = [ident, args, rets, body]
+    }
+
     p, let fn_def = add_extra(p, tag, op_tkn, extra)
 
     return p, fn_def
 }
 
-fn parse_function_argument_list(p parser)! parser, ast.index {
+// parse_parameter_list parses comma-separated parameter lists
+// Used for both function parameters and generic type parameters
+// Returns param_list node containing identifiers with optional types
+fn parse_parameter_list(p parser, end lexer.tag)! parser, ast.index {
     var p = p
     var extra = make([]ast.index, 0, 2)
 
-    // loop ensures we append ident idx and type idx to extra,
-    // this means each loop adds two elements to extra regardless
-    // if the identifier has a type defined or not
-    for !is_tag(p, lexer.tag.RPAREN) && !is_tag(p, lexer.tag.EOF) {
+    for !is_tag(p, end) && !is_tag(p, lexer.tag.EOF) {
         if !is_tag(p, lexer.tag.IDENT) {
             p = add_error(p, expected_identifier{i: p.tkn_i})
-            p = next_token(p)
             return p, -1
         }
-        p, let arg = try parse_literal(p)
-        extra = append(extra, arg)
+        p, let ident = try parse_literal(p)
+        extra = append(extra, ident)
 
+        // optionally parse type
         if is_type_literal(p) {
             p, let typ = try parse_type_literal(p)
             extra = append(extra, typ)
         } else {
             extra = append(extra, -1)
         }
-        
-        if is_tag(p, lexer.tag.RPAREN) || is_tag(p, lexer.tag.EOF) {
+
+        if is_tag(p, end) || is_tag(p, lexer.tag.EOF) {
             break
         } else if is_tag(p, lexer.tag.COMMA) {
             p = next_token(p)
@@ -580,16 +612,12 @@ fn parse_function_argument_list(p parser)! parser, ast.index {
             } else {
                 p = add_error(p, expected_comma{i: p.tkn_i})
             }
-            p = next_token(p)
             return p, -1
         }
     }
-    // NOTE: maybe we validate that last node in extra
-    // is not an ident? or should we just do this in
-    // semsis
 
-    p, let args = add_extra(p, ast.tag.fn_arg_list, -1, extra)
-    return p, args
+    p, let params = add_extra(p, ast.tag.param_list, -1, extra)
+    return p, params
 }
 
 fn parse_function_return_list(p parser)! parser, ast.index {
