@@ -103,6 +103,7 @@ pub enum tag {
     index
     slice
     slice_idxs
+    type_params
     ident
     int
     float
@@ -660,14 +661,8 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
             }
         }
 
-    case tag.index:
+    case tag.index, tag.slice, tag.type_params:
         buf = to_string(a, data.x, buf)   
-        buf = append(buf, '[')
-        buf = to_string(a, data.y, buf)
-        buf = append(buf, ']')
-
-    case tag.slice:
-        buf = to_string(a, data.x, buf)
         buf = append(buf, '[')
         buf = to_string(a, data.y, buf)
         buf = append(buf, ']')

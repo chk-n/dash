@@ -1325,7 +1325,7 @@ fn parse_expression(p parser, prec precedence)! parser, ast.index {
 fn parse_prefix_expression(p parser)! parser, ast.index {
     match current_tag(p) {
     case lexer.tag.IDENT:
-        return try parse_ident_or_struct(p)
+        return try parse_identifier_postfix(p)
     case lexer.tag.INT, lexer.tag.FLOAT,
          lexer.tag.STRING, lexer.tag.BOOL,
          lexer.tag.CHAR:
@@ -1343,36 +1343,48 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
     case lexer.tag.TRY:
         return try parse_try_expression(p)
     case _:
+        // we allow types to be used as expressions e.g.
+        // in when instantiating generic fns or structs
+        if is_type_literal(p) {
+            return try parse_type_literal(p)
+        }
         var p = add_error(p, expected_expression{i: p.tkn_i})
         // p = next_token(p)  
         return p, ast.NULL_IDX
     }
 }
 
-fn parse_ident_or_struct(p parser)! parser, ast.index {
+// parse_identifier_postfix is a special function that first
+// parses the identifier and then handles special cases regarding
+// generic fn calls and struct literals. 
+fn parse_identifier_postfix(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.IDENT), "expected identifier")
+
+    var p, var exp = try parse_literal(p)
+
+    if is_tag(p, lexer.tag.LBRACK) {
+        p, exp = try parse_bracket_expression(p, exp)
+    }
     
-    var p, let ident = try parse_literal(p)
+    if is_tag(p, lexer.tag.LPAREN) {
+        return try parse_call_expression(p, exp)
+    } else if is_tag(p, lexer.tag.LBRACE) && p.ctx != context.brace {
+        p, let strct = try parse_struct_literal(p)
+        if strct == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
 
-    if is_tag(p, lexer.tag.DOT) {
-        return try parse_infix_expression(p, ident)
-    } else if p.ctx == context.brace || !is_tag(p, lexer.tag.LBRACE) {
-        // do not parse {} if we are currently in an if/else condition
-        return p, ident
-    }
-
-    p, let strct = try parse_struct_literal(p)
-    if strct == ast.NULL_IDX {
-        return p, ast.NULL_IDX
-    }
-
-    p, let lit = add_node(p, {
-        tag: ast.tag.struct_lit,
-        token: p.tkn_i,
-        data: {x: ident, y: strct},
-    })    
-
-    return p, lit      
+        p, let lit = add_node(p, {
+            tag: ast.tag.struct_lit,
+            token: p.tkn_i,
+            data: {x: exp, y: strct},
+        })
+        return p, lit
+    } else {
+        // TODO: assert exp not in form a[b,c] as
+        // that is invalid index expression
+        return p, exp
+    }   
 }
 
 // parse_type_literal parses scalar and aggregate types
@@ -1706,7 +1718,7 @@ fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
     case lexer.tag.LPAREN:
         return try parse_call_expression(p, prev)
     case lexer.tag.LBRACK:
-        return try parse_index_expression(p, prev)
+        return try parse_bracket_expression(p, prev)
     case lexer.tag.ADDADD, lexer.tag.SUBSUB:
         return try parse_increment_expression(p, prev)
     case lexer.tag.CATCH:
@@ -1787,9 +1799,9 @@ fn parse_expression_list(p parser, end lexer.tag)! parser, ast.index {
     return p, exps      
 }
 
-// parse_index_expression parses index and slice operations
-// e.g. a[0], a[1:6], a[2:] and a[:4]
-fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
+// parse_bracket_expression parses indexm, slice and generic instantiation
+// operations e.g. a[0], a[1:6], a[2:], a[:4] and a[b,i64,c]
+fn parse_bracket_expression(p parser, prev ast.index)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.LBRACK), "expected '['")
 
     let op_tkn = p.tkn_i
@@ -1807,9 +1819,9 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
         // TODO: assert int literal or dot expression or function call
         // was parsed
     }
-  
+
     // for slice we store indices in extra
-    // and set node to index to extra 
+    // and set node to index to extra
     if is_tag(p, lexer.tag.COLON) {
         tag = ast.tag.slice
         p = next_token(p)
@@ -1822,7 +1834,34 @@ fn parse_index_expression(p parser, prev ast.index)! parser, ast.index {
             }
         }
 
-        p, node = add_extra(p, ast.tag.slice_idxs, ast.NULL_TKN, [node, end_idx])              
+        p, node = add_extra(p, ast.tag.slice_idxs, ast.NULL_TKN, [node, end_idx])
+    } else if is_tag(p, lexer.tag.COMMA) {
+        tag = ast.tag.type_params
+        // parse comma separated types or idents e.g. a[b,string]
+        var extra = make([]ast.index, 0, 2)
+        extra = append(extra, node)
+
+        for is_tag(p, lexer.tag.COMMA) {
+            p = next_token(p)
+
+            if is_tag(p, lexer.tag.RBRACK) {
+                // TODO: add error
+                break
+            }
+
+            var expr = ast.NULL_IDX
+            if is_type_literal(p) {
+                p, expr = try parse_type_literal(p)
+            } else {
+                p, expr = try parse_expression(p, precedence.none)
+            }
+            if expr == ast.NULL_IDX {
+                return p, ast.NULL_IDX
+            }
+            extra = append(extra, expr)
+        }
+
+        p, node = add_extra(p, ast.tag.expr_list, ast.NULL_TKN, extra)
     }
 
     if !is_tag(p, lexer.tag.RBRACK) {

@@ -25,6 +25,9 @@ fn test_parse_struct_literal()! {
     try assert_parse_exp("{a: 1, b: false}", "{a:1,b:false}")
     try assert_parse_exp("{a: {b: 2}, c: 4}", "{a:{b:2},c:4}")
 
+    try assert_canonical_exp("a[i64]{a:2}")
+    try assert_canonical_exp("a[i64,b,string]{a:2}")
+
     try assert_parse_error("{", [expected_identifier{i: 1}])
     try assert_parse_error("a{", [expected_identifier{i: 2}])
     try assert_parse_error("{a", [expected_colon{i: 2}])
@@ -36,7 +39,9 @@ fn test_parse_struct_literal()! {
     try assert_parse_error("{a: 1, b:", [expected_expression{i: 7}])
     // try assert_parse_error("{}", [expected_identifier{i: 1}])
     try assert_parse_error("{a:, b: 2}", [expected_expression{i: 3}])
-    try assert_parse_error("{a: 1, b:}", [expected_expression{i: 7}]) 
+    try assert_parse_error("{a: 1, b:}", [expected_expression{i: 7}])
+
+    // note, empty type parameter list caught by index expression tests
 }
 
 @test
@@ -142,6 +147,9 @@ fn test_call_expression()! {
     try assert_parse_exp("func(x, {y: z})", "func(x,{y:z})")
     try assert_parse_exp("outer(inner(a, b), c)", "outer(inner(a,b),c)")
 
+    try assert_canonical_exp("a[string,i64]()")
+    try assert_canonical_exp("a[u8,u16,u32]()")
+
     try assert_parse_error("a(", [expected_expression{i: 2}])
     try assert_parse_error("a(b", [expected_parenthesis{i: 3}])
     try assert_parse_error("a(b,", [expected_parenthesis{i: 4}])
@@ -149,6 +157,8 @@ fn test_call_expression()! {
     try assert_parse_error("a(b,c,", [expected_parenthesis{i: 6}])
     try assert_parse_error("a(b,,)", [expected_expression{i: 4}])
     try assert_parse_error("a(,)", [expected_expression{i: 2}])
+
+    // note, empty type parameter list caught by index expression tests
  }
 
 @test
@@ -170,7 +180,9 @@ fn test_index_expression()! {
     try assert_parse_error("a[:", [expected_expression{i: 3}])
     try assert_parse_error("a[1:2:3]", [expected_bracket{i: 5}])
     try assert_parse_error("a[::1]", [expected_expression{i: 3}])
-    // try assert_parse_error("a[:]", "")
+    try assert_parse_error("a[]", [expected_expression{i: 2}]) 
+    try assert_parse_error("a[,]", [expected_expression{i: 2}]) 
+    // try assert_parse_error("a[:]", [])
 }
 
 @test
@@ -295,6 +307,8 @@ fn test_parse_type_statement()! {
     try assert_canonical_lib("lib a type x {}abc")
     try assert_canonical_lib("lib a type x {}y.z")
 
+    try assert_canonical_lib("lib a type x a[string]")
+    try assert_canonical_lib("lib a type x a[string,i64]")
 
     // // TODO: add map type
 
