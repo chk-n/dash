@@ -760,7 +760,10 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
     }
 }
 
-// parse_assign_or_call disambiguates 'a,' / 'a =' and 'a()'
+// parse_assign_or_call attempts to parse assignment
+// or function call. This function assumes that an
+// identifier in current context means only valid
+// path forwards is assignment or fn call.
 fn parse_assign_or_call(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.IDENT), "expected ident")
 
@@ -768,7 +771,7 @@ fn parse_assign_or_call(p parser)! parser, ast.index {
         return try parse_assignment_statement(p)
     } else if is_peek_tag(p, lexer.tag.LPAREN) {
         return try parse_expression(p, precedence.none)
-    }
+    } 
 
     var p = add_error(p, unexpected_statement{i: p.tkn_i})
     p = next_token(p)
