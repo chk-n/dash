@@ -213,7 +213,7 @@ fn test_operator_precedence()! {
 
 @test
 fn test_parse_library()! {
-    try assert_canonical("lib abc ")
+    try assert_canonical_lib("lib abc ")
 
     try assert_error("lib", [expected_identifier{i: 1}])
     try assert_error("lib 1", [expected_identifier{i: 1}])
@@ -221,16 +221,16 @@ fn test_parse_library()! {
 
 @test
 fn test_parse_assignment()! {
-    try assert_canonical("lib a let x = 1")
-    try assert_canonical("lib a var x = test()")
-    // try assert_canonical("lib a x = abc{a:b}")
-    // try assert_canonical("lib a x = 2.2")
-    try assert_canonical("lib a let x,var y,var z = 1,2,3")
-    // try assert_canonical("lib a w,x,y,z = 1,2,3")
-    // try assert_canonical("lib a a,b,let x = 1,2,3")
-    try assert_canonical("lib a let x = 1 var y = 2")
+    try assert_canonical_lib("lib a let x = 1")
+    try assert_canonical_lib("lib a var x = test()")
+    // try assert_canonical_lib("lib a x = abc{a:b}")
+    // try assert_canonical_lib("lib a x = 2.2")
+    try assert_canonical_lib("lib a let x,var y,var z = 1,2,3")
+    // try assert_canonical_lib("lib a w,x,y,z = 1,2,3")
+    // try assert_canonical_lib("lib a a,b,let x = 1,2,3")
+    try assert_canonical_lib("lib a let x = 1 var y = 2")
     try assert_parse("lib a let a = 1,", "lib a let a = 1")
-    try assert_canonical("lib a pub let x = 1")
+    try assert_canonical_lib("lib a pub let x = 1")
 
     try assert_error("lib a x", [invalid_statement{i: 2}])
     try assert_error("lib a let", [expected_identifier{i: 3}])
@@ -244,10 +244,10 @@ fn test_parse_assignment()! {
 
 @test
 fn test_parse_use_statement()! {
-    try assert_canonical(`lib a use ""`)
-    try assert_canonical(`lib a use "abc"`)
-    try assert_canonical(`lib a use "abc/xyz"`)
-    try assert_canonical(`lib a use xyz "abc/xyz"`)
+    try assert_canonical_lib(`lib a use ""`)
+    try assert_canonical_lib(`lib a use "abc"`)
+    try assert_canonical_lib(`lib a use "abc/xyz"`)
+    try assert_canonical_lib(`lib a use xyz "abc/xyz"`)
 
     try assert_error(`lib a use`, [expected_string_literal{i:3}])
     try assert_error(`lib a use abc`, [expected_string_literal{i:4}])
@@ -258,47 +258,50 @@ fn test_parse_use_statement()! {
 
 @test
 fn test_parse_type_statement()! {
-    try assert_canonical("lib a type x u8")
-    try assert_canonical("lib a type x u16")
-    try assert_canonical("lib a type x u32")
-    try assert_canonical("lib a type x u64")
-    try assert_canonical("lib a type x i8")
-    try assert_canonical("lib a type x i16")
-    try assert_canonical("lib a type x i32")
-    try assert_canonical("lib a type x i64")
-    try assert_canonical("lib a type x int")
+    try assert_canonical_lib("lib a type x u8")
+    try assert_canonical_lib("lib a type x u16")
+    try assert_canonical_lib("lib a type x u32")
+    try assert_canonical_lib("lib a type x u64")
+    try assert_canonical_lib("lib a type x i8")
+    try assert_canonical_lib("lib a type x i16")
+    try assert_canonical_lib("lib a type x i32")
+    try assert_canonical_lib("lib a type x i64")
+    try assert_canonical_lib("lib a type x int")
 
-    try assert_canonical("lib a type x char")
-    try assert_canonical("lib a type x byte")
+    try assert_canonical_lib("lib a type x char")
+    try assert_canonical_lib("lib a type x byte")
      
-    try assert_canonical("lib a type x f32")
-    try assert_canonical("lib a type x f64")
-    try assert_canonical("lib a type x float")
+    try assert_canonical_lib("lib a type x f32")
+    try assert_canonical_lib("lib a type x f64")
+    try assert_canonical_lib("lib a type x float")
     
-    try assert_canonical("lib a type x bool")
+    try assert_canonical_lib("lib a type x bool")
+    
+    try assert_canonical_lib("lib a type x any")
 
-    try assert_canonical("lib a type x string")
-    try assert_canonical("lib a type x []byte")
-    try assert_canonical("lib a type x []y")
-    try assert_canonical("lib a type x [][][][][]i64")
+    try assert_canonical_lib("lib a type x string")
+    try assert_canonical_lib("lib a type x []byte")
+    try assert_canonical_lib("lib a type x []y")
+    try assert_canonical_lib("lib a type x [][][][][]i64")
      
-    try assert_canonical("lib a type x ?byte")
-    try assert_canonical("lib a type x ?{}abc")
-    try assert_canonical("lib a type x ?[]byte")
-    try assert_canonical("lib a type x ?[]?byte")
-    try assert_canonical("lib a type x []?[]?[]?[]?[]?i64")
-    try assert_canonical("lib a type x ?y")
-    try assert_canonical("lib a type x ?x.y")
+    try assert_canonical_lib("lib a type x ?byte")
+    try assert_canonical_lib("lib a type x ?{}abc")
+    try assert_canonical_lib("lib a type x ?[]byte")
+    try assert_canonical_lib("lib a type x ?[]?byte")
+    try assert_canonical_lib("lib a type x []?[]?[]?[]?[]?i64")
+    try assert_canonical_lib("lib a type x ?y")
+    try assert_canonical_lib("lib a type x ?x.y")
 
-    try assert_canonical("lib a type x {}abc")
-    try assert_canonical("lib a type x {}y.z")
+    try assert_canonical_lib("lib a type x {}abc")
+    try assert_canonical_lib("lib a type x {}y.z")
+
 
     // // TODO: add map type
 
-    try assert_canonical("lib a type x y")
-    try assert_canonical("lib a type x y.z")
+    try assert_canonical_lib("lib a type x y")
+    try assert_canonical_lib("lib a type x y.z")
     
-    try assert_canonical("lib a pub type x i64")
+    try assert_canonical_lib("lib a pub type x i64")
 
     try assert_error("lib a type", [expected_identifier{i: 3}])
     try assert_error("lib a type x", [expected_type{i: 4}])
@@ -310,17 +313,17 @@ fn test_parse_type_statement()! {
 
 @test
 fn test_struct_statement()! {
-    try assert_canonical("lib a struct x {a i64}")
-    try assert_canonical("lib a struct x {a y b string}")
-    try assert_canonical("lib a struct x {a y.z}")
-    try assert_canonical("lib a pub struct x {a i64}")
+    try assert_canonical_lib("lib a struct x {a i64}")
+    try assert_canonical_lib("lib a struct x {a y b string}")
+    try assert_canonical_lib("lib a struct x {a y.z}")
+    try assert_canonical_lib("lib a pub struct x {a i64}")
     
-    try assert_canonical("lib a struct x[T any] {a T}")
-    try assert_canonical("lib a struct x[T,U any] {a T}")
-    try assert_canonical("lib a struct x[T any,U any,E any] {a T}")
+    try assert_canonical_lib("lib a struct x[T any] {a T}")
+    try assert_canonical_lib("lib a struct x[T,U any] {a T}")
+    try assert_canonical_lib("lib a struct x[T any,U any,E any] {a T}")
 
     // note, this error is caught in semsis
-    try assert_canonical("lib a struct x[T] {a T}")
+    try assert_canonical_lib("lib a struct x[T] {a T}")
 
     try assert_error("lib a struct", [expected_identifier{i: 3}])
     try assert_error("lib a struct 1", [expected_identifier{i: 3}])
@@ -335,9 +338,9 @@ fn test_struct_statement()! {
 
 @test
 fn test_union_statement()! {
-    try assert_canonical("lib a union x {i64}")
-    try assert_canonical("lib a union x {f32 y y.z}")
-    try assert_canonical("lib a pub union x {i64}")
+    try assert_canonical_lib("lib a union x {i64}")
+    try assert_canonical_lib("lib a union x {f32 y y.z}")
+    try assert_canonical_lib("lib a pub union x {i64}")
     
     try assert_error("lib a union", [expected_identifier{i: 3}])
     try assert_error("lib a union x", [expected_brace{i: 4}])
@@ -351,9 +354,9 @@ fn test_union_statement()! {
 
 @test
 fn test_parse_enum_statement()! {
-    try assert_canonical("lib a enum b {x}")
-    try assert_canonical("lib a enum b {x y z}")
-    try assert_canonical("lib a pub enum b {x}")
+    try assert_canonical_lib("lib a enum b {x}")
+    try assert_canonical_lib("lib a enum b {x y z}")
+    try assert_canonical_lib("lib a pub enum b {x}")
 
     try assert_error("lib a enum", [expected_identifier{i: 3}])
     try assert_error("lib a enum b", [expected_brace{i: 4}] )
@@ -365,43 +368,43 @@ fn test_parse_enum_statement()! {
 
 @test
 fn test_parse_function_statement()! {
-    try assert_canonical("lib a fn abc()")
-    try assert_canonical("lib a fn abc() i64")
-    try assert_canonical("lib a fn abc() u8,string")
-    try assert_canonical("lib a fn abc() f32,x.y,y")
-    try assert_canonical("lib a fn abc()!")
-    try assert_canonical("lib a fn abc()! xyz")
-    try assert_canonical("lib a fn abc()! xyz,byte")
-    try assert_canonical("lib a fn abc() {}")
-    try assert_canonical("lib a fn abc()! {}")    
-    try assert_canonical("lib a fn abc() xyz {}")
-    try assert_canonical("lib a fn abc()! xyz {}")
-    try assert_canonical("lib a fn abc() xyz,i64 {}")
-    try assert_canonical("lib a fn abc()! xyz,i64 {}")
+    try assert_canonical_lib("lib a fn abc()")
+    try assert_canonical_lib("lib a fn abc() i64")
+    try assert_canonical_lib("lib a fn abc() u8,string")
+    try assert_canonical_lib("lib a fn abc() f32,x.y,y")
+    try assert_canonical_lib("lib a fn abc()!")
+    try assert_canonical_lib("lib a fn abc()! xyz")
+    try assert_canonical_lib("lib a fn abc()! xyz,byte")
+    try assert_canonical_lib("lib a fn abc() {}")
+    try assert_canonical_lib("lib a fn abc()! {}")    
+    try assert_canonical_lib("lib a fn abc() xyz {}")
+    try assert_canonical_lib("lib a fn abc()! xyz {}")
+    try assert_canonical_lib("lib a fn abc() xyz,i64 {}")
+    try assert_canonical_lib("lib a fn abc()! xyz,i64 {}")
     
-    try assert_canonical("lib a fn abc(a i64)")
+    try assert_canonical_lib("lib a fn abc(a i64)")
     try assert_parse("lib a fn abc(a i64,)", "lib a fn abc(a i64)")
-    try assert_canonical("lib a fn abc(a,b i64)")
-    try assert_canonical("lib a fn abc(a,b,c,d,e,f,g,h i64)")
-    try assert_canonical("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
-    try assert_canonical("lib a fn abc(a string,b i64)")
-    try assert_canonical("lib a fn abc(a mut<[]abc>)")
+    try assert_canonical_lib("lib a fn abc(a,b i64)")
+    try assert_canonical_lib("lib a fn abc(a,b,c,d,e,f,g,h i64)")
+    try assert_canonical_lib("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
+    try assert_canonical_lib("lib a fn abc(a string,b i64)")
+    try assert_canonical_lib("lib a fn abc(a mut<[]abc>)")
 
     // NOTE: these issues will be caught by semsis
-    try assert_canonical("lib a fn abc(a)")
-    try assert_canonical("lib a fn abc(a,b)")
-    try assert_canonical("lib a fn abc(a i64,b)")
+    try assert_canonical_lib("lib a fn abc(a)")
+    try assert_canonical_lib("lib a fn abc(a,b)")
+    try assert_canonical_lib("lib a fn abc(a i64,b)")
 
-    try assert_canonical("lib a @abc(c) fn abc()")
-    try assert_canonical(`lib a @abc(a,1.1) fn abc()`)
-    try assert_canonical("lib a @xyz fn abc()")
+    try assert_canonical_lib("lib a @abc(c) fn abc()")
+    try assert_canonical_lib(`lib a @abc(a,1.1) fn abc()`)
+    try assert_canonical_lib("lib a @xyz fn abc()")
 
-    try assert_canonical("lib a pub fn abc()")
+    try assert_canonical_lib("lib a pub fn abc()")
     
-    try assert_canonical("lib a pub fn abc[T any]() {}")
-    try assert_canonical("lib a pub fn abc[T,E,U any]() {}")
-    try assert_canonical("lib a pub fn abc[T,E any,U any]() {}")
-    try assert_canonical("lib a pub fn abc[T any]()! {}")
+    try assert_canonical_lib("lib a pub fn abc[T any]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T,E,U any]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T,E any,U any]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T any]()! {}")
 
     try assert_error("lib a fn abc[() {}", [expected_identifier{i: 5}])
     try assert_error("lib a fn abc[T() {}", [expected_comma{i: 6}])
@@ -427,21 +430,21 @@ fn test_parse_function_statement()! {
 
 @test
 fn test_parse_if_statement()! {
-    try assert_canonical("lib a fn a() {if a {}}")
-    try assert_canonical("lib a fn a() {if (1 == 2) {}}")
-    try assert_canonical("lib a fn a() {if b() {}}")
-    try assert_canonical("lib a fn a() {if a {} else {}}")
-    try assert_canonical("lib a fn a() {if a {} else if b {}}")
-    try assert_canonical("lib a fn a() {if a {} else if b {} else {}}")
-    try assert_canonical("lib a fn a() {if a {} else if b {} else if c {} else {}}")
-    try assert_canonical("lib a fn a() {if a {} if b {}}")
-    try assert_canonical("lib a fn a() {if a {let x = 1}}")
-    try assert_canonical("lib a fn a() {if a {let x = 1 var y = 2}}")
-    try assert_canonical("lib a fn a() {if a {f()} else {g()}}")
+    try assert_canonical_lib("lib a fn a() {if a {}}")
+    try assert_canonical_lib("lib a fn a() {if (1 == 2) {}}")
+    try assert_canonical_lib("lib a fn a() {if b() {}}")
+    try assert_canonical_lib("lib a fn a() {if a {} else {}}")
+    try assert_canonical_lib("lib a fn a() {if a {} else if b {}}")
+    try assert_canonical_lib("lib a fn a() {if a {} else if b {} else {}}")
+    try assert_canonical_lib("lib a fn a() {if a {} else if b {} else if c {} else {}}")
+    try assert_canonical_lib("lib a fn a() {if a {} if b {}}")
+    try assert_canonical_lib("lib a fn a() {if a {let x = 1}}")
+    try assert_canonical_lib("lib a fn a() {if a {let x = 1 var y = 2}}")
+    try assert_canonical_lib("lib a fn a() {if a {f()} else {g()}}")
      
 
-    try assert_canonical("lib a fn a() {if a {if b {if c {}}}}")
-    try assert_canonical("lib a fn a() {if a {if b {if c {}} else if d {}}}")
+    try assert_canonical_lib("lib a fn a() {if a {if b {if c {}}}}")
+    try assert_canonical_lib("lib a fn a() {if a {if b {if c {}} else if d {}}}")
     
     try assert_error("lib a fn a() { if }", [expected_expression{i: 8}])
     try assert_error("lib a fn a() { else }", [unexpected_statement{i: 7}])
@@ -466,16 +469,16 @@ fn test_parse_if_statement()! {
 
 @test
 fn test_parse_for_statement()! {
-    try assert_canonical("lib a fn a() {for {}}")
-    try assert_canonical("lib a fn a() {for b {}}")
-    try assert_canonical("lib a fn a() {for (b > 2) {}}")
-    try assert_canonical("lib a fn a() {for b() {}}")
-    try assert_canonical("lib a fn a() {for i = 0;(i < len());i++ {}}")
-    try assert_canonical("lib a fn a() {for i = 0;(i < len());i = (i + 3) {}}")
+    try assert_canonical_lib("lib a fn a() {for {}}")
+    try assert_canonical_lib("lib a fn a() {for b {}}")
+    try assert_canonical_lib("lib a fn a() {for (b > 2) {}}")
+    try assert_canonical_lib("lib a fn a() {for b() {}}")
+    try assert_canonical_lib("lib a fn a() {for i = 0;(i < len());i++ {}}")
+    try assert_canonical_lib("lib a fn a() {for i = 0;(i < len());i = (i + 3) {}}")
     // TODO: we still need to add support for partial classic loops
-    // try assert_canonical("lib a fn a() {for i < len(); i++ {}}")
-    // try assert_canonical("lib a fn a() {for a in arr {}}")
-    // try assert_canonical("lib a fn a() {for a,b in arr {}}")
+    // try assert_canonical_lib("lib a fn a() {for i < len(); i++ {}}")
+    // try assert_canonical_lib("lib a fn a() {for a in arr {}}")
+    // try assert_canonical_lib("lib a fn a() {for a,b in arr {}}")
 
     try assert_error("lib a fn a() { for }", [expected_expression{i: 8}])
     try assert_error("lib a fn a() { for { }", [expected_brace{i: 10}])
@@ -490,36 +493,36 @@ fn test_parse_for_statement()! {
 
 @test
 fn test_parse_return_statement()! {
-    try assert_canonical("lib a fn a() {return}")
-    try assert_canonical("lib a fn a() {return 1}")
-    try assert_canonical("lib a fn a() {return x,y,z}")
-    try assert_canonical("lib a fn a() {return a(),b(),z.a()}")
+    try assert_canonical_lib("lib a fn a() {return}")
+    try assert_canonical_lib("lib a fn a() {return 1}")
+    try assert_canonical_lib("lib a fn a() {return x,y,z}")
+    try assert_canonical_lib("lib a fn a() {return a(),b(),z.a()}")
     try assert_parse("lib a fn a() {return x,}", "lib a fn a() {return x}")
 }
 
 @test
 fn test_parse_keyword_statement()! {
-    try assert_canonical("lib a fn a() {break}")
-    try assert_canonical("lib a fn a() {next}")
+    try assert_canonical_lib("lib a fn a() {break}")
+    try assert_canonical_lib("lib a fn a() {next}")
 }
 
 @test
 fn test_parse_try_expression()! {
-    try assert_canonical("lib a fn a() {try x()}")
-    try assert_canonical("lib a fn a() {try a.b.c.d.e()}")
-    try assert_canonical("lib a fn a() {let x = try x()}")
-    try assert_canonical("lib a fn a() {x,y,z = x(),try y(),z()}")
-    try assert_canonical("lib a fn a() {try x() try y()}")
+    try assert_canonical_lib("lib a fn a() {try x()}")
+    try assert_canonical_lib("lib a fn a() {try a.b.c.d.e()}")
+    try assert_canonical_lib("lib a fn a() {let x = try x()}")
+    try assert_canonical_lib("lib a fn a() {x,y,z = x(),try y(),z()}")
+    try assert_canonical_lib("lib a fn a() {try x() try y()}")
 
     try assert_error("lib a fn a() {try}", [expected_expression{i: 8}])
 }
 
 @test
 fn test_parse_catch_statement()! {
-    try assert_canonical("lib a fn a() {x() catch y {}}")
-    try assert_canonical("lib a fn a() {x() catch y {let x = 1}}")
-    try assert_canonical("lib a fn a() {x() catch y {let x = 1 for {}}}")
-    try assert_canonical("lib a fn a() {let x = x() catch y {}}")
+    try assert_canonical_lib("lib a fn a() {x() catch y {}}")
+    try assert_canonical_lib("lib a fn a() {x() catch y {let x = 1}}")
+    try assert_canonical_lib("lib a fn a() {x() catch y {let x = 1 for {}}}")
+    try assert_canonical_lib("lib a fn a() {let x = x() catch y {}}")
 
     try assert_error("lib a fn a() {x() catch}", [expected_identifier{i: 11}])
     try assert_error("lib a fn a() {x() catch x}", [expected_brace{i: 12}])
@@ -528,19 +531,19 @@ fn test_parse_catch_statement()! {
 
 @test
 fn test_parse_raise_statement()! {
-    try assert_canonical("lib a fn a() {raise x}")
-    try assert_canonical("lib a fn a() {raise x.y}")
-    try assert_canonical("lib a fn a() {raise x.y{a:1,b:b()}}")
+    try assert_canonical_lib("lib a fn a() {raise x}")
+    try assert_canonical_lib("lib a fn a() {raise x.y}")
+    try assert_canonical_lib("lib a fn a() {raise x.y{a:1,b:b()}}")
     
     try assert_error("lib a fn a() {raise}", [expected_expression{i: 8}])
 }
 
 @test
 fn test_parse_defer_statement()! {
-    try assert_canonical("lib a fn a() {defer x()}")
-    try assert_canonical("lib a fn a() {defer a.b()}")
-    try assert_canonical("lib a fn a() {defer {}}")
-    try assert_canonical("lib a fn a() {defer {var y = c() y = d()}}")
+    try assert_canonical_lib("lib a fn a() {defer x()}")
+    try assert_canonical_lib("lib a fn a() {defer a.b()}")
+    try assert_canonical_lib("lib a fn a() {defer {}}")
+    try assert_canonical_lib("lib a fn a() {defer {var y = c() y = d()}}")
 
     try assert_error("lib a fn a() {defer}", [expected_expression{i: 8}])
     // try assert_error("lib a fn a() {defer x}", [expected_function_call{i: 8}])
@@ -550,17 +553,17 @@ fn test_parse_defer_statement()! {
 
 @test
 fn test_parse_match_statement()! {
-    try assert_canonical("lib a fn a() {match x {}}")
-    try assert_canonical("lib a fn a() {match 1 {}}")
-    try assert_canonical("lib a fn a() {match a() {}}")
-    try assert_canonical("lib a fn a() {match y = x {}}")
-    try assert_canonical("lib a fn a() {match x {case _:}}")
-    try assert_canonical("lib a fn a() {match x {case _: let x = 2}}")
-    try assert_canonical("lib a fn a() {match x {case _: if y {} else {} x = a()}}")
-    try assert_canonical("lib a fn a() {match x {case 1,2:}}")
-    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f:}}")
-    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f: case _:}}")
-    try assert_canonical("lib a fn a() {match x {case 1,abc.x,f: case 2: case 3: case 4: case 5:}}")
+    try assert_canonical_lib("lib a fn a() {match x {}}")
+    try assert_canonical_lib("lib a fn a() {match 1 {}}")
+    try assert_canonical_lib("lib a fn a() {match a() {}}")
+    try assert_canonical_lib("lib a fn a() {match y = x {}}")
+    try assert_canonical_lib("lib a fn a() {match x {case _:}}")
+    try assert_canonical_lib("lib a fn a() {match x {case _: let x = 2}}")
+    try assert_canonical_lib("lib a fn a() {match x {case _: if y {} else {} x = a()}}")
+    try assert_canonical_lib("lib a fn a() {match x {case 1,2:}}")
+    try assert_canonical_lib("lib a fn a() {match x {case 1,abc.x,f:}}")
+    try assert_canonical_lib("lib a fn a() {match x {case 1,abc.x,f: case _:}}")
+    try assert_canonical_lib("lib a fn a() {match x {case 1,abc.x,f: case 2: case 3: case 4: case 5:}}")
 }
 
 // ------- //
@@ -582,11 +585,19 @@ fn assert_parse(input, want string)! {
     try assert(want == string(got), "expected AST to match")    
 }
 
+fn assert_canonical_lib(input string)! {
+    try assert_canonical(input, mode.lib)
+}
+
+fn assert_canonical_exp(input string)! {
+    try assert_canonical(input, mode.exp)
+}
+
 // assert_canonical asserts that input is equal
 // to the string representation of AST produced
 // by parser
-fn assert_canonical(input string)! {
-    let a1 = try parse([]byte(input), mode.lib)
+fn assert_canonical(input string, m mode)! {
+    let a1 = try parse([]byte(input), m)
     if len(a1.errs) != 0 {
         println(a1.errs)
     }
@@ -601,7 +612,7 @@ fn assert_canonical(input string)! {
     try assert(input == string(got1), "expected AST to match")
 
     // re-parse 
-    let a2 = try parse(got1, mode.lib)
+    let a2 = try parse(got1, m)
     try assert(len(a2.errs) == 0, "expected no errors")
     
     let idx = ast.index(len(a2.nodes)-1)
