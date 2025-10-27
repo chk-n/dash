@@ -211,7 +211,7 @@ func TestImportLibrary(t *testing.T) {
 			if len(tt.errors) > 0 {
 				gotErrs := semsis.Errors()
 				if len(gotErrs) != len(tt.errors) {
-					t.Errorf("want %d errors but got %d errors. %s", len(gotErrs), len(tt.errors), gotErrs)
+					t.Errorf("want %d errors but got %d errors. %s", len(tt.errors), len(gotErrs), gotErrs)
 				}
 				for i, err := range semsis.Errors() {
 					if err != tt.errors[i] {
