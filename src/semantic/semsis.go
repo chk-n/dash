@@ -428,15 +428,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.ConditionalExpression:
 		s.analyse(n.Condition, "")
 		s.analyse(n.Block, "")
-	case *ast.CopyExpression:
-		// validate identifier defined
-		s.analyse(n.Ident, "")
-	case *ast.CopyUpdateExpression:
-		// validate identifier defined
-		s.analyse(n.Ident, "")
-		s.varSt.Set(name, &VarInfo{Type: n.Type(), Reassignable: true})
-
-		s.analyse(n.Block, "")
 	case *ast.StructLiteral:
 		// Infer types of anonymous structs
 		if n.Name == nil {

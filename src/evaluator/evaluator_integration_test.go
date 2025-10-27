@@ -23,12 +23,11 @@ func TestEvalLibrary(t *testing.T) {
 			--
 			use "one"
 			
+
 			struct point { x one.abc }
 
 			var p = point{x: 1}
-			p = p^{
-			   p.x = p.x + 4 
-			}
+			p = put(p, {x: p.x + 4})
 			p`,
 			want: map[string]any{
 				"x": int64(5),

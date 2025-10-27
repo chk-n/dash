@@ -1135,58 +1135,6 @@ func TestMatchErrorStatement(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
-func TestCopyExpression(t *testing.T) {
-	tests := []testCase{
-		{
-			name:  "copy",
-			input: "let x = 1 let y = x^",
-			want:  "lib main pub fn main() { let x i64 = 1 let y i64 = x^ }",
-		},
-		{
-			name:  "copy and update - struct",
-			input: "let a = {x: 1,y: 2} let b = a^ { b.x = 2 }",
-			want:  "lib main pub fn main() { let a struct<x i64, y i64> = {x i64: 1, y i64: 2} let b struct<x i64, y i64> = a^ { b.x i64 = 2 } }",
-		},
-		{
-			name:  "copy and update - array",
-			input: "let a = [0,1,2,3] let b = a^ { b[2] = 1 }",
-			want:  "lib main pub fn main() { let a []i64 = [0,1,2,3] let b []i64 = a^ { b[2] i64 = 1 } }",
-		},
-		{
-			name:   "update outside of CopyUpdateExpression",
-			input:  "let a = {x: 1,y: 2} a.x = 2",
-			errors: []string{"illegal update of 'a'"},
-		},
-		{
-			name:  "copy update guarded type",
-			input: `type abc []string | len(abc) < 10 let a = abc(["h", "w"]) let b = a^ { b[0] = "1" }`,
-			want:  `lib main type abc []string | (len(abc) < 10) pub fn main() { let a dirty<abc> = abc(["h","w"]) let b dirty<abc> = a^ { b[0] string = "1" } }`,
-		},
-		// TODO: improve semantic analysis
-		// {
-		// 	name:   "copy and update - copy passed to function",
-		// 	input:  "let a = [0,1,2,3] let b = a^ { test(b) } fn test(a []i64) { }",
-		// 	errors: []string{""},
-		// },
-		// {
-		// 	name:   "copy and update - return in update block",
-		// 	input:  "a = [0,1,2,3] b = a^ { return b }",
-		// 	errors: []string{""},
-		// },
-		{
-			name:  "copy and update - anonymous fn in update block",
-			input: "let a = [0,1,2,3] let b = a^ { let test = fn(x i64) { } }",
-			want:  "lib main pub fn main() { let a []i64 = [0,1,2,3] let b []i64 = a^ { let test fn(i64) = fn(x i64) { } } }",
-		},
-		{
-			name:  "copy update entire struct",
-			input: "struct abc {x i64} let a = abc{x: 1} let b = a^ { b = abc{x: 2}",
-			want:  "lib main struct abc {x i64} pub fn main() { let a abc = abc{x i64: 1} let b abc = a^ { b abc = abc{x i64: 2} } }",
-		},
-	}
-	runAnalysisTests(t, tests)
-}
-
 func TestMutable(t *testing.T) {
 	tests := []testCase{
 		{
@@ -1554,11 +1502,6 @@ func TestCallArgumentTypeCoercion(t *testing.T) {
 			name:   "int literal, overflow",
 			input:  "fn test(x u8) {} test(257)",
 			errors: []string{"integer literal '257' overflows 'u8'"},
-		},
-		{
-			name:  "append error to error array",
-			input: "struct abc { errs []error } fn test(a abc, errs []error) { let a = a^{ a.errs = errs } }",
-			want:  "lib main struct abc {errs []error} fn test(a abc,errs []error) { let a abc = a^ { a.errs []error = errs } } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)

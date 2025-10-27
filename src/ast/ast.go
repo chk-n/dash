@@ -1179,41 +1179,6 @@ func (e *SliceExpression) String() string {
 	return out.String()
 }
 
-// x^
-type CopyExpression struct {
-	Token token.Token
-	Ident Expression
-}
-
-func (e *CopyExpression) expressionNode()      {}
-func (e *CopyExpression) Type() types.Type     { return e.Ident.Type() }
-func (e *CopyExpression) SetType(t types.Type) {}
-func (e *CopyExpression) TokenLiteral() string { return e.Token.Literal }
-func (e *CopyExpression) String() string {
-	return e.Ident.String() + e.TokenLiteral()
-}
-
-// x^ { x.field = 2 }
-type CopyUpdateExpression struct {
-	Token token.Token
-	Ident Expression
-	Block *BlockStatement
-}
-
-func (e *CopyUpdateExpression) expressionNode()      {}
-func (e *CopyUpdateExpression) Type() types.Type     { return e.Ident.Type() }
-func (e *CopyUpdateExpression) SetType(t types.Type) {}
-func (e *CopyUpdateExpression) TokenLiteral() string { return e.Token.Literal }
-func (e *CopyUpdateExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Ident.String())
-	out.WriteString(e.TokenLiteral())
-	out.WriteString(" " + e.Block.String())
-
-	return out.String()
-}
-
 type TypeLiteral struct {
 	Token token.Token
 	T     types.Type
@@ -1696,14 +1661,6 @@ func (e *IndexExpression) Pos() token.Pos {
 }
 
 func (e *SliceExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *CopyExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *CopyUpdateExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 

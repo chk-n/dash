@@ -610,31 +610,6 @@ func TestArrayLiteral(t *testing.T) {
 	}
 }
 
-func TestCopyExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "shallow copy", input: "x^", want: "x^"},
-		{
-			name:  "shallow copy with modification",
-			input: "x^ { x.field = 1 }",
-			want:  "x^ { x.field = 1 }",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := getParser(tt.input)
-			stmt := p.parseExpression(LOWEST)
-
-			if tt.want != stmt.String() {
-				t.Errorf("want %s but got %s", tt.input, stmt.String())
-			}
-		})
-	}
-}
 
 // ---------------------- //
 // Function related tests //

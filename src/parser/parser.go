@@ -29,7 +29,7 @@ const (
 	PRODUCT       // *
 	DIVIDE        // /
 	NULL_COALESCE // ??
-	PREFIX        // -5, !false, ?x
+	PREFIX        // -5, !false, ?x, ~x
 	POSTFIX       // x++
 	CALL          // myFunction(X)
 	SLICE         // a[0]
@@ -180,7 +180,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPostfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerPostfix(token.INCR, p.parsePostfixExpression)
 	p.registerPostfix(token.DECR, p.parsePostfixExpression)
-	p.registerPostfix(token.CARET, p.parseCopyExpression)
 
 	p.attributeParseFns = make(map[string]attributeParseFn)
 	p.registerAttribute("extern", p.parseExternAttribute)
@@ -1588,16 +1587,6 @@ func (p *Parser) parseIndexOrSliceExpression(left ast.Expression) ast.Expression
 
 }
 
-func (p *Parser) parseCopyExpression(left ast.Expression) ast.Expression {
-	carat := p.curToken
-	p.nextToken()
-
-	if p.curTokenIs(token.LBRACE) {
-		block := p.parseBlockStatement()
-		return &ast.CopyUpdateExpression{Token: carat, Ident: left, Block: block}
-	}
-	return &ast.CopyExpression{Token: carat, Ident: left}
-}
 
 // Handles parsing:
 // types as expressions (e.g. for 'make([]byte, 100)'),

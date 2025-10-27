@@ -3,7 +3,6 @@ package evaluator
 import (
 	"fmt"
 	"hash/fnv"
-	"maps"
 	"path"
 	"reflect"
 	"strconv"
@@ -256,8 +255,6 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		return n.Value
 	case *ast.NullLiteral:
 		return Optional{isValid: false}
-	case *ast.CopyUpdateExpression:
-		return e.evalCopyUpdateExpression(n.Ident.TokenLiteral(), n, ctx)
 	case *ast.Comment:
 		return nil
 	case nil:
@@ -460,13 +457,6 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 	// g. if in use expression
 
 	for i, val := range n.Values {
-		// special case for copy update as it requires to set
-		// the copied value to context before executing body
-		if val, ok := val.(*ast.CopyUpdateExpression); ok {
-			res := e.evalCopyUpdateExpression(n.VarNameAt(i), val, ctx)
-			setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
-			continue
-		}
 		switch val.Type().(type) {
 		case *types.Multi:
 			res := e.Eval(val, ctx).(*Return)
@@ -838,33 +828,6 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) an
 		}
 	}
 	return &Return{Values: vals}
-}
-
-func (e *Evaluator) evalCopyUpdateExpression(newVar string, n *ast.CopyUpdateExpression, stk *Context) any {
-	orig := e.Eval(n.Ident, stk)
-
-	// make a deep copy
-	var cpy any
-	switch v := orig.(type) {
-	case []any:
-		newArr := make([]any, len(v))
-		copy(newArr, v)
-		cpy = newArr
-
-	case map[string]any:
-		newMap := make(map[string]any, len(v))
-		maps.Copy(newMap, v)
-		cpy = newMap
-
-	default:
-		panic("this is a compiler error. please report")
-	}
-
-	stk.Set(newVar, cpy)
-
-	e.Eval(n.Block, stk)
-
-	return cpy
 }
 
 func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
