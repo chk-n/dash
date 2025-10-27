@@ -23,7 +23,7 @@ var (
 		return fmt.Errorf("expression is not used")
 	}
 	errIllegalOperationOnType = func(op, typ string) error {
-		return fmt.Errorf("illegal use of '%s' operation on type '%s'", op, typ)
+		return fmt.Errorf("illegal operation '%s' on type '%s'", op, typ)
 	}
 	errIllegalTypeCast = func(fromType, toType string) error {
 		return fmt.Errorf("illegal type cast from '%s' to '%s'", fromType, toType)
@@ -214,6 +214,16 @@ var (
 	}
 	errIllegalValueOf = func(reason string) error {
 		return fmt.Errorf("illegal 'value of' operation: %s", reason)
+	}
+)
+
+// -------------- //
+// Bitwise ops    //
+// -------------- //
+
+var (
+	errIllegalBinaryOpOnNonInteger = func(op string) error {
+		return fmt.Errorf("illegal '%s' operation: can only be used with integer types", op)
 	}
 )
 

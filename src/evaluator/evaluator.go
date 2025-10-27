@@ -1008,6 +1008,8 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) 
 		val, err = e.evalPrefixMinus(val)
 	case token.BANG:
 		val, err = e.evalPrefixNot(val)
+	case token.BNOT:
+		val, err = e.evalPrefixBitwiseNot(val)
 	case token.OPTIONAL:
 		if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
 			val = unwrapFunctionResult(val, 0)
@@ -1062,6 +1064,19 @@ func (e *Evaluator) evalPrefixNot(v any) (any, error) {
 		return !v.Values[0].(bool), nil
 	default:
 		return nil, fmt.Errorf("cannot apply not to type %T", v)
+	}
+}
+
+func (e *Evaluator) evalPrefixBitwiseNot(v any) (any, error) {
+	switch v := v.(type) {
+	case int64:
+		return ^v, nil
+	case byte:
+		return ^v, nil
+	case rune:
+		return ^v, nil
+	default:
+		return nil, fmt.Errorf("cannot apply bitwise NOT to type %T", v)
 	}
 }
 
@@ -1132,6 +1147,17 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 	// Assignment
 	case token.ASSIGN:
 		val = e.evalInfixAssign(n, r, ctx)
+	// Bitwise
+	case token.LSHIFT:
+		val, err = e.evalInfixLeftShift(l, r)
+	case token.RSHIFT:
+		val, err = e.evalInfixRightShift(l, r)
+	case token.AMPERSAND:
+		val, err = e.evalInfixBitwiseAnd(l, r)
+	case token.BAR:
+		val, err = e.evalInfixBitwiseOr(l, r)
+	case token.CARET:
+		val, err = e.evalInfixBitwiseXor(l, r)
 	// Special
 	case token.COLON:
 		val = []any{l, r}
@@ -1232,6 +1258,106 @@ func (e *Evaluator) evalInfixMod(l, r any) (res any, err error) {
 		res = l % r_
 	default:
 		err = fmt.Errorf("unsupported type for modulo %T", l)
+	}
+	return
+}
+
+func (e *Evaluator) evalInfixLeftShift(l, r any) (res any, err error) {
+	switch l := l.(type) {
+	case int64:
+		var r_ int64
+		r_, err = castTo[int64](r)
+		res = l << r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l << r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
+		res = l << r_
+	default:
+		err = fmt.Errorf("unsupported type for left shift %T", l)
+	}
+	return
+}
+
+func (e *Evaluator) evalInfixRightShift(l, r any) (res any, err error) {
+	switch l := l.(type) {
+	case int64:
+		var r_ int64
+		r_, err = castTo[int64](r)
+		res = l >> r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l >> r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
+		res = l >> r_
+	default:
+		err = fmt.Errorf("unsupported type for right shift %T", l)
+	}
+	return
+}
+
+func (e *Evaluator) evalInfixBitwiseAnd(l, r any) (res any, err error) {
+	switch l := l.(type) {
+	case int64:
+		var r_ int64
+		r_, err = castTo[int64](r)
+		res = l & r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l & r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
+		res = l & r_
+	default:
+		err = fmt.Errorf("unsupported type for bitwise AND %T", l)
+	}
+	return
+}
+
+func (e *Evaluator) evalInfixBitwiseOr(l, r any) (res any, err error) {
+	switch l := l.(type) {
+	case int64:
+		var r_ int64
+		r_, err = castTo[int64](r)
+		res = l | r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l | r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
+		res = l | r_
+	default:
+		err = fmt.Errorf("unsupported type for bitwise OR %T", l)
+	}
+	return
+}
+
+func (e *Evaluator) evalInfixBitwiseXor(l, r any) (res any, err error) {
+	switch l := l.(type) {
+	case int64:
+		var r_ int64
+		r_, err = castTo[int64](r)
+		res = l ^ r_
+	case byte:
+		var r_ byte
+		r_, err = castTo[byte](r)
+		res = l ^ r_
+	case rune:
+		var r_ rune
+		r_, err = castTo[rune](r)
+		res = l ^ r_
+	default:
+		err = fmt.Errorf("unsupported type for bitwise XOR %T", l)
 	}
 	return
 }

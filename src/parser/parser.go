@@ -20,10 +20,14 @@ const (
 	COLON         // :
 	ASSIGN        // =
 	OR            // ||
+	BITWISE_OR    // |
+	BITWISE_XOR   // ^
 	AND           // &&
+	BITWISE_AND   // &
 	EQUALS        // ==
 	LESSGREATER   // > or <
 	LESSGREATEREQ // >= or <=
+	SHIFT         // << >>
 	SUM           // +
 	SUBTRACT      // -
 	PRODUCT       // *
@@ -47,6 +51,11 @@ var precedences = map[token.Type]int{
 	token.LTE:           LESSGREATEREQ,
 	token.OR:            OR,
 	token.AND:           AND,
+	token.BAR:           BITWISE_OR,
+	token.CARET:         BITWISE_XOR,
+	token.AMPERSAND:     BITWISE_AND,
+	token.LSHIFT:        SHIFT,
+	token.RSHIFT:        SHIFT,
 	token.PLUS:          SUM,
 	token.MINUS:         SUM,
 	token.SLASH:         PRODUCT,
@@ -104,6 +113,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.AMPERSAND, p.parsePrefixExpression)
 	p.registerPrefix(token.ASTERISK, p.parsePrefixExpression)
 	p.registerPrefix(token.OPTIONAL, p.parsePrefixExpression)
+	p.registerPrefix(token.BNOT, p.parsePrefixExpression)
 	// Literal parse functions
 	p.registerPrefix(token.IDENT, p.parseIdentifierStructLiteralOrFunctionCall)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
@@ -167,12 +177,11 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerInfix(token.ASSIGN, p.parseInfixExpression)
 	p.registerInfix(token.NULL_COALESCE, p.parseInfixExpression)
-
-	// p.registerInfix(token.LSHIFT, p.parseInfixExpression)
-	// p.registerInfix(token.RSHIFT, p.parseInfixExpression)
-	// p.registerInfix(token.BAR, p.parseInfixExpression)
-	// p.registerInfix(token.CARET, p.parseInfixExpression)
-	// p.registerInfix(token.BNOT, p.parseInfixExpression) // TODO: maybe we change token
+	p.registerInfix(token.LSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.RSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.BAR, p.parseInfixExpression)
+	p.registerInfix(token.CARET, p.parseInfixExpression)
+	p.registerInfix(token.AMPERSAND, p.parseInfixExpression)
 	// p.registerInfix(token.BANDNOT, p.parseInfixExpression)
 	p.registerInfix(token.CATCH, p.parseCatchExpression)
 

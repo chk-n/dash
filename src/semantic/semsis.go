@@ -1032,6 +1032,16 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		case token.BANG:
 			// TODO: check only possible on value of type bool
+		case token.BNOT:
+			// Check if the type is an integer type
+			underlyingType := types.GetUnderlyingType(n.T)
+			switch underlyingType.(type) {
+			case *types.Int, *types.Byte, *types.Char:
+				// Type remains the same
+			default:
+				s.addError(n, errIllegalBinaryOpOnNonInteger(n.TokenLiteral()))
+				return
+			}
 		}
 	case *ast.InfixExpression:
 
@@ -1126,10 +1136,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		// type is already dirty<T> we ensure the infix expression type
 		// remains dirty
 		switch n.Token.Type {
-		// TODO: add binary operations
 		case token.PLUS, token.MINUS, token.ASTERISK,
 			token.SLASH, token.MOD, token.NULL_COALESCE,
-			token.ASSIGN:
+			token.ASSIGN, token.LSHIFT, token.RSHIFT,
+			token.AMPERSAND, token.BAR, token.CARET:
 			// if already dirty we skip
 			if _, ok := rightT.(*types.Dirty); ok {
 				break
@@ -1747,7 +1757,8 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 		case token.PLUS, token.MINUS, token.ASTERISK,
 			token.SLASH, token.MOD, token.LT, token.LTE,
 			token.GT, token.GTE, token.EQ, token.NEQ,
-			token.COLON:
+			token.COLON, token.LSHIFT, token.RSHIFT,
+			token.AMPERSAND, token.BAR, token.CARET:
 			return true
 		default:
 			return false
@@ -1779,7 +1790,8 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 		switch tkn {
 		case token.PLUS, token.MINUS, token.ASTERISK,
 			token.SLASH, token.MOD, token.EQ, token.NEQ,
-			token.LT, token.LTE, token.GT, token.GTE:
+			token.LT, token.LTE, token.GT, token.GTE,
+			token.LSHIFT, token.RSHIFT, token.AMPERSAND, token.BAR, token.CARET:
 			return true
 		default:
 			return false
@@ -1788,7 +1800,8 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 		switch tkn {
 		case token.PLUS, token.MINUS, token.ASTERISK,
 			token.SLASH, token.MOD, token.EQ, token.NEQ,
-			token.LT, token.LTE, token.GT, token.GTE:
+			token.LT, token.LTE, token.GT, token.GTE,
+			token.LSHIFT, token.RSHIFT, token.AMPERSAND, token.BAR, token.CARET:
 			return true
 		default:
 			return false

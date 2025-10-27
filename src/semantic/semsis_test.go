@@ -295,12 +295,12 @@ func TestOptionalType(t *testing.T) {
 		{
 			name:   "null coalesce on non optional literal",
 			input:  "let a = 1 ?? 2",
-			errors: []string{"illegal use of '??' operation on type 'i64'"},
+			errors: []string{"illegal operation '??' on type 'i64'"},
 		},
 		{
 			name:   "null coalesce on non optional ident",
 			input:  "let a = 2 let b = a ?? 2",
-			errors: []string{"illegal use of '??' operation on type 'i64'"},
+			errors: []string{"illegal operation '??' on type 'i64'"},
 		},
 		{
 			name:   "null coalsce with both optional",
@@ -1831,6 +1831,82 @@ func TestGenericStructs(t *testing.T) {
 		// TODO: add error case where generic struct not instantiated with a type
 		// TODO: add tests where constraint violated
 
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestBitwiseOperations(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "left shift",
+			input: "let a = 1 << 2",
+			want:  "lib main pub fn main() { let a i64 = (1 << 2) }",
+		},
+		{
+			name:  "right shift",
+			input: "let a = 8 >> 2",
+			want:  "lib main pub fn main() { let a i64 = (8 >> 2) }",
+		},
+		{
+			name:  "bitwise AND",
+			input: "let a = 5 & 3",
+			want:  "lib main pub fn main() { let a i64 = (5 & 3) }",
+		},
+		{
+			name:  "bitwise OR",
+			input: "let a = 5 | 3",
+			want:  "lib main pub fn main() { let a i64 = (5 | 3) }",
+		},
+		{
+			name:  "bitwise XOR",
+			input: "let a = 5 ^ 3",
+			want:  "lib main pub fn main() { let a i64 = (5 ^ 3) }",
+		},
+		{
+			name:  "bitwise NOT",
+			input: "let a = ~5",
+			want:  "lib main pub fn main() { let a i64 = ~5 }",
+		},
+		{
+			name:  "bitwise with byte",
+			input: "let a = byte(15) & byte(7)",
+			want:  "lib main pub fn main() { let a byte = (byte(15) & byte(7)) }",
+		},
+		{
+			name:  "bitwise XOR with byte",
+			input: "let a = byte(15) ^ byte(7)",
+			want:  "lib main pub fn main() { let a byte = (byte(15) ^ byte(7)) }",
+		},
+		{
+			name:  "bitwise with u8",
+			input: "let a = u8(1) << u8(2)",
+			want:  "lib main pub fn main() { let a u8 = (u8(1) << u8(2)) }",
+		},
+		{
+			name:  "combined operations",
+			input: "let a = (5 & 3) | (8 >> 1)",
+			want:  "lib main pub fn main() { let a i64 = ((5 & 3) | (8 >> 1)) }",
+		},
+		{
+			name:   "shift on float",
+			input:  "let a = 1.0 << 2",
+			errors: []string{"type mistmatch, expected type 'i64' but got 'f64'"},
+		},
+		{
+			name:   "bitwise AND on string",
+			input:  `let a = "hello" & "world"`,
+			errors: []string{"illegal operation '&' on type 'string'"},
+		},
+		{
+			name:   "bitwise NOT on float",
+			input:  "let a = ~1.0",
+			errors: []string{"illegal '~' operation: can only be used with integer types"},
+		},
+		{
+			name:   "bitwise XOR on string",
+			input:  `let a = "hello" ^ "world"`,
+			errors: []string{"illegal operation '^' on type 'string'"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }

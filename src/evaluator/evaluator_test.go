@@ -109,6 +109,76 @@ func TestEvaluateInfix(t *testing.T) {
 	}
 }
 
+func TestBitwiseOperations(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "left shift",
+			prog: "1 << 2",
+			want: int64(4),
+		},
+		{
+			name: "right shift",
+			prog: "8 >> 2",
+			want: int64(2),
+		},
+		{
+			name: "bitwise AND",
+			prog: "5 & 3",
+			want: int64(1),
+		},
+		{
+			name: "bitwise OR",
+			prog: "5 | 3",
+			want: int64(7),
+		},
+		{
+			name: "bitwise XOR",
+			prog: "5 ^ 3",
+			want: int64(6),
+		},
+		{
+			name: "bitwise NOT",
+			prog: "~5",
+			want: int64(-6),
+		},
+		{
+			name: "combined operations",
+			prog: "(5 & 3) | (8 >> 1)",
+			want: int64(5),
+		},
+		{
+			name: "bitwise with byte",
+			prog: "byte(15) & byte(7)",
+			want: byte(7),
+		},
+		{
+			name: "bitwise NOT with byte",
+			prog: "~byte(255)",
+			want: byte(0),
+		},
+		{
+			name: "bitwise XOR with byte",
+			prog: "byte(15) ^ byte(10)",
+			want: byte(5),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := parseExpression(tt.prog)
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+			if got != tt.want {
+				t.Errorf("got: %v but want: %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCharOperations(t *testing.T) {
 	tests := []struct {
 		name string

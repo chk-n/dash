@@ -176,6 +176,14 @@ func TestPrefixExpression(t *testing.T) {
 			name:  "force unwrap value of",
 			input: "?*a",
 		},
+		{
+			name:  "bitwise NOT",
+			input: "~a",
+		},
+		{
+			name:  "bitwise NOT with number",
+			input: "~5",
+		},
 	}
 
 	for _, tc := range tests {
@@ -270,6 +278,91 @@ func TestInfixExpression(t *testing.T) {
 			name:  "dot access with arithmetic and function call",
 			input: "a.b + a.c()",
 			want:  "(a.b + a.c())",
+		},
+		{
+			name:  "bitwise left shift",
+			input: "1 << 2",
+			want:  "(1 << 2)",
+		},
+		{
+			name:  "bitwise right shift",
+			input: "8 >> 2",
+			want:  "(8 >> 2)",
+		},
+		{
+			name:  "bitwise AND",
+			input: "5 & 3",
+			want:  "(5 & 3)",
+		},
+		{
+			name:  "bitwise OR",
+			input: "5 | 3",
+			want:  "(5 | 3)",
+		},
+		{
+			name:  "bitwise XOR",
+			input: "5 ^ 3",
+			want:  "(5 ^ 3)",
+		},
+		{
+			name:  "bitwise XOR with variables",
+			input: "a ^ b",
+			want:  "(a ^ b)",
+		},
+		{
+			name:  "combined bitwise operations",
+			input: "a << 2 | b & 255",
+			want:  "((a << 2) | (b & 255))",
+		},
+		{
+			name:  "bitwise with XOR",
+			input: "a ^ b & c",
+			want:  "(a ^ (b & c))",
+		},
+		{
+			name:  "XOR with OR",
+			input: "a | b ^ c",
+			want:  "(a | (b ^ c))",
+		},
+		{
+			name:  "XOR precedence",
+			input: "1 & 2 ^ 3 | 4",
+			want:  "(((1 & 2) ^ 3) | 4)",
+		},
+		{
+			name:  "bitwise with arithmetic",
+			input: "a + b & 255",
+			want:  "((a + b) & 255)",
+		},
+		{
+			name:  "shift with arithmetic",
+			input: "1 << 2 + 3",
+			want:  "(1 << (2 + 3))",
+		},
+		{
+			name:  "complex bitwise expression",
+			input: "(a & 255) << 8 | (b & 255)",
+			want:  "(((a & 255) << 8) | (b & 255))",
+		},
+		{
+			name:  "bitwise NOT with infix",
+			input: "~a & 255",
+			want:  "(~a & 255)",
+		},
+		{
+			name:  "precedence: OR vs AND",
+			input: "a | b & c",
+			want:  "(a | (b & c))",
+		},
+		{
+			name:  "precedence: AND vs shift",
+			input: "a & b << 2",
+			want:  "(a & (b << 2))",
+		},
+		{
+			name:  "precedence: shift vs addition",
+			input: "a << b + c",
+			want:  "(a << (b + c))",
 		},
 	}
 
