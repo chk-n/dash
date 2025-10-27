@@ -102,6 +102,10 @@ func (s *Semantics) Analyse(lib *ast.Library) {
 	s.analyseDuplicateIdentifiers(lib.Nodes)
 	s.analyseCircularTypeReferences(lib.Nodes)
 
+	// NOTE: global assignments that call functions
+	// are not supported yet
+	s.registerGlobalAssignments(lib.Nodes)
+
 	s.analyse(lib, "")
 }
 
@@ -124,11 +128,25 @@ func (s *Semantics) ErrorsFmt() []string {
 	return errs
 }
 
+// registerGlobalAssignments registers all top-level variable declarations
+// in the symbol table before analyzing function bodies
+func (s *Semantics) registerGlobalAssignments(nodes []ast.Node) {
+	for _, node := range nodes {
+		if assignStmt, ok := node.(*ast.AssignmentStatement); ok {
+			s.analyseAssignmentStatement(assignStmt)
+		}
+	}
+}
+
 // Builds symbol table for function arguments and variables, it performs some basic type inference too
 func (s *Semantics) analyse(n ast.Node, name string) {
 	switch n := n.(type) {
 	case *ast.Library:
 		for _, fn := range n.Nodes {
+			// Skip assignment statements as they were already processed in registerTopLevelDeclarations
+			if _, ok := fn.(*ast.AssignmentStatement); ok {
+				continue
+			}
 			s.analyse(fn, "")
 		}
 	case *ast.TypeDefinitionStatement:
@@ -1527,8 +1545,6 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 			}
 			n.T = err
 			s.varSt.Set(n.Name.String(), &VarInfo{Type: n.Type()})
-		case *ast.AssignmentStatement:
-			// TODO
 		}
 	}
 }
