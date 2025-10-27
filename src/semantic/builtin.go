@@ -10,7 +10,11 @@ import (
 
 func isBuiltinFunction(lit string) bool {
 	switch lit {
-	case "append", "len", "cap", "size", "make", "validate", "println", "assert":
+	case
+		"put", "get", //"remove",
+		"append", "slice", 
+		"len", "cap",
+		"size", "make", "validate", "println", "assert":
 		return true
 	}
 	return false
@@ -29,6 +33,34 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 
 	switch lit {
 	case "append":
+		args = []types.Type{argsTypes[0], argsTypes[1]}
+		rets = []types.Type{argsTypes[0]}
+	case "put":
+		// Two different signatures:
+		// 1. For arrays/maps: fn put[T any](arr []T, idx i64, v T) []T
+		// 2. For structs: fn put[T any](s1 T, s2 T) T
+		if len(argsTypes) == 2 {
+			args = []types.Type{argsTypes[0], argsTypes[1]}
+			rets = []types.Type{argsTypes[0]}
+		} else {
+			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
+			rets = []types.Type{argsTypes[0]}
+		}
+	case "insert":
+		// fn insert[T any](arr []T, idx i64, v T) []T
+		args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
+		rets = []types.Type{argsTypes[0]}
+	case "get":
+		// fn get[T any]([]T, idx i64) T
+		elemType := argsTypes[0].(*types.Array).T
+		args = []types.Type{argsTypes[0], &types.ConstI64}
+		rets = []types.Type{elemType}
+	case "slice":
+		// fn slice[T any]([]T, start i64, end i64) []T
+		args = []types.Type{argsTypes[0], &types.ConstI64, &types.ConstI64}
+		rets = []types.Type{argsTypes[0]}
+	case "concat":
+		// fn concat[T any]([]T, []T) []T
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{argsTypes[0]}
 	case "len":

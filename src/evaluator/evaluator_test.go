@@ -1110,10 +1110,10 @@ func TestTypeDefinition(t *testing.T) {
 		{
 			name: "accept and return scalar type def",
 			prog: `type user string
-				fn get(u user) user {
+				fn fetch(u user) user {
 					return u
 				}
-				let u = get(user("peter"))
+				let u = fetch(user("peter"))
 				u`,
 			want: &Return{Values: []any{"peter"}},
 		},
@@ -1122,21 +1122,21 @@ func TestTypeDefinition(t *testing.T) {
 		// 	name: "accept and return aggregate type def",
 		// 	prog: `struct person { name string }
 		// 		type user person
-		// 		fn get(u user) user {
+		// 		fn fetch(u user) user {
 		// 			return u
 		// 		}
-		// 		let u = get(user(person{name: "peter"}))
+		// 		let u = fetch(user(person{name: "peter"}))
 		// 		u`,
 		// 	want: &Return{vals: []any{"peter"}},
 		// },
 		// {
 		// 	name: "accept and return aggregate type def",
 		// 	prog: `type reduce fn(i64, i64) i64
-		// 		fn get(f reduce) reduce {
+		// 		fn fetch(f reduce) reduce {
 		// 			return f
 		// 		}
 		// 		let r = fn(a, b i64) i64 { return a + b }
-		// 		let func = get(reduce(r))
+		// 		let func = fetch(reduce(r))
 		// 		func(1, 2)`,
 		// 	want: &Return{vals: []any{3}},
 		// },
@@ -1206,24 +1206,11 @@ func TestCopyUpdateExpression(t *testing.T) {
 		want any
 	}{
 		{
-			name: "array update",
-			prog: `
-			let arr = [1, 2, 3]
-			let arr' = arr^{
-			   arr'[0] = 10
-			   arr'[2] = 30
-			}
-			arr'`,
-			want: []any{int64(10), int64(2), int64(30)},
-		},
-		{
-			name: "struct update",
+			name: "struct update with put",
 			prog: `
 			struct point { x i64, y i64 }
 			let p = point{x: 0, y: 1}
-			let p' = p^{
-			   p'.x = 5 
-			}
+			let p' = put(p, {x: 5})
 			p'`,
 			want: map[string]any{
 				"x": int64(5),
@@ -1806,6 +1793,66 @@ func TestAppend(t *testing.T) {
 			let arr = make([]byte, 0, 2)
 			append(arr, 3)`,
 			want: &Return{[]any{[]any{int64(3)}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuiltinArrayFunctions(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "put element in array",
+			prog: `
+			let arr = [1, 2, 3]
+			put(arr, 1, 99)`,
+			want: &Return{[]any{[]any{int64(1), int64(99), int64(3)}}},
+		},
+		{
+			name: "get element from array",
+			prog: `
+			let arr = [1, 2, 3]
+			get(arr, 1)`,
+			want: &Return{[]any{int64(2)}},
+		},
+		{
+			name: "slice array",
+			prog: `
+			let arr = [1, 2, 3, 4, 5]
+			slice(arr, 1, 3)`,
+			want: &Return{[]any{[]any{int64(2), int64(3)}}},
+		},
+		{
+			name: "put preserves original array",
+			prog: `
+			let arr = [1, 2, 3]
+			let new_arr = put(arr, 0, 99)
+			arr`,
+			want: []any{int64(1), int64(2), int64(3)},
+		},
+		{
+			name: "slice entire array",
+			prog: `
+			let arr = [1, 2, 3]
+			slice(arr, 0, 3)`,
+			want: &Return{[]any{[]any{int64(1), int64(2), int64(3)}}},
 		},
 	}
 

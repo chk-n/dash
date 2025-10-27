@@ -171,16 +171,8 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		return fn
 	case *ast.FunctionCallExpression:
 		// check if it's a built-in function
-		if n.TokenLiteral() == "len" {
-			return e.evalLen(n.Arguments, ctx)
-		} else if n.TokenLiteral() == "println" {
-			return e.evalPrintln(n.Arguments, ctx)
-		} else if n.TokenLiteral() == "make" {
-			return e.evalMake(n.Arguments, ctx)
-		} else if n.TokenLiteral() == "assert" {
-			return e.evalAssert(n.Arguments, ctx)
-		} else if n.TokenLiteral() == "append" {
-			return e.evalAppend(n.Arguments, ctx)
+		if res, ok := e.evalBuiltinFunction(n, ctx); ok {
+			return res
 		}
 		// If ok is true then it is a custom type cast
 		if _, ok := ctx.typs.Get(n.TokenLiteral()); ok {
@@ -1582,6 +1574,29 @@ func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any 
 // Built-in functions //
 // ------------------ //
 
+func (e *Evaluator) evalBuiltinFunction(n *ast.FunctionCallExpression, ctx *Context) (any, bool) {
+	switch n.TokenLiteral() {
+	case "len":
+		return e.evalLen(n.Arguments, ctx), true
+	case "println":
+		return e.evalPrintln(n.Arguments, ctx), true
+	case "make":
+		return e.evalMake(n.Arguments, ctx), true
+	case "assert":
+		return e.evalAssert(n.Arguments, ctx), true
+	case "append":
+		return e.evalAppend(n.Arguments, ctx), true
+	case "put":
+		return e.evalPut(n.Arguments, ctx), true
+	case "get":
+		return e.evalGet(n.Arguments, ctx), true
+	case "slice":
+		return e.evalSlice(n.Arguments, ctx), true
+	default:
+		return nil, false
+	}
+}
+
 func (e *Evaluator) evalLen(args []ast.Expression, stk *Context) any {
 	if len(args) != 1 {
 		panic("this is a compiler error. please report")
@@ -1714,6 +1729,107 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 				newArr = append(arr, val)
 			}
 		}
+	default:
+		panic("this is a compiler error. please report")
+	}
+	return &Return{Values: []any{newArr}}
+}
+
+func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
+	// Handle struct case: put(s1, s2)
+	if len(args) == 2 {
+		s1 := e.Eval(args[0], ctx)
+		s2 := e.Eval(args[1], ctx)
+
+		// Both should be map[string]any (structs)
+		struct1, ok1 := s1.(map[string]any)
+		struct2, ok2 := s2.(map[string]any)
+		if !ok1 || !ok2 {
+			panic("this is a compiler error. please report")
+		}
+
+		// Create a new struct by copying s1
+		newStruct := make(map[string]any)
+		for k, v := range struct1 {
+			newStruct[k] = v
+		}
+
+		// Overwrite/add fields from s2
+		for k, v := range struct2 {
+			newStruct[k] = v
+		}
+
+		return &Return{Values: []any{newStruct}}
+	}
+
+	// Handle array/map case: put(arr, idx, val)
+	arr := e.Eval(args[0], ctx)
+	idx := e.Eval(args[1], ctx).(int64)
+	val := e.Eval(args[2], ctx)
+	val = unwrapFunctionResult(val, 0)
+
+	var newArr any
+	switch arr := arr.(type) {
+	case []any:
+		newArr = make([]any, len(arr))
+		copy(newArr.([]any), arr)
+		newArr.([]any)[idx] = val
+	case []uint8:
+		newArr = make([]uint8, len(arr))
+		copy(newArr.([]uint8), arr)
+		switch val := val.(type) {
+		case int32:
+			newArr.([]uint8)[idx] = uint8(val)
+		case uint8:
+			newArr.([]uint8)[idx] = val
+		default:
+			panic("this is a compiler error. please report")
+		}
+	default:
+		panic("this is a compiler error. please report")
+	}
+	return &Return{Values: []any{newArr}}
+}
+
+func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
+	arr := e.Eval(args[0], ctx)
+	idx := e.Eval(args[1], ctx).(int64)
+
+	var result any
+	switch arr := arr.(type) {
+	case []any:
+		if idx < 0 || idx >= int64(len(arr)) {
+			panic("index out of bounds")
+		}
+		result = arr[idx]
+	case []uint8:
+		if idx < 0 || idx >= int64(len(arr)) {
+			panic("index out of bounds")
+		}
+		result = arr[idx]
+	default:
+		panic("this is a compiler error. please report")
+	}
+	return &Return{Values: []any{result}}
+}
+
+func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
+	arr := e.Eval(args[0], ctx)
+	start := e.Eval(args[1], ctx).(int64)
+	end := e.Eval(args[2], ctx).(int64)
+
+	var newArr any
+	switch arr := arr.(type) {
+	case []any:
+		if start < 0 || end > int64(len(arr)) || start > end {
+			panic("slice bounds out of range")
+		}
+		newArr = arr[start:end]
+	case []uint8:
+		if start < 0 || end > int64(len(arr)) || start > end {
+			panic("slice bounds out of range")
+		}
+		newArr = arr[start:end]
 	default:
 		panic("this is a compiler error. please report")
 	}

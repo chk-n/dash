@@ -74,7 +74,7 @@ func TestAssignmentStatement(t *testing.T) {
 		},
 		{
 			name:   "multiple return assignments to 1 var",
-			input:  "let x = match 1 { case _: get() } fn get() i64, i64 { return 0,0 }",
+			input:  "let x = match 1 { case _: fetch() } fn fetch() i64, i64 { return 0,0 }",
 			errors: []string{"assignment mismmatch, assigned 2 values to 1 variables"},
 		},
 	}
@@ -111,12 +111,12 @@ func TestStringOperations(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name:  "concatination - vars",
+			name:  "concatenation - vars",
 			input: `let a = "1" let b = a + a`,
 			want:  `lib main pub fn main() { let a string = "1" let b string = (a + a) }`,
 		},
 		{
-			name:  "concatination - literals",
+			name:  "concatenation - literals",
 			input: `let a = "1" + "2"`,
 			want:  `lib main pub fn main() { let a string = ("1" + "2") }`,
 		},
@@ -796,10 +796,10 @@ func TestTypeDefinition(t *testing.T) {
 		{
 			name: "function type",
 			input: `alias reduce fn(i64) i64
-				fn get(f reduce) { }
+				fn apply(f reduce) { }
 				let r = fn(a i64) i64 { return a }
-				get(r)`,
-			want: "lib main alias reduce fn(i64)i64 fn get(f fn(i64)i64) { } pub fn main() { let r fn(i64)i64 = fn(a i64) i64 { return a } get(r) }",
+				apply(r)`,
+			want: "lib main alias reduce fn(i64)i64 fn apply(f fn(i64)i64) { } pub fn main() { let r fn(i64)i64 = fn(a i64) i64 { return a } apply(r) }",
 		},
 		{
 			name:  "comparison type def and literal",
@@ -1508,6 +1508,21 @@ func TestBuiltInFunction(t *testing.T) {
 			input: `fn err()! { try assert(true, "") } try err()`,
 			want:  `lib main fn err()! { try assert(true,"") } pub fn main() { try err() }`,
 		},
+		{
+			name:  "put with struct",
+			input: "struct person { name string, age i64 } let p1 = person{name: \"john\", age: 30} let p2 = put(p1, {age: 31})",
+			want:  "lib main struct person {name string, age i64} pub fn main() { let p1 person = person{name string: \"john\", age i64: 30} let p2 person = put(p1,{age i64: 31}) }",
+		},
+		{
+			name:  "put with anonymous struct",
+			input: "let p1 = {x: 1, y: 2} let p2 = put(p1, {y: 5})",
+			want:  "lib main pub fn main() { let p1 struct<x i64, y i64> = {x i64: 1, y i64: 2} let p2 struct<x i64, y i64> = put(p1,{y i64: 5}) }",
+		},
+		{
+			name:  "put with array",
+			input: "let arr = [1,2,3] let arr2 = put(arr, 1, 10)",
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let arr2 []i64 = put(arr,1,10) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1662,6 +1677,21 @@ func TestAppendFunction(t *testing.T) {
 			name:  "append char to []byte",
 			input: `let buf = make([]byte, 1) let result = append(buf, 'A')`,
 			want:  "lib main pub fn main() { let buf mut[[]byte] = make([]byte,1) let result mut[[]byte] = append(buf,'A') }",
+		},
+		{
+			name:  "put element in array",
+			input: `let arr = [1, 2, 3] let result = put(arr, 1, 99)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result []i64 = put(arr,1,99) }",
+		},
+		{
+			name:  "get element from array",
+			input: `let arr = [1, 2, 3] let result = get(arr, 1)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result i64 = get(arr,1) }",
+		},
+		{
+			name:  "slice array",
+			input: `let arr = [1, 2, 3, 4, 5] let result = slice(arr, 1, 3)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3,4,5] let result []i64 = slice(arr,1,3) }",
 		},
 	}
 	runAnalysisTests(t, tests)
