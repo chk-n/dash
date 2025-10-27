@@ -33,6 +33,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 
 	switch lit {
 	case "append":
+		// TODO: assert argsTypes[1] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{argsTypes[0]}
 	case "put":
@@ -43,7 +44,8 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 			args = []types.Type{argsTypes[0], argsTypes[1]}
 			rets = []types.Type{argsTypes[0]}
 		} else {
-			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
+			// TODO: assert argsTypes[1] is *types.Int
+			args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 			rets = []types.Type{argsTypes[0]}
 		}
 	case "insert":
@@ -53,11 +55,13 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 	case "get":
 		// fn get[T any]([]T, idx i64) T
 		elemType := argsTypes[0].(*types.Array).T
-		args = []types.Type{argsTypes[0], &types.ConstI64}
+		// TODO: assert argsTypes[1] is *types.Int
+		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{elemType}
 	case "slice":
 		// fn slice[T any]([]T, start i64, end i64) []T
-		args = []types.Type{argsTypes[0], &types.ConstI64, &types.ConstI64}
+		// TODO: assert argsTypes[1] and argsTypes[2] is *types.Int
+		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
 	case "concat":
 		// fn concat[T any]([]T, []T) []T
