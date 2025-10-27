@@ -249,6 +249,8 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
 		}
 	case *ast.IntegerLiteral:
 		return n.Value
+	case *ast.HexLiteral:
+		return n.Value
 	case *ast.BooleanLiteral:
 		return n.Value
 	case *ast.FloatLiteral:
@@ -568,6 +570,8 @@ func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, res any,
 	case *ast.Identifier:
 		field = right.Value
 	case *ast.IntegerLiteral:
+		field = fmt.Sprintf("%d", right.Value)
+	case *ast.HexLiteral:
 		field = fmt.Sprintf("%d", right.Value)
 	default:
 		panic("this is a compiler error. please report")

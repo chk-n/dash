@@ -1242,6 +1242,21 @@ func (l *IntegerLiteral) SetType(t types.Type) { l.T = t }
 func (l *IntegerLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *IntegerLiteral) String() string       { return l.Token.Literal }
 
+type HexLiteral struct {
+	Token token.Token
+	Value int64
+
+	// Set by semsis
+	T types.Type
+}
+
+func (l *HexLiteral) expressionNode()      {}
+func (l *HexLiteral) literalNode()         {}
+func (l *HexLiteral) Type() types.Type     { return l.T }
+func (l *HexLiteral) SetType(t types.Type) { l.T = t }
+func (l *HexLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *HexLiteral) String() string       { return l.Token.Literal }
+
 type BooleanLiteral struct {
 	Token token.Token
 	Value bool
@@ -1677,6 +1692,10 @@ func (e *Comment) Pos() token.Pos {
 }
 
 func (l *IntegerLiteral) Pos() token.Pos {
+	return l.Token.Position
+}
+
+func (l *HexLiteral) Pos() token.Pos {
 	return l.Token.Position
 }
 

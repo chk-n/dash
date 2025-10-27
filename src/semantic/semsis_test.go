@@ -81,6 +81,37 @@ func TestAssignmentStatement(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestHexLiterals(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "simple hex literal",
+			input: "let a = 0xFF",
+			want:  "lib main pub fn main() { let a i64 = 0xFF }",
+		},
+		{
+			name:  "hex literal with underscore",
+			input: "let a = 0xFF_FF",
+			want:  "lib main pub fn main() { let a i64 = 0xFF_FF }",
+		},
+		{
+			name:  "hex literal cast to u8",
+			input: "let a = u8(0xFF)",
+			want:  "lib main pub fn main() { let a u8 = u8(0xFF) }",
+		},
+		{
+			name:  "hex literal in expression",
+			input: "let a = 0x10 + 0x20",
+			want:  "lib main pub fn main() { let a i64 = (0x10 + 0x20) }",
+		},
+		{
+			name:  "hex literal comparison",
+			input: "let a = 0xFF == 255",
+			want:  "lib main pub fn main() { let a bool = (0xFF == 255) }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
 func TestPointerOperations(t *testing.T) {
 	tests := []testCase{
 		{

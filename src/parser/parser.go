@@ -117,6 +117,7 @@ func New(l *lexer.Lexer) *Parser {
 	// Literal parse functions
 	p.registerPrefix(token.IDENT, p.parseIdentifierStructLiteralOrFunctionCall)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.HEX, p.parseHexLiteral)
 	p.registerPrefix(token.FLOAT, p.parseFloatLiteral)
 	p.registerPrefix(token.BOOL, p.parseBooleanLiteral)
 	p.registerPrefix(token.NULL, p.parseNullLiteral)
@@ -1625,6 +1626,10 @@ func (p *Parser) parseTryExpression() ast.Expression {
 	exp := &ast.TryExpression{Token: p.curToken}
 	p.nextToken()
 
+	if !p.curTokenIs(token.IDENT) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
 	exp.Right = p.parseExpression(CALL)
 	return exp
 }
@@ -1690,6 +1695,21 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 		return lit
 	}
 	lit.Value = intValue
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseHexLiteral() ast.Expression {
+	lit := &ast.HexLiteral{Token: p.curToken, T: &types.ConstI64}
+	// Remove "0x" prefix and underscores
+	hexStr := strings.ReplaceAll(p.curToken.Literal[2:], "_", "")
+	hexValue, err := strconv.ParseInt(hexStr, 16, 64)
+	if err != nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		p.nextToken()
+		return lit
+	}
+	lit.Value = hexValue
 	p.nextToken()
 	return lit
 }

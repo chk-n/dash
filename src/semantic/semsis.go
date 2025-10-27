@@ -684,6 +684,12 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
 				t.T = typ
+			case *ast.HexLiteral:
+				typ, err := left.GetTypeByIndex(int(t.Value))
+				if err != nil {
+					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+				}
+				t.T = typ
 			default:
 				s.analyse(n.Right, "")
 			}
@@ -1164,6 +1170,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.NullLiteral:
 		n.T = &types.ConstNull
 	case *ast.IntegerLiteral:
+		n.T = &types.ConstI64
+	case *ast.HexLiteral:
 		n.T = &types.ConstI64
 	case *ast.FloatLiteral:
 		n.T = &types.ConstF64
@@ -2067,6 +2075,38 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	case *ast.IntegerLiteral:
+		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
+		switch t := coercedType.(type) {
+		case *types.Byte:
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU8) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+		case *types.Int:
+			if !types.IntValueFitsIn(lit.Value, t) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+		case *types.Char:
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU32) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+				return false
+			}
+
+		default:
+			targetSign := types.GetSign(targetType)
+			intType := types.LowestFittingInt(lit.Value, targetSign == 1)
+			if !types.CanCoalesce(intType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+			lit.SetType(intType)
+			return true
+		}
+		lit.SetType(coercedType)
+		return true
+
+	case *ast.HexLiteral:
 		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
 		switch t := coercedType.(type) {
 		case *types.Byte:

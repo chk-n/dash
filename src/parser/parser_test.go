@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"dash-lang.io/src/ast"
 	"dash-lang.io/src/lexer"
 )
 
@@ -663,6 +664,61 @@ func TestCharLiteral(t *testing.T) {
 
 			if tc.input != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.input, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestHexLiteral(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  int64
+	}{
+		{
+			name:  "simple hex",
+			input: `0xFF`,
+			want:  255,
+		},
+		{
+			name:  "hex with underscore",
+			input: `0xFF_FF`,
+			want:  65535,
+		},
+		{
+			name:  "lowercase hex",
+			input: `0xdeadbeef`,
+			want:  3735928559,
+		},
+		{
+			name:  "uppercase hex",
+			input: `0xDEADBEEF`,
+			want:  3735928559,
+		},
+		{
+			name:  "mixed case hex",
+			input: `0xDeAdBeEf`,
+			want:  3735928559,
+		},
+		{
+			name:  "zero",
+			input: `0x0`,
+			want:  0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseHexLiteral()
+
+			if tc.input != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.input, stmt.String(), stmt)
+			}
+
+			hexLit := stmt.(*ast.HexLiteral)
+			if hexLit.Value != tc.want {
+				t.Errorf("want value %d but got %d", tc.want, hexLit.Value)
 			}
 		})
 	}

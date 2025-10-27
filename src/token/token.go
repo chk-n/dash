@@ -37,6 +37,7 @@ const (
 	// ------------------- //
 
 	INT
+	HEX
 	FLOAT
 	STRING
 	BOOL
