@@ -125,11 +125,16 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 			} else {
 				lib = libPart
 			}
+		}
 
+		// parser errors are tracked seperately so we return nil
+		if len(pErrs) != 0 {
+			return nil
 		}
 
 		// NOTE: in future this will also contain the path to the lib
-		libImportName := fmt.Sprintf("%s/%s", b.projectName, lib.Name.String())
+		dir := dep.AbsoluteDir
+		libImportName := fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
 
 		if _, ok := libs[libImportName]; ok {
 			return fmt.Errorf("duplicate library name '%s' found in directory '%s'",
@@ -204,7 +209,7 @@ func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]
 			}
 
 			if libName == "" {
-				libName = fmt.Sprintf("%s/%s", b.projectName, lib.Name.String())
+				libName = fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
 			}
 			// skip if already parsed
 			if _, exists := importMap[libName]; exists {
