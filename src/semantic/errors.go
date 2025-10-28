@@ -232,6 +232,9 @@ var (
 // -------- //
 
 var (
+	errUintLiteralOverflows = func(val uint64, t string) error {
+		return fmt.Errorf("unisgned integer literal '%d' overflows '%s'", val, t)
+	}
 	errIntLiteralOverflows = func(val int64, t string) error {
 		return fmt.Errorf("integer literal '%d' overflows '%s'", val, t)
 	}

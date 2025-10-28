@@ -1597,7 +1597,6 @@ func (p *Parser) parseIndexOrSliceExpression(left ast.Expression) ast.Expression
 
 }
 
-
 // Handles parsing:
 // types as expressions (e.g. for 'make([]byte, 100)'),
 // or type conversions
@@ -1703,7 +1702,7 @@ func (p *Parser) parseHexLiteral() ast.Expression {
 	lit := &ast.HexLiteral{Token: p.curToken, T: &types.ConstI64}
 	// Remove "0x" prefix and underscores
 	hexStr := strings.ReplaceAll(p.curToken.Literal[2:], "_", "")
-	hexValue, err := strconv.ParseInt(hexStr, 16, 64)
+	hexValue, err := strconv.ParseUint(hexStr, 16, 64)
 	if err != nil {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		p.nextToken()

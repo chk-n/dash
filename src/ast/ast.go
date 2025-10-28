@@ -1244,7 +1244,7 @@ func (l *IntegerLiteral) String() string       { return l.Token.Literal }
 
 type HexLiteral struct {
 	Token token.Token
-	Value int64
+	Value uint64
 
 	// Set by semsis
 	T types.Type

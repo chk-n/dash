@@ -673,7 +673,7 @@ func TestHexLiteral(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  int64
+		want  uint64
 	}{
 		{
 			name:  "simple hex",
@@ -758,7 +758,6 @@ func TestArrayLiteral(t *testing.T) {
 		})
 	}
 }
-
 
 // ---------------------- //
 // Function related tests //

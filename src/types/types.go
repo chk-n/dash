@@ -1439,6 +1439,81 @@ func IntValueFitsIn(v int64, t2 *Int) bool {
 	return true
 }
 
+func UintValueFitsIn(v uint64, t2 *Int) bool {
+	if t2.Signed == -1 {
+		// For signed integers, check if the uint64 value fits within the signed range
+		switch t2.Width {
+		case 8:
+			if v > math.MaxInt8 {
+				return false
+			}
+		case 16:
+			if v > math.MaxInt16 {
+				return false
+			}
+		case 32:
+			if v > math.MaxInt32 {
+				return false
+			}
+		case 64:
+			if v > math.MaxInt64 {
+				return false
+			}
+		case 128, 256:
+			return true
+		}
+	} else {
+		// Unsigned integers
+		switch t2.Width {
+		case 8:
+			if v > math.MaxUint8 {
+				return false
+			}
+		case 16:
+			if v > math.MaxUint16 {
+				return false
+			}
+		case 32:
+			if v > math.MaxUint32 {
+				return false
+			}
+		case 64:
+			// All uint64 values fit in uint64
+			return true
+		case 128, 256:
+			return true
+		}
+	}
+	return true
+}
+
+func LowestFittingUint(v uint64, signed bool) *Int {
+	if signed {
+		if v <= math.MaxInt8 {
+			return &ConstI8
+		} else if v <= math.MaxInt16 {
+			return &ConstI16
+		} else if v <= math.MaxInt32 {
+			return &ConstI32
+		} else if v <= math.MaxInt64 {
+			return &ConstI64
+		} else {
+			// Value too large for signed int64, use uint64
+			return &ConstU64
+		}
+	} else {
+		if v <= math.MaxUint8 {
+			return &ConstU8
+		} else if v <= math.MaxUint16 {
+			return &ConstU16
+		} else if v <= math.MaxUint32 {
+			return &ConstU32
+		} else {
+			return &ConstU64
+		}
+	}
+}
+
 func IsFloatRepresentableAs(v float64, t *Float) bool {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return false
