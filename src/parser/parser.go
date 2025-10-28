@@ -27,11 +27,11 @@ const (
 	EQUALS        // ==
 	LESSGREATER   // > or <
 	LESSGREATEREQ // >= or <=
-	SHIFT         // << >>
 	SUM           // +
 	SUBTRACT      // -
 	PRODUCT       // *
 	DIVIDE        // /
+	SHIFT         // << >>
 	NULL_COALESCE // ??
 	PREFIX        // -5, !false, ?x, ~x
 	POSTFIX       // x++

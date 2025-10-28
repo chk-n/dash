@@ -338,7 +338,7 @@ func TestInfixExpression(t *testing.T) {
 		{
 			name:  "shift with arithmetic",
 			input: "1 << 2 + 3",
-			want:  "(1 << (2 + 3))",
+			want:  "((1 << 2) + 3)",
 		},
 		{
 			name:  "complex bitwise expression",
@@ -363,7 +363,7 @@ func TestInfixExpression(t *testing.T) {
 		{
 			name:  "precedence: shift vs addition",
 			input: "a << b + c",
-			want:  "(a << (b + c))",
+			want:  "((a << b) + c)",
 		},
 	}
 
