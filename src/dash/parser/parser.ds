@@ -104,7 +104,7 @@ fn next_token(p parser) parser {
     if i64(p.tkn_i + 1) >= len(p.tkns) {
         return p
     }
-    p = p^{ p.tkn_i = p.tkn_i + 1 }
+    p = parser{..p, tkn_i: p.tkn_i + 1}
     return p
 }
 
@@ -179,7 +179,7 @@ fn parse_library(p parser)! parser, ast.index {
         data: {x: ident, y: stmts},
     })
     
-    var p = p^{ p.nodes = nodes }
+    var p = parser{..p, nodes: nodes}
     let l = ast.index(len(nodes)-1)
         
     return p, l   
@@ -237,7 +237,7 @@ fn parse_use_statement(p parser)! parser, ast.index {
         token: op_tkn, 
         data: {x: a, y: lib_name},
     })
-    var p = p^{ p.nodes = nodes }
+    var p = parser{..p, nodes: nodes}
     let idx = ast.index(len(nodes)-1)
 
     return p, idx
@@ -267,7 +267,7 @@ fn parse_type_statement(p parser)! parser, ast.index {
         token: op_tkn, 
         data: {x: ident, y: typ},
     })
-    var p = p^{ p.nodes = nodes }
+    var p = parser{..p, nodes: nodes}
     let idx = ast.index(len(nodes)-1)
     
     return p, idx
@@ -568,9 +568,9 @@ fn parse_function_statement(p parser)! parser, ast.index {
     // parse optional return type list
     var rets = ast.NULL_IDX
     if is_type_literal(p) {
-        p = p^{ p.ctx = context.brace }
+        p = parser{..p, ctx: context.brace}
         p, rets = try parse_function_return_list(p)
-        p = p^{ p.ctx = context.none }
+        p = parser{..p, ctx: context.none}
     }
     // parse optional body
     var body = ast.NULL_IDX
@@ -899,9 +899,9 @@ fn parse_if_statement(p parser)! parser, ast.index {
     var extra = make([]ast.index, 0, 2)
     
     // Parse if condition
-    p = p^{ p.ctx = context.brace }
+    p = parser{..p, ctx: context.brace}
     p, let if_cond = try parse_expression(p, precedence.none)
-    p = p^{ p.ctx = context.none }
+    p = parser{..p, ctx: context.none}
     if if_cond == ast.NULL_IDX {
         return p, ast.NULL_IDX
     }
@@ -927,9 +927,9 @@ fn parse_if_statement(p parser)! parser, ast.index {
         if is_tag(p, lexer.tag.IF) {
             // consume 'if'
             p = next_token(p) 
-            p = p^{ p.ctx = context.brace }
+            p = parser{..p, ctx: context.brace}
             p, let elif_cond = try parse_expression(p, precedence.none)
-            p = p^{ p.ctx = context.none }
+            p = parser{..p, ctx: context.none}
             if elif_cond == ast.NULL_IDX {
                 return p, ast.NULL_IDX
             }
@@ -983,9 +983,9 @@ fn parse_for_statement(p parser)! parser, ast.index {
         })
         return p, stmt
     }
-    p = p^{ p.ctx = context.brace }
+    p = parser{..p, ctx: context.brace}
     p, let exp = try parse_expression(p, precedence.none)
-    p = p^{ p.ctx = context.none }
+    p = parser{..p, ctx: context.none}
 
     var cond = exp
     var tag = ast.tag.for_bool
@@ -1007,9 +1007,9 @@ fn parse_for_statement(p parser)! parser, ast.index {
         // consume ';'
         p = next_token(p)
 
-        p = p^{ p.ctx = context.brace }
+        p = parser{..p, ctx: context.brace}
         p, let incr = try parse_expression(p, precedence.none)
-        p = p^{ p.ctx = context.none }
+        p = parser{..p, ctx: context.none}
         if incr == ast.NULL_IDX {
             return p, ast.NULL_IDX
         }
@@ -1171,9 +1171,9 @@ fn parse_match_statement(p parser)! parser, ast.index {
     // consume 'match'
     var p = next_token(p)
 
-    p = p^{ p.ctx = context.brace }
+    p = parser{..p, ctx: context.brace}
     p, let scrutinee = try parse_expression(p, precedence.none)
-    p = p^{ p.ctx = context.none }
+    p = parser{..p, ctx: context.none}
 
     if !is_tag(p, lexer.tag.LBRACE) {
         p = add_error(p, expected_brace{i: p.tkn_i})
@@ -2006,7 +2006,7 @@ fn add_extra(p parser, t ast.tag, tkn ast.token_index, e []ast.index) parser, as
     let start = len(p.extras)
     let end = start+len(e)-1
     var extras = append(p.extras, e)
-    var p = p^{ p.extras = extras }
+    var p = parser{..p, extras: extras}
 
     p, let node = add_node(p, {
         tag: t,
@@ -2019,7 +2019,7 @@ fn add_extra(p parser, t ast.tag, tkn ast.token_index, e []ast.index) parser, as
 
 fn add_node(p parser, n ast.node) parser, ast.index {
     var nodes = append(p.nodes, n)
-    var p = p^{ p.nodes = nodes }
+    var p = parser{..p, nodes: nodes}
     let idx = ast.index(len(nodes)-1)
 
     return p, idx
@@ -2028,7 +2028,7 @@ fn add_node(p parser, n ast.node) parser, ast.index {
 fn add_error(p parser, err error) parser {
     var p = p
     let errs = append(p.errs, err)
-    return p^{ p.errs = errs }
+    return parser{..p, errs: errs}
 }
 
 // get_precedence checks the precedence of the
