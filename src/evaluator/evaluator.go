@@ -3,6 +3,7 @@ package evaluator
 import (
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"path"
 	"reflect"
 	"strconv"
@@ -1607,6 +1608,10 @@ func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context
 
 func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 	strct := make(map[string]any)
+	if n.Copy != nil {
+		s := e.Eval(n.Copy, stk).(map[string]any)
+		maps.Copy(strct, s)
+	}
 
 	for _, field := range n.Fields {
 		var name string
@@ -1829,32 +1834,6 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 }
 
 func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
-	// Handle struct case: put(s1, s2)
-	if len(args) == 2 {
-		s1 := e.Eval(args[0], ctx)
-		s2 := e.Eval(args[1], ctx)
-
-		// Both should be map[string]any (structs)
-		struct1, ok1 := s1.(map[string]any)
-		struct2, ok2 := s2.(map[string]any)
-		if !ok1 || !ok2 {
-			panic("this is a compiler error. please report")
-		}
-
-		// Create a new struct by copying s1
-		newStruct := make(map[string]any)
-		for k, v := range struct1 {
-			newStruct[k] = v
-		}
-
-		// Overwrite/add fields from s2
-		for k, v := range struct2 {
-			newStruct[k] = v
-		}
-
-		return &Return{Values: []any{newStruct}}
-	}
-
 	// Handle array/map case: put(arr, idx, val)
 	arr := e.Eval(args[0], ctx)
 	idx := e.Eval(args[1], ctx).(int64)

@@ -1387,6 +1387,7 @@ type StructLiteral struct {
 	// Can be nil if anonymous struct.
 	Name           Expression // can be Identifier or DotExpression
 	TypeParameters []types.Type
+	Copy           Expression
 	Fields         []*StructFieldLiteral
 
 	// Set by semantic analysis
@@ -1418,6 +1419,13 @@ func (s *StructLiteral) String() string {
 	}
 
 	out.WriteString("{")
+	if s.Copy != nil {
+		out.WriteString("..")
+		out.WriteString(s.Copy.String())
+		if len(s.Fields) != 0 {
+			out.WriteString(", ")
+		}
+	}
 	for i, f := range s.Fields {
 		out.WriteString(f.String())
 		if i != len(s.Fields)-1 {

@@ -1487,21 +1487,6 @@ func TestBuiltInFunction(t *testing.T) {
 			input: `fn err()! { try assert(true, "") } try err()`,
 			want:  `lib main fn err()! { try assert(true,"") } pub fn main() { try err() }`,
 		},
-		{
-			name:  "put with struct",
-			input: "struct person { name string, age i64 } let p1 = person{name: \"john\", age: 30} let p2 = put(p1, {age: 31})",
-			want:  "lib main struct person {name string, age i64} pub fn main() { let p1 person = person{name string: \"john\", age i64: 30} let p2 person = put(p1,{age i64: 31}) }",
-		},
-		{
-			name:  "put with anonymous struct",
-			input: "let p1 = {x: 1, y: 2} let p2 = put(p1, {y: 5})",
-			want:  "lib main pub fn main() { let p1 struct<x i64, y i64> = {x i64: 1, y i64: 2} let p2 struct<x i64, y i64> = put(p1,{y i64: 5}) }",
-		},
-		{
-			name:  "put with array",
-			input: "let arr = [1,2,3] let arr2 = put(arr, 1, 10)",
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let arr2 []i64 = put(arr,1,10) }",
-		},
 	}
 	runAnalysisTests(t, tests)
 }

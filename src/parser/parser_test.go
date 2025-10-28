@@ -1430,6 +1430,11 @@ func TestStructLiteral(t *testing.T) {
 			input: `abc.d[[]i32]{}`,
 			want:  `abc.d[[]i32]{}`,
 		},
+		{
+			name:  "literal with copy",
+			input: `strct{..s, a: 1}`,
+			want:  `strct{..s, a: 1}`,
+		},
 	}
 
 	for _, tc := range tests {

@@ -1280,7 +1280,7 @@ func TestCopyUpdateExpression(t *testing.T) {
 			prog: `
 			struct point { x i64, y i64 }
 			let p = point{x: 0, y: 1}
-			let p' = put(p, {x: 5})
+			let p' = point{..p, x: 5}
 			p'`,
 			want: map[string]any{
 				"x": int64(5),

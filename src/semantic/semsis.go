@@ -542,6 +542,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					s.addError(n, errStructMissingFields(n.Name.TokenLiteral()))
 					return
 				}
+			} else if n.Copy != nil {
+				// skip struct field tests as its a copy
 			} else {
 				for _, sft := range structType.Ts {
 					// Skip any optional types

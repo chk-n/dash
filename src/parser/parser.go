@@ -1797,6 +1797,16 @@ func (p *Parser) parseStructLiteral(exp ast.Expression, typeParams []types.Type)
 	}
 	p.nextToken()
 
+	if p.curTokenIs(token.RANGE) {
+		p.nextToken()
+		lit.Copy = p.parseExpression(LOWEST)
+
+		if !p.curTokenIs(token.COMMA) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		}
+		p.nextToken()
+	}
+
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 		if p.peekTokenIs(token.COLON) {
 			// case 1: struct with named field

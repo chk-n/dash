@@ -27,7 +27,7 @@ func TestEvalLibrary(t *testing.T) {
 			struct point { x one.abc }
 
 			var p = point{x: 1}
-			p = put(p, {x: p.x + 4})
+			p = point{..p, x: p.x + 4}
 			p`,
 			want: map[string]any{
 				"x": int64(5),

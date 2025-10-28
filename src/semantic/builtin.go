@@ -12,7 +12,7 @@ func isBuiltinFunction(lit string) bool {
 	switch lit {
 	case
 		"put", "get", //"remove",
-		"append", "slice", 
+		"append", "slice",
 		"len", "cap",
 		"size", "make", "validate", "println", "assert":
 		return true
@@ -37,17 +37,9 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{argsTypes[0]}
 	case "put":
-		// Two different signatures:
-		// 1. For arrays/maps: fn put[T any](arr []T, idx i64, v T) []T
-		// 2. For structs: fn put[T any](s1 T, s2 T) T
-		if len(argsTypes) == 2 {
-			args = []types.Type{argsTypes[0], argsTypes[1]}
-			rets = []types.Type{argsTypes[0]}
-		} else {
-			// TODO: assert argsTypes[1] is *types.Int
-			args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
-			rets = []types.Type{argsTypes[0]}
-		}
+		// TODO: assert argsTypes[1] is *types.Int
+		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
+		rets = []types.Type{argsTypes[0]}
 	case "insert":
 		// fn insert[T any](arr []T, idx i64, v T) []T
 		args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
