@@ -2218,8 +2218,7 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			return s.analyseExpressionType(expr, expr.Type(), et.T)
 		}
 		return false
-	case *ast.BooleanLiteral,
-		*ast.ByteLiteral, *ast.StringLiteral:
+	case *ast.BooleanLiteral, *ast.StringLiteral:
 		if !types.CanCoalesce(exprType, targetType) {
 			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
 			return false

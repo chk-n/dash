@@ -1315,18 +1315,6 @@ func (l *FloatLiteral) SetType(t types.Type) {
 func (l *FloatLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *FloatLiteral) String() string       { return l.Token.Literal }
 
-type ByteLiteral struct {
-	Token token.Token
-	Value byte
-}
-
-func (l *ByteLiteral) expressionNode()      {}
-func (l *ByteLiteral) literalNode()         {}
-func (l *ByteLiteral) Type() types.Type     { return &types.ConstByte }
-func (l *ByteLiteral) SetType(t types.Type) {}
-func (l *ByteLiteral) TokenLiteral() string { return l.Token.Literal }
-func (l *ByteLiteral) String() string       { return l.Token.Literal }
-
 // NullLiteral can be used in 3 places
 // as argument, as return value or within
 // infix expression; '==' or '!='
@@ -1720,10 +1708,6 @@ func (l *CharacterLiteral) Pos() token.Pos {
 }
 
 func (l *FloatLiteral) Pos() token.Pos {
-	return l.Token.Position
-}
-
-func (l *ByteLiteral) Pos() token.Pos {
 	return l.Token.Position
 }
 
