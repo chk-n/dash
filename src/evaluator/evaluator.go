@@ -138,7 +138,10 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 	}
 }
 
-func (e *Evaluator) Eval(n ast.Node, ctx *Context) any {
+
+func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
+	defer recoverPanic(&result)
+
 	switch n := n.(type) {
 	// Recursively initialise libraries top down
 	case *ast.Library:
