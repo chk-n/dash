@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"dash-lang.io/src/ast"
@@ -22,12 +23,17 @@ type Config struct {
 }
 
 type Builder struct {
-	srcDir string
-	// root directory of project
+	srcDir      string
 	projectRoot string
-	// name of project as defined
-	// within dash.toml
 	projectName string
+}
+
+func (b *Builder) ProjectRoot() string {
+	return b.projectRoot
+}
+
+func (b *Builder) ProjectName() string {
+	return b.projectName
 }
 
 func New(cfg *Config) *Builder {
@@ -40,21 +46,22 @@ func (b *Builder) BuildProject() (_ map[string]*ast.Library, err error) {
 		return nil, err
 	}
 
+	if b.projectName, err = getProjectName(b.projectRoot); err != nil {
+		return nil, err
+	}
+
 	filesPerDir, err := b.findAllDashFiles()
 	if err != nil {
 		return nil, fmt.Errorf("unable to find dash files: %s", err)
 	}
 
-	if b.projectName, err = getProjectName(b.projectRoot); err != nil {
-		return nil, err
-	}
-
-	root, err := b.buildDependencyTree(b.srcDir, filesPerDir)
+	nodes, err := b.buildDependencyInfo(filesPerDir)
 	if err != nil {
-		return nil, fmt.Errorf("unable to build dependency tree: %s", err)
+		return nil, fmt.Errorf("unable to build dependency info: %s", err)
 	}
 
-	libs, err := b.buildProject(root)
+	// Build all libraries by walking dependency tree from all root nodes
+	libs, err := b.buildAllLibraries(nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -63,19 +70,24 @@ func (b *Builder) BuildProject() (_ map[string]*ast.Library, err error) {
 }
 
 func (b *Builder) findAllDashFiles() (_ map[string][]string, err error) {
-	// walk files in project
 	filesPerDir := make(map[string][]string)
-	if err := filepath.Walk(b.projectRoot, func(path string, info os.FileInfo, err error) error {
+
+	// Get absolute path of srcDir for consistent comparisons
+	absSrcDir, err := filepath.Abs(b.srcDir)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get absolute path of srcDir: %w", err)
+	}
+
+	// First, find all .ds files under srcDir (the target directory)
+	if err := filepath.Walk(absSrcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// skip directories
 		if info.IsDir() {
 			return nil
 		}
 
-		// we only want .ds files
 		if !strings.HasSuffix(path, ".ds") {
 			return nil
 		}
@@ -88,10 +100,83 @@ func (b *Builder) findAllDashFiles() (_ map[string][]string, err error) {
 		return nil, err
 	}
 
+	// Now recursively find all imported libraries
+	// Map to track which imports we've already processed
+	processedImports := make(map[string]bool)
+
+	// Keep finding imports until no new ones are discovered
+	for {
+		// Collect all imports from current set of files
+		var newImports []string
+		for _, files := range filesPerDir {
+			for _, file := range files {
+				lib, err := extractImports(file)
+				if err != nil {
+					return nil, err
+				}
+				if lib == nil {
+					continue
+				}
+
+				for _, n := range lib.Nodes {
+					if useStmt, ok := n.(*ast.UseStatement); ok {
+						importName := useStmt.Name.TokenLiteral()
+						if !processedImports[importName] {
+							newImports = append(newImports, importName)
+							processedImports[importName] = true
+						}
+					}
+				}
+			}
+		}
+
+		// If no new imports, we're done
+		if len(newImports) == 0 {
+			break
+		}
+
+		// Find files for the new imports by walking the entire project
+		allFilesInProject := make(map[string][]string)
+		if err := filepath.Walk(b.projectRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if info.IsDir() {
+				return nil
+			}
+
+			if !strings.HasSuffix(path, ".ds") {
+				return nil
+			}
+
+			dir := filepath.Dir(path)
+			allFilesInProject[dir] = append(allFilesInProject[dir], path)
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		// Add files for the imported libraries
+		for dir, files := range allFilesInProject {
+			if !strings.HasPrefix(dir, b.projectRoot) {
+				continue
+			}
+			libName := fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
+
+			if slices.Contains(newImports, libName) {
+				if _, exists := filesPerDir[dir]; !exists {
+					filesPerDir[dir] = files
+				}
+			}
+		}
+	}
+
 	return filesPerDir, nil
 }
 
-func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, error) {
+func (b *Builder) buildAllLibraries(nodes map[string]*dependencyTree) (map[string]*ast.Library, error) {
 	libs := make(map[string]*ast.Library)
 	var pErrs []string
 	var sErrs []string
@@ -135,7 +220,6 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 		// NOTE: in future this will also contain the path to the lib
 		dir := dep.AbsoluteDir
 		libImportName := fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
-
 		if _, ok := libs[libImportName]; ok {
 			return fmt.Errorf("duplicate library name '%s' found in directory '%s'",
 				lib.Name.String(), dep.AbsoluteDir)
@@ -172,8 +256,21 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 		return nil
 	}
 
-	if err := walkDependencyTree(root, parseAndMerge); err != nil {
-		return nil, fmt.Errorf("unable to walk dependency tree: %s", err)
+	// Find root nodes (nodes that are not imported by anyone)
+	imported := make(map[*dependencyTree]bool)
+	for _, node := range nodes {
+		for _, imp := range node.Imports {
+			imported[imp] = true
+		}
+	}
+
+	// Walk from all root nodes (this will visit all reachable nodes)
+	for _, node := range nodes {
+		if !imported[node] {
+			if err := walkDependencyTree(node, parseAndMerge); err != nil {
+				return nil, fmt.Errorf("unable to walk dependency tree: %s", err)
+			}
+		}
 	}
 
 	if len(pErrs) > 0 && len(sErrs) > 0 {
@@ -190,14 +287,14 @@ func (b *Builder) buildProject(root *dependencyTree) (map[string]*ast.Library, e
 	return libs, nil
 }
 
-func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]string) (*dependencyTree, error) {
-	// maps 'dir' to a DependecyTree node
+func (b *Builder) buildDependencyInfo(filesPerDir map[string][]string) (map[string]*dependencyTree, error) {
+	// maps 'libName' to a DependencyTree node
 	nodes := make(map[string]*dependencyTree, len(filesPerDir))
-	// contains all imports made by a library using 'dir' as key
+	// contains all imports made by a library using 'libName' as key
 	importMap := make(map[string][]string)
 
+	// First pass: create nodes and extract imports for all directories
 	for dir, files := range filesPerDir {
-
 		var libName string
 		for _, file := range files {
 			lib, err := extractImports(file)
@@ -209,13 +306,19 @@ func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]
 			}
 
 			if libName == "" {
+				// Ensure dir is under projectRoot
+				if !strings.HasPrefix(dir, b.projectRoot) {
+					return nil, fmt.Errorf("directory %s is not under project root %s", dir, b.projectRoot)
+				}
 				libName = fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
 			}
+
 			// skip if already parsed
 			if _, exists := importMap[libName]; exists {
 				continue
 			}
 
+			importMap[libName] = []string{}
 			for _, n := range lib.Nodes {
 				switch n := n.(type) {
 				case *ast.UseStatement:
@@ -224,28 +327,23 @@ func (b *Builder) buildDependencyTree(entryLib string, filesPerDir map[string][]
 				}
 			}
 		}
-		if strings.Contains(dir, entryLib) {
-			entryLib = libName
-		}
 		nodes[libName] = &dependencyTree{AbsoluteDir: dir, Files: files}
 	}
 
-	for dir, imps := range importMap {
+	// Second pass: link imports to dependency tree nodes
+	for libName, imps := range importMap {
 		imports := []*dependencyTree{}
 		for _, imp := range imps {
 			child, ok := nodes[imp]
 			if !ok {
-				// NOTE: this can be caused by an import being
-				// defined but not found. Obviously this should
-				// be handled earlier
-				panic("empty")
+				return nil, fmt.Errorf("library '%s' imports '%s' but it was not found in the project", libName, imp)
 			}
 			imports = append(imports, child)
 		}
-		nodes[dir].Imports = imports
+		nodes[libName].Imports = imports
 	}
 
-	return nodes[entryLib], nil
+	return nodes, nil
 }
 
 // ------- //
@@ -261,7 +359,7 @@ func findProjectRoot(startDir string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("expected directory but got file")
 	}
-	// get absolute path
+
 	absDir, err := filepath.Abs(startDir)
 	if err != nil {
 		return "", fmt.Errorf("unable to get absolute path: %s", err)

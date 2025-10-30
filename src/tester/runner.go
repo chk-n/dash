@@ -2,6 +2,9 @@ package tester
 
 import (
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"dash-lang.io/src/ast"
@@ -33,7 +36,6 @@ func NewTestRunner(dir string) *TestRunner {
 
 // Run executes all tests in the current directory
 func (tr *TestRunner) RunAll() error {
-	// Build entire project from directory
 	cfg := &builder.Config{
 		SrcDir: tr.testDir,
 	}
@@ -43,12 +45,26 @@ func (tr *TestRunner) RunAll() error {
 		return err
 	}
 
-	// Create evaluator with all libraries
+	absTestDir, err := filepath.Abs(tr.testDir)
+	if err != nil {
+		return fmt.Errorf("unable to get absolute path of test dir: %w", err)
+	}
+
 	eval := evaluator.New(libs)
 
-	// run all tests for all libraries
-	for libName, lib := range libs {
-		// Create new context for test
+	libNames := make([]string, 0, len(libs))
+	for libName := range libs {
+		libNames = append(libNames, libName)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(libNames)))
+
+	for _, libName := range libNames {
+		lib := libs[libName]
+
+		if !shouldTestLibrary(libName, absTestDir, b.ProjectRoot(), b.ProjectName()) {
+			continue
+		}
+
 		ctx := evaluator.NewContext(nil)
 		eval.InitialiseLib(lib, ctx)
 
@@ -80,6 +96,17 @@ func (tr *TestRunner) RunAll() error {
 
 	tr.printSummary()
 	return nil
+}
+
+// shouldTestLibrary determines if a library's tests should be run based on location
+func shouldTestLibrary(libName, absTestDir, projectRoot, projectName string) bool {
+	parts := strings.SplitN(libName, "/", 2)
+	if len(parts) != 2 {
+		return true
+	}
+
+	libDir := filepath.Join(projectRoot, parts[1])
+	return libDir == absTestDir || strings.HasPrefix(libDir, absTestDir+string(filepath.Separator))
 }
 
 func isTestFunction(fn *ast.FunctionExpression) bool {
