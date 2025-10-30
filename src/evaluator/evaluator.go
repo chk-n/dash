@@ -93,7 +93,7 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 
 		if _, ok := e.ctxs[normalisedLibName]; !ok {
 			ctxLib := NewContext(nil)
-			e.Eval(lib, ctxLib)
+			e.eval(lib, ctxLib)
 			e.ctxs[normalisedLibName] = ctxLib
 		}
 	}
@@ -138,10 +138,13 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 	}
 }
 
-
 func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 	defer recoverPanic(&result)
 
+	return e.eval(n, ctx)
+}
+
+func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 	switch n := n.(type) {
 	// Recursively initialise libraries top down
 	case *ast.Library:
@@ -160,7 +163,7 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 				*ast.EnumStatement, *ast.ErrorStatement:
 				// skip as already initialised
 			default:
-				last = e.Eval(n, ctx)
+				last = e.eval(n, ctx)
 			}
 		}
 		return last
@@ -179,7 +182,7 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 		}
 		// If ok is true then it is a custom type cast
 		if _, ok := ctx.typs.Get(n.TokenLiteral()); ok {
-			res := e.Eval(n.Arguments[0], ctx)
+			res := e.eval(n.Arguments[0], ctx)
 			if _, ok := n.T.(*types.Union); ok {
 				typeName := n.Arguments[0].Type().Ident()
 				descriptor := generateTypeDescriptor(typeName)
@@ -239,7 +242,7 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 	case *ast.ArrayLiteral:
 		vals := make([]any, len(n.Values))
 		for i, val := range n.Values {
-			vals[i] = e.Eval(val, ctx)
+			vals[i] = e.eval(val, ctx)
 		}
 		return vals
 	case *ast.StringLiteral:
@@ -292,7 +295,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	// evaluate arguments and set values in fresh symbol table
 	for i, arg := range n.Arguments {
 		fnArgName := fn.arguments[i].Name.Value
-		argValue := e.Eval(arg, stk)
+		argValue := e.eval(arg, stk)
 
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
 			argValue = e.evalToAny(argValue)
@@ -300,7 +303,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 
 		newCtx.Set(fnArgName, argValue)
 	}
-	res := e.Eval(fn.body, newCtx)
+	res := e.eval(fn.body, newCtx)
 
 	if returnVal, ok := res.(*Return); ok {
 		// check if function has any return types that are 'any'
@@ -320,7 +323,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 // The goal of type casts for now is to only support the minimum number of operations
 // to be able to bootstrap the compiler in dash
 func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Context) any {
-	val := e.Eval(n.Argument, stk)
+	val := e.eval(n.Argument, stk)
 	val = unwrapFunctionResult(val, 0)
 	switch t := n.Typ.(type) {
 	case *types.Int:
@@ -465,7 +468,7 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 	for i, val := range n.Values {
 		switch val.Type().(type) {
 		case *types.Multi:
-			res := e.Eval(val, ctx).(*Return)
+			res := e.eval(val, ctx).(*Return)
 			if _, ok := res.Values[0].(*Error); ok {
 				return res
 			}
@@ -473,7 +476,7 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
 			}
 		case *types.ImportedNamed:
-			res := e.Eval(val, ctx)
+			res := e.eval(val, ctx)
 			if ret, ok := res.(*Return); ok {
 				if _, ok := ret.Values[0].(*Error); ok {
 					return ret
@@ -503,7 +506,7 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 				}
 			}
 		default:
-			res := e.Eval(val, ctx)
+			res := e.eval(val, ctx)
 			unwrapped := unwrapFunctionResult(res, 0)
 			if _, ok := unwrapped.(*Error); ok {
 				return res
@@ -545,7 +548,7 @@ func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, res any
 	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	idx := e.Eval(exp.Indices[0], stk).(int64)
+	idx := e.eval(exp.Indices[0], stk).(int64)
 	arr.([]any)[idx] = res
 }
 
@@ -559,14 +562,14 @@ func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, res any
 	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	rng := e.Eval(exp.Indices[0], stk).([]any)
+	rng := e.eval(exp.Indices[0], stk).([]any)
 	start := rng[0].(int64)
 	end := rng[1].(int64)
 	copy(arr.([]any)[start:end], res.([]any))
 }
 
 func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, res any, stk *Context) {
-	strct := e.Eval(exp.Left, stk).(map[string]any)
+	strct := e.eval(exp.Left, stk).(map[string]any)
 
 	// we know exp.Right must be an identifier or integer literal for struct fields
 	var field string
@@ -592,9 +595,9 @@ func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression, stk *Context) 
 	for _, c := range n.Conditionals {
 		// This means else block matched
 		if c.Condition == nil {
-			return e.Eval(c.Block, stk)
+			return e.eval(c.Block, stk)
 		}
-		val := e.Eval(c.Condition, stk)
+		val := e.eval(c.Condition, stk)
 		var cond bool
 		if res, ok := val.(*Return); ok {
 			cond = res.Values[0].(bool)
@@ -604,7 +607,7 @@ func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression, stk *Context) 
 			panic("this is a compiler error. please report")
 		}
 		if cond {
-			return e.Eval(c.Block, stk)
+			return e.eval(c.Block, stk)
 		}
 	}
 	return nil
@@ -618,20 +621,20 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 		e.evalAssignmentStatement(n.Assignment, stk)
 
 		for {
-			cond := e.Eval(n.Condition, stk)
+			cond := e.eval(n.Condition, stk)
 			if !cond.(bool) {
 				break
 			}
-			exp := e.Eval(n.Block, stk)
+			exp := e.eval(n.Block, stk)
 			if _, ok := exp.(*Return); ok {
 				return exp
 			} else if exp == BREAK {
 				break
 			} else if exp == NEXT {
-				e.Eval(n.Change, stk)
+				e.eval(n.Change, stk)
 				continue
 			}
-			e.Eval(n.Change, stk)
+			e.eval(n.Change, stk)
 		}
 		return nil
 	}
@@ -639,13 +642,13 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	// conditional loop
 	if n.Condition != nil && n.Change == nil {
 		for {
-			cond := e.Eval(n.Condition, stk)
+			cond := e.eval(n.Condition, stk)
 			cond = unwrapFunctionResult(cond, 0)
 			if !cond.(bool) {
 				break
 			}
 
-			exp := e.Eval(n.Block, stk)
+			exp := e.eval(n.Block, stk)
 			if _, ok := exp.(*Return); ok {
 				return exp
 			} else if exp == BREAK {
@@ -660,7 +663,7 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	// infinite loop
 	if n.Condition == nil {
 		for {
-			exp := e.Eval(n.Block, stk)
+			exp := e.eval(n.Block, stk)
 			if _, ok := exp.(*Return); ok {
 				return exp
 			} else if exp == BREAK {
@@ -676,7 +679,7 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 }
 
 func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement, stk *Context) any {
-	scrutinee := e.Eval(n.Scrutinee, stk)
+	scrutinee := e.eval(n.Scrutinee, stk)
 
 	if _, ok := n.Scrutinee.(*ast.FunctionCallExpression); ok {
 		scrutinee = unwrapFunctionResult(scrutinee, 0)
@@ -749,7 +752,7 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 		for _, c := range n.Cases {
 			// Check each predicate in the case
 			for _, pred := range c.Predicates {
-				predValue := e.Eval(pred, stk)
+				predValue := e.eval(pred, stk)
 				if predValue == scrutinee {
 					return e.evalMatchCase(c, stk)
 				}
@@ -767,7 +770,7 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 func (e *Evaluator) evalMatchCase(c *ast.MatchCase, stk *Context) any {
 	var last any
 	for _, stmt := range c.Body {
-		last = e.Eval(stmt, stk)
+		last = e.eval(stmt, stk)
 		if _, ok := last.(*Return); ok {
 			return last
 		}
@@ -779,7 +782,7 @@ func (e *Evaluator) evalMatchCase(c *ast.MatchCase, stk *Context) any {
 func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any {
 	var exp any
 	for _, stmt := range n.Statements {
-		exp = e.Eval(stmt, stk)
+		exp = e.eval(stmt, stk)
 		// We stop execution only in 3 circumstances
 		// because of a return statement, break/next
 		// statement or because of an error due to "try"
@@ -820,7 +823,7 @@ func (e *Evaluator) evalKeywordStatement(n *ast.KeywordStatement) any {
 func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) any {
 	var vals []any
 	for i := range n.Values {
-		res := e.Eval(n.Values[i], stk)
+		res := e.eval(n.Values[i], stk)
 		switch n.Values[i].(type) {
 		case *ast.FunctionCallExpression, *ast.TryExpression, *ast.MatchExpressionStatement:
 			if ret, ok := res.(*Return); ok {
@@ -847,7 +850,7 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 	}
 
 	// case 2: local access
-	leftValue := e.Eval(n.Left, stk)
+	leftValue := e.eval(n.Left, stk)
 	if leftValue == nil {
 		panic("this is a compiler error. please report")
 	}
@@ -873,7 +876,7 @@ func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, stk
 		// Check if it's a type cast: lib.Type(value)
 		if _, ok := libCtx.typs.Get(name); ok {
 			// For type casts, evaluate the argument and return it
-			return e.Eval(right.Arguments[0], stk)
+			return e.eval(right.Arguments[0], stk)
 		}
 
 		// Otherwise it's a function call: lib.function(args...)
@@ -922,12 +925,12 @@ func (e *Evaluator) evalLocalAccess(leftValue any, right ast.Expression, stk *Co
 }
 
 func (e *Evaluator) evalSliceExpression(n *ast.SliceExpression, ctx *Context) any {
-	arr := e.Eval(n.Left, ctx)
+	arr := e.eval(n.Left, ctx)
 
 	rng := n.Indices[0].(*ast.InfixExpression)
 
-	start := e.Eval(rng.Left, ctx).(int64)
-	end := e.Eval(rng.Right, ctx).(int64)
+	start := e.eval(rng.Left, ctx).(int64)
+	end := e.eval(rng.Right, ctx).(int64)
 
 	return sliceArray(arr, start, end)
 }
@@ -962,12 +965,12 @@ func sliceArray(arr any, s, e int64) any {
 }
 
 func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) any {
-	arr := e.Eval(n.Left, stk)
+	arr := e.eval(n.Left, stk)
 
 	// evaluate all indices
 	indices := make([]int, len(n.Indices))
 	for i, idx := range n.Indices {
-		val := e.Eval(idx, stk)
+		val := e.eval(idx, stk)
 		idx, err := castTo[int64](val)
 		if err != nil {
 			panic("this is a compiler error. please report")
@@ -1009,7 +1012,7 @@ func indexArray(arr any, idx int) any {
 // ----------------- //
 
 func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) any {
-	val := e.Eval(n.Right, stk)
+	val := e.eval(n.Right, stk)
 	var err error
 	switch n.Token.Type {
 	case token.MINUS:
@@ -1107,11 +1110,11 @@ func (e *Evaluator) evalPrefixOptional(v any) any {
 // ---------------- //
 
 func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) any {
-	l := e.Eval(n.Left, ctx)
+	l := e.eval(n.Left, ctx)
 	if _, ok := l.(*Return); ok {
 		l = unwrapFunctionResult(l, 0)
 	}
-	r := e.Eval(n.Right, ctx)
+	r := e.eval(n.Right, ctx)
 	if _, ok := r.(*Return); ok {
 		r = unwrapFunctionResult(r, 0)
 	}
@@ -1579,7 +1582,7 @@ func (e *Evaluator) evalInfixPipe(l, r any, ctx *Context) any {
 			newCtx.Set(paramName, l)
 		}
 
-		return e.Eval(fn.body, newCtx)
+		return e.eval(fn.body, newCtx)
 	}
 	return nil
 }
@@ -1589,7 +1592,7 @@ func (e *Evaluator) evalInfixPipe(l, r any, ctx *Context) any {
 // ------------------ //
 
 func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context) {
-	left := e.Eval(n.Left, stk)
+	left := e.eval(n.Left, stk)
 	val, ok := left.(int64)
 	if !ok {
 		panic("this is a compiler error. please report")
@@ -1612,7 +1615,7 @@ func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context
 func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 	strct := make(map[string]any)
 	if n.Copy != nil {
-		s := e.Eval(n.Copy, stk).(map[string]any)
+		s := e.eval(n.Copy, stk).(map[string]any)
 		maps.Copy(strct, s)
 	}
 
@@ -1624,7 +1627,7 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 		} else {
 			name = fmt.Sprintf("%d", field.Index)
 		}
-		val := e.Eval(field.Value, stk)
+		val := e.eval(field.Value, stk)
 		// Unwrap Return structs to get the actual value
 		val = unwrapFunctionResult(val, 0)
 		strct[name] = val
@@ -1643,7 +1646,7 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 // -------------- //
 
 func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
-	res := e.Eval(n.Right, ctx)
+	res := e.eval(n.Right, ctx)
 	if res == nil {
 		return nil
 	}
@@ -1663,7 +1666,7 @@ func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {
 	// Evaluate the error expression to get the actual error value/name
-	errVal := e.Eval(n.Error, ctx)
+	errVal := e.eval(n.Error, ctx)
 
 	if _, ok := errVal.(*Error); !ok {
 		panic("this is a compiler error. please report")
@@ -1706,9 +1709,9 @@ func (e *Evaluator) evalLen(args []ast.Expression, stk *Context) any {
 	var val any
 	switch args[0].(type) {
 	case *ast.FunctionCallExpression:
-		val = unwrapFunctionResult(e.Eval(args[0], stk), 0)
+		val = unwrapFunctionResult(e.eval(args[0], stk), 0)
 	default:
-		val = e.Eval(args[0], stk)
+		val = e.eval(args[0], stk)
 	}
 
 	var n int64
@@ -1730,7 +1733,7 @@ func (e *Evaluator) evalPrintln(args []ast.Expression, stk *Context) any {
 
 	// evaluate each argument and convert to string
 	for _, arg := range args {
-		a := e.Eval(arg, stk)
+		a := e.eval(arg, stk)
 		switch a := a.(type) {
 		case *Return:
 			rets := a.Values
@@ -1753,19 +1756,19 @@ func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 
 	var arr []any
 	if len(args) == 2 {
-		size := e.Eval(args[1], stk)
+		size := e.eval(args[1], stk)
 		sizeVal, _ := size.(int64)
 		if sizeVal < 0 {
 			panic("this is a compiler error. please report")
 		}
 		arr = make([]any, sizeVal)
 	} else {
-		len := e.Eval(args[1], stk)
+		len := e.eval(args[1], stk)
 		lenVal, _ := len.(int64)
 		if lenVal < 0 {
 			panic("this is a compiler error. please report")
 		}
-		size := e.Eval(args[2], stk)
+		size := e.eval(args[2], stk)
 		sizeVal, _ := size.(int64)
 		if sizeVal < 0 || lenVal > sizeVal {
 			panic("this is a compiler error. please report")
@@ -1778,7 +1781,7 @@ func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 
 func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 	var cond bool
-	val := e.Eval(args[0], ctx)
+	val := e.eval(args[0], ctx)
 	if ret, ok := val.(*Return); ok {
 		cond = ret.Values[0].(bool)
 	} else {
@@ -1786,7 +1789,7 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 	}
 
 	if !cond {
-		msg := e.Eval(args[1], ctx).(string)
+		msg := e.eval(args[1], ctx).(string)
 		typeDesc := generateTypeDescriptor("std.assert")
 		return &Return{Values: []any{&Error{descriptor: typeDesc, Err: msg}}}
 	}
@@ -1794,11 +1797,11 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 }
 
 func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
-	arr := e.Eval(args[0], ctx)
+	arr := e.eval(args[0], ctx)
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
-		val := e.Eval(args[1], ctx)
+		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
 		if anyArr, ok := val.([]any); ok {
 			newArr = append(arr, anyArr...)
@@ -1817,7 +1820,7 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 			newArr = append(arr, val)
 		}
 	case []uint8:
-		val := e.Eval(args[1], ctx)
+		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
 		// Handle case where we're appending []uint8 to []uint8
 		if byteArr, ok := val.([]uint8); ok {
@@ -1838,9 +1841,9 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	// Handle array/map case: put(arr, idx, val)
-	arr := e.Eval(args[0], ctx)
-	idx := e.Eval(args[1], ctx).(int64)
-	val := e.Eval(args[2], ctx)
+	arr := e.eval(args[0], ctx)
+	idx := e.eval(args[1], ctx).(int64)
+	val := e.eval(args[2], ctx)
 	val = unwrapFunctionResult(val, 0)
 
 	var newArr any
@@ -1867,8 +1870,8 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 }
 
 func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
-	arr := e.Eval(args[0], ctx)
-	idx := e.Eval(args[1], ctx).(int64)
+	arr := e.eval(args[0], ctx)
+	idx := e.eval(args[1], ctx).(int64)
 
 	var result any
 	switch arr := arr.(type) {
@@ -1889,9 +1892,9 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 }
 
 func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
-	arr := e.Eval(args[0], ctx)
-	start := e.Eval(args[1], ctx).(int64)
-	end := e.Eval(args[2], ctx).(int64)
+	arr := e.eval(args[0], ctx)
+	start := e.eval(args[1], ctx).(int64)
+	end := e.eval(args[2], ctx).(int64)
 
 	var newArr any
 	switch arr := arr.(type) {
@@ -1917,7 +1920,7 @@ func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Conte
 	// evaluate arguments and set values in fresh symbol table
 	for i, arg := range args {
 		fnArgName := fn.arguments[i].Name.Value
-		argValue := e.Eval(arg, ctx)
+		argValue := e.eval(arg, ctx)
 
 		// Check if parameter type is 'any' and convert if needed
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
@@ -1926,7 +1929,7 @@ func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Conte
 
 		newCtx.Set(fnArgName, argValue)
 	}
-	res := e.Eval(fn.body, newCtx)
+	res := e.eval(fn.body, newCtx)
 	if _, ok := res.(*Return); ok {
 		return res
 	}

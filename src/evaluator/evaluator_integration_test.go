@@ -98,7 +98,7 @@ func TestEvalLibrary(t *testing.T) {
 			ctx := NewContext(nil)
 			e.InitialiseLib(lib, ctx)
 
-			got := e.Eval(lib, ctx)
+			got := e.eval(lib, ctx)
 
 			if !deepEqual(tt.want, got) {
 				t.Errorf("wanted:\n%s\nbut got:\n%s", tt.want, got)
