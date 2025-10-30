@@ -47,16 +47,25 @@ func (tr *TestRunner) RunAll() error {
 	eval := evaluator.New(libs)
 
 	// run all tests for all libraries
-	for _, lib := range libs {
+	for libName, lib := range libs {
 		// Create new context for test
 		ctx := evaluator.NewContext(nil)
 		eval.InitialiseLib(lib, ctx)
+
+		printedHeader := false
+
 		for _, n := range lib.Nodes {
 			switch fn := n.(type) {
 			case *ast.FunctionExpression:
 				if !isTestFunction(fn) {
 					continue
 				}
+
+				if !printedHeader {
+					fmt.Printf("\n\x1b[1m%s\x1b[0m\n", libName)
+					printedHeader = true
+				}
+
 				result := tr.runTest(fn, eval, ctx)
 				tr.results = append(tr.results, result)
 				if result.Passed {
