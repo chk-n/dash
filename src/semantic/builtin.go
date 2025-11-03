@@ -40,25 +40,25 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		// TODO: assert argsTypes[1] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
+		errorProne = true
 	case "insert":
 		// fn insert[T any](arr []T, idx i64, v T) []T
 		args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
+		errorProne = true
 	case "get":
-		// fn get[T any]([]T, idx i64) T
+		// fn get[T any]([]T, idx i64)! T
 		elemType := argsTypes[0].(*types.Array).T
 		// TODO: assert argsTypes[1] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{elemType}
+		errorProne = true
 	case "slice":
-		// fn slice[T any]([]T, start i64, end i64) []T
+		// fn slice[T any]([]T, start i64, end i64)! []T
 		// TODO: assert argsTypes[1] and argsTypes[2] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
-	case "concat":
-		// fn concat[T any]([]T, []T) []T
-		args = []types.Type{argsTypes[0], argsTypes[1]}
-		rets = []types.Type{argsTypes[0]}
+		errorProne = true
 	case "len":
 		args = []types.Type{
 			&types.Generic{Name: "T", Constraints: []types.Type{
