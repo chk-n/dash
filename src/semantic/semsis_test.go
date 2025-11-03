@@ -1948,6 +1948,17 @@ func TestBuiltinWithTypeAliases(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestScoping(t *testing.T) {
+	tests := []testCase{
+		{
+			name:   "for loop scoping",
+			input:  "lib main for i = 0; i < 10; i++ { } i",
+			errors: []string{"identifier 'i' not found"},
+		},
+	}
+	runAnalysisTests(t, tests)
+
+}
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

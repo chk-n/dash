@@ -861,6 +861,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 	case *ast.ForStatement:
 		s.scope.Push(FOR)
+		s.varSt.Scope()
+
+		defer s.varSt.Unscope()
 		defer s.scope.Pop()
 
 		if n.Assignment != nil {
