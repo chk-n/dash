@@ -1927,6 +1927,27 @@ func TestBitwiseOperations(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestBuiltinWithTypeAliases(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "get with type alias index",
+			input: `type index u32 let arr = [1, 2, 3] let idx = index(0) let val = try get(arr, idx)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(0) let val i64 = try get(arr,idx) }",
+		},
+		{
+			name:  "slice with type alias indices",
+			input: `type index u32 let arr = [1, 2, 3, 4, 5] let start = index(1) let end = index(3) let result = try slice(arr, start, end)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3,4,5] let start index = index(1) let end index = index(3) let result []i64 = try slice(arr,start,end) }",
+		},
+		{
+			name:  "put with type alias index",
+			input: `type index u32 let arr = [1, 2, 3] let idx = index(1) let result = put(arr, idx, 99)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(1) let result []i64 = put(arr,idx,99) }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

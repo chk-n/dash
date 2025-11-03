@@ -1277,8 +1277,9 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 			// type so that they can be used with built-in
 			// functions
 			argT := s.coalesceTypeForBuiltIn(arg.Type(), n.TokenLiteral())
-			if !expectedType.Equal(argT) {
-				s.addError(arg, errTypeMismatch(expectedType.String(), argT.String()))
+			expectedT := s.coalesceTypeForBuiltIn(expectedType, n.TokenLiteral())
+			if !expectedT.Equal(argT) {
+				s.addError(arg, errTypeMismatch(expectedT.String(), argT.String()))
 			}
 			continue
 		} else {
