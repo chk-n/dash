@@ -1265,7 +1265,19 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 
 	// Check arguments of same type
 	for i, arg := range n.Arguments {
-		s.analyse(arg, "")
+
+		switch arg := arg.(type) {
+		case *ast.StructLiteral:
+			// for anonymous struct literals we need
+			// to coalesce literal to the expected type
+			if arg.Name == nil {
+				s.coalesceAnonymousStruct(arg, expectedTs[i])
+			} else {
+				s.analyse(arg, "")
+			}
+		default:
+			s.analyse(arg, "")
+		}
 		expectedType := expectedTs[i]
 
 		typ := s.inferUnknownNamedType(arg.Type())
@@ -1430,6 +1442,48 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.Type, fnName string) types.Ty
 		return s.coalesceTypeForBuiltIn(t.T, fnName)
 	default:
 		return t
+	}
+}
+
+func (s *Semantics) coalesceAnonymousStruct(structLit *ast.StructLiteral, expectedType types.Type) {
+	expectedStruct, ok := types.GetUnderlyingStructType(expectedType)
+	if !ok {
+		s.analyse(structLit, "")
+		return
+	}
+
+	structLit.Name = &ast.Identifier{
+		Token: token.Token{Literal: expectedStruct.Name},
+		Value: expectedStruct.Name,
+		T:     expectedType,
+	}
+	structLit.T = expectedType
+
+	for i, field := range structLit.Fields {
+		var expectedFieldType types.Type
+		if field.Name != nil {
+			fieldType, _, err := expectedStruct.GetTypeByField(field.Name.TokenLiteral())
+			if err != nil {
+				s.analyse(field.Value, "")
+				continue
+			}
+			expectedFieldType = fieldType
+		} else {
+			if i >= len(expectedStruct.Ts) {
+				s.analyse(field.Value, "")
+				continue
+			}
+			expectedFieldType = expectedStruct.Ts[i].T
+		}
+
+		if nestedStruct, ok := field.Value.(*ast.StructLiteral); ok && nestedStruct.Name == nil {
+			s.coalesceAnonymousStruct(nestedStruct, expectedFieldType)
+		} else {
+			s.analyse(field.Value, "")
+		}
+
+		field.T = expectedFieldType
+		structLit.Fields[i].Index = i
 	}
 }
 

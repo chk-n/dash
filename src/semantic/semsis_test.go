@@ -783,6 +783,16 @@ func TestAnonymousStruct(t *testing.T) {
 			input: `enum token_type { t } let n = {token_type.t} let typ = n.0`,
 			want:  "lib main enum token_type {t} pub fn main() { let n struct<token_type> = {token_type: token_type.t} let typ token_type = n.0 }",
 		},
+		{
+			name:  "anonymous struct - coalesce literals to expected type in function call",
+			input: `struct data { x u32, y u32 } fn test(d data) { } test({x: 1, y: 2})`,
+			want:  "lib main struct data {x u32, y u32} fn test(d data) { } pub fn main() { test(data{x u32: 1, y u32: 2}) }",
+		},
+		{
+			name:  "anonymous struct - coalesce nested literals to expected type in function call",
+			input: `struct a {f b}  struct b { x u32, y u32 } fn test(s a) { } test({f: {x: 1, y: 2}})`,
+			want:  "lib main struct a {f b} struct b {x u32, y u32} fn test(s a) { } pub fn main() { test(a{f b: b{x u32: 1, y u32: 2}}) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
