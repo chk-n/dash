@@ -1211,8 +1211,8 @@ func TestMemorySemantics(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "passing memory to fn makes it unusable",
-			input: "let a = make([]u8, 1) test(&a) let b = a fn test(m *mut[[]u8]) {}",
-			want:  "lib main fn test(m *mut[[]u8]) { } pub fn main() { let a mut[[]u8] = make([]u8,1) test(&a) let b []u8 = a }",
+			input: "let a = try make([]u8, 1) test(&a) let b = a fn test(m *mut[[]u8]) {}",
+			want:  "lib main fn test(m *mut[[]u8]) { } pub fn main() { let a mut[[]u8] = try make([]u8,1) test(&a) let b []u8 = a }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1269,6 +1269,21 @@ func TestTryExpression(t *testing.T) {
 		// 	input: "fn test() { let arr = [1, 2, 3] let x = arr[5] }",
 		// 	want:  "lib main fn test() { let arr []i64 = [1,2,3] let x i64 = arr[5] } pub fn main() { }",
 		// },
+		{
+			name:  "try with nested error-prone calls",
+			input: "fn test()! { let arr = [1, 2] let arr2 = [3, 4] let c = try append(slice(arr, 0, 1), slice(arr2, 0, 1)) }",
+			want:  "lib main fn test()! { let arr []i64 = [1,2] let arr2 []i64 = [3,4] let c []i64 = try append(slice(arr,0,1),slice(arr2,0,1)) } pub fn main() { }",
+		},
+		{
+			name:  "try with dot access on error-prone call",
+			input: "struct a {x i64} fn test()! { let arr = [a{x: 1}] let v = try get(arr, 0).x }",
+			want:  "lib main struct a {x i64} fn test()! { let arr []a = [a{x i64: 1}] let v i64 = try get(arr,0).x } pub fn main() { }",
+		},
+		{
+			name:   "error-prone call without try",
+			input:  "fn test()! { let arr = [1, 2] let v = get(arr, 0) }",
+			errors: []string{"error-prone function 'get' must be wrapped in 'try'"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1469,13 +1484,13 @@ func TestBuiltInFunction(t *testing.T) {
 		},
 		{
 			name:  "make",
-			input: "let arr = make([]i64, 10)",
-			want:  "lib main pub fn main() { let arr mut[[]i64] = make([]i64,10) }",
+			input: "let arr = try make([]i64, 10)",
+			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10) }",
 		},
 		{
 			name:  "make with initial value",
-			input: "let arr = make([]i64, 10, 0)",
-			want:  "lib main pub fn main() { let arr mut[[]i64] = make([]i64,10,0) }",
+			input: "let arr = try make([]i64, 10, 0)",
+			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10,0) }",
 		},
 		{
 			name:  "validate",
@@ -1484,13 +1499,13 @@ func TestBuiltInFunction(t *testing.T) {
 		},
 		{
 			name:  "length of memory",
-			input: "let arr = make([]byte, 256) len(arr)",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = make([]byte,256) len(arr) }",
+			input: "let arr = try make([]byte, 256) len(arr)",
+			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) len(arr) }",
 		},
 		{
 			name:  "capacity of memory",
-			input: "let arr = make([]byte, 256) cap(arr)",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = make([]byte,256) cap(arr) }",
+			input: "let arr = try make([]byte, 256) cap(arr)",
+			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) cap(arr) }",
 		},
 		{
 			name:  "assert",
@@ -1619,48 +1634,48 @@ func TestAppendFunction(t *testing.T) {
 	tests := []testCase{
 		{
 			name:   "append string to []byte",
-			input:  `let buf = make([]byte, 1) let result = append(buf, "hello")`,
+			input:  `let buf = try make([]byte, 1) let result = try append(buf, "hello")`,
 			errors: []string{"type mistmatch, expected type 'byte' but got 'string'"},
 		},
 		{
 			name:  "append byte to []byte",
-			input: `let buf = make([]byte, 1) let result = append(buf, byte(65))`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = make([]byte,1) let result mut[[]byte] = append(buf,byte(65)) }",
+			input: `let buf = try make([]byte, 1) let result = try append(buf, byte(65))`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,byte(65)) }",
 		},
 		{
 			name:  "append []byte to []byte",
-			input: `let buf = make([]byte, 1) let more = []byte([1,2,3]) let result = append(buf, more)`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = make([]byte,1) let more []byte = []byte([1,2,3]) let result mut[[]byte] = append(buf,more) }",
+			input: `let buf = try make([]byte, 1) let more = []byte([1,2,3]) let result = try append(buf, more)`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let more []byte = []byte([1,2,3]) let result mut[[]byte] = try append(buf,more) }",
 		},
 		{
 			name:   "append int to []string",
-			input:  `let arr = make([]string, 1) let result = append(arr, 42)`,
+			input:  `let arr = try make([]string, 1) let result = try append(arr, 42)`,
 			errors: []string{"type mistmatch, expected type 'string' but got 'i64'"},
 		},
 		{
 			name:   "append to non-slice",
-			input:  `let x = 42 let result = append(x, 1)`,
+			input:  `let x = 42 let result = try append(x, 1)`,
 			errors: []string{"type mistmatch, expected type '[]T' but got 'i64'"},
 		},
 		{
 			name:  "append char to []byte",
-			input: `let buf = make([]byte, 1) let result = append(buf, 'A')`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = make([]byte,1) let result mut[[]byte] = append(buf,'A') }",
+			input: `let buf = try make([]byte, 1) let result = try append(buf, 'A')`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,'A') }",
 		},
 		{
 			name:  "put element in array",
-			input: `let arr = [1, 2, 3] let result = put(arr, 1, 99)`,
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result []i64 = put(arr,1,99) }",
+			input: `let arr = [1, 2, 3] let result = try put(arr, 1, 99)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result []i64 = try put(arr,1,99) }",
 		},
 		{
 			name:  "get element from array",
-			input: `let arr = [1, 2, 3] let result = get(arr, 1)`,
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result i64 = get(arr,1) }",
+			input: `let arr = [1, 2, 3] let result = try get(arr, 1)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result i64 = try get(arr,1) }",
 		},
 		{
 			name:  "slice array",
-			input: `let arr = [1, 2, 3, 4, 5] let result = slice(arr, 1, 3)`,
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3,4,5] let result []i64 = slice(arr,1,3) }",
+			input: `let arr = [1, 2, 3, 4, 5] let result = try slice(arr, 1, 3)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3,4,5] let result []i64 = try slice(arr,1,3) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1951,8 +1966,8 @@ func TestBuiltinWithTypeAliases(t *testing.T) {
 		},
 		{
 			name:  "put with type alias index",
-			input: `type index u32 let arr = [1, 2, 3] let idx = index(1) let result = put(arr, idx, 99)`,
-			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(1) let result []i64 = put(arr,idx,99) }",
+			input: `type index u32 let arr = [1, 2, 3] let idx = index(1) let result = try put(arr, idx, 99)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(1) let result []i64 = try put(arr,idx,99) }",
 		},
 	}
 	runAnalysisTests(t, tests)

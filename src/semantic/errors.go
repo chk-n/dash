@@ -66,6 +66,9 @@ var (
 	errInvalidTry = func() error {
 		return fmt.Errorf("invalid use of 'try' with a non error-prone function")
 	}
+	errErrorProneNeedsTry = func(name string) error {
+		return fmt.Errorf("error-prone function '%s' must be wrapped in 'try'", name)
+	}
 	errCannotInferTypeParameter = func(name string) error {
 		return fmt.Errorf("cannot infer type parameter '%s'", name)
 	}

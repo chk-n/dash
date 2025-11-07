@@ -913,6 +913,16 @@ func TestTryCatchExpression(t *testing.T) {
 			input: "other_fn(try risky_fn())",
 			want:  "other_fn(try risky_fn())",
 		},
+		{
+			name:  "try with dot access",
+			input: "try get(arr, 0).x",
+			want:  "try get(arr,0).x",
+		},
+		{
+			name:  "try with comparison expression",
+			input: "try true == get()",
+			want:  "try (true == get())",
+		},
 	}
 
 	for _, tc := range tests {

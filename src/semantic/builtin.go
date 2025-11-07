@@ -36,6 +36,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		// TODO: assert argsTypes[1] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{argsTypes[0]}
+		errorProne = true
 	case "put":
 		// TODO: assert argsTypes[1] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
@@ -91,6 +92,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
 		}
 		rets = []types.Type{&types.Mutable{T: argsTypes[0]}}
+		errorProne = true
 	case "validate":
 		args = []types.Type{&types.Dirty{T: &types.Generic{Name: "T"}}}
 		rets = []types.Type{&types.ConstBool}

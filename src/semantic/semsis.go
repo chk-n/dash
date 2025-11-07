@@ -64,6 +64,8 @@ type Semantics struct {
 	// can mark operations as dirty e.g. for use,
 	// copy update and operations with guarded type
 	guardedType *internal.Cache[string, struct{}]
+	// tracks depth of try blocks (0 = not inside try)
+	insideTryDepth int
 }
 
 type SemanticalError struct {
@@ -305,6 +307,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		} else {
 			n.T = &types.Multi{Ts: n.ReturnTypes}
 		}
+
+		// Check if error-prone function needs try
+		s.checkErrorProneFunction(n)
 
 		// built in functions such as 'len' do not consume memory
 		if !isBuiltinFunction(n.Token.Literal) {
@@ -909,9 +914,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		}
 		s.analyse(n.Block, "")
 	case *ast.TryExpression:
-		// TODO: check that try used in error-prone function
+		// Increment try depth before analyzing the expression
+		s.insideTryDepth++
 		s.analyse(n.Right, "")
-		// TODO: check if try used with error-prone function
+		s.insideTryDepth--
 		n.SetType(n.Right.Type())
 	case *ast.RaiseStatement:
 		switch exp := n.Error.(type) {
@@ -2354,6 +2360,34 @@ func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array)
 
 func (s *Semantics) addError(n ast.Node, err error) {
 	s.errors = append(s.errors, &SemanticalError{At: n, Err: err})
+}
+
+// checkErrorProneFunction validates that error-prone functions are wrapped in try.
+// If the call is already inside a try block, it's allowed without additional wrapping.
+func (s *Semantics) checkErrorProneFunction(n *ast.FunctionCallExpression) {
+	if s.insideTryDepth > 0 {
+		return
+	}
+
+	var isErrorProne bool
+	fnName := n.TokenLiteral()
+
+	if isBuiltinFunction(fnName) {
+		builtinFn := getBuiltinSignature(fnName, getTypesFromExpressions(n.Arguments))
+		if builtinFn != nil {
+			if fnType, ok := builtinFn.Type().(*types.Function); ok {
+				isErrorProne = fnType.IsErrorProne
+			}
+		}
+	} else {
+		if fnInfo, ok := s.fnSt.Get(fnName); ok {
+			isErrorProne = fnInfo.Type.IsErrorProne
+		}
+	}
+
+	if isErrorProne {
+		s.addError(n, errErrorProneNeedsTry(fnName))
+	}
 }
 
 func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {

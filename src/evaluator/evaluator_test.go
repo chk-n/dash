@@ -812,7 +812,7 @@ func TestTryExpression(t *testing.T) {
 	            try divide(a, b)
 	            return 0
 	        }
-	        safe_divide(10, 0)`,
+	        try safe_divide(10, 0)`,
 			want: &Return{Values: []any{&Error{Err: "main.divide_by_zero"}}},
 		},
 		{
@@ -841,6 +841,65 @@ func TestTryExpression(t *testing.T) {
 		    let res = try test2()
 		    res`,
 			want: int64(1),
+		},
+		{
+			name: "try with dot access",
+			prog: `
+			struct Point {x i64}
+	        let arr = [Point{x: 10}]
+	        try get(arr, 0).x`,
+			want: int64(10),
+		},
+		{
+			name: "try wrapping nested error-prone calls",
+			prog: `
+	        let a = [1, 2]
+	        let b = [3, 4]
+	        try append(slice(a, 0, 1), slice(b, 0, 1))`,
+			want: &Return{Values: []any{[]any{int64(1), int64(3)}}},
+		},
+		{
+			name: "try with dot access propagates error",
+			prog: `
+			struct Point {x i64}
+	        let arr = [Point{x: 10}]
+	        try get(arr, 5).x`,
+			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+		},
+		{
+			name: "try with comparison propagates error",
+			prog: `
+	        let arr = [1, 2]
+	        try get(arr, 5) == 1`,
+			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+		},
+		{
+			name: "try with comparison succeeds",
+			prog: `
+	        let arr = [1, 2]
+	        try get(arr, 0) == 1`,
+			want: true,
+		},
+		{
+			name: "try with slice error",
+			prog: `
+	        let arr = [1, 2, 3]
+	        try slice(arr, 0, 10)`,
+			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+		},
+		{
+			name: "try with arithmetic containing error",
+			prog: `
+	        let arr = [5, 10]
+	        try get(arr, 5) + 10`,
+			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+		},
+		{
+			name: "try with logical operation containing error",
+			prog: `
+	        let arr = [true, false]
+	        try get(arr, 5) && true`,
+			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
 		},
 	}
 
@@ -1022,22 +1081,22 @@ func TestMake(t *testing.T) {
 	}{
 		{
 			name: "make integer array",
-			prog: "make([]i64, 3)",
+			prog: "try make([]i64, 3)",
 			want: &Return{[]any{[]any{nil, nil, nil}}},
 		},
 		{
 			name: "make float array",
-			prog: "make([]f64, 2)",
+			prog: "try make([]f64, 2)",
 			want: &Return{[]any{[]any{nil, nil}}},
 		},
 		{
 			name: "make string array",
-			prog: `make([]string, 1)`,
+			prog: `try make([]string, 1)`,
 			want: &Return{[]any{[]any{nil}}},
 		},
 		{
 			name: "make empty array",
-			prog: "make([]i64, 0)",
+			prog: "try make([]i64, 0)",
 			want: &Return{[]any{[]any{}}},
 		},
 	}
@@ -1066,12 +1125,12 @@ func TestAssert(t *testing.T) {
 	}{
 		{
 			name: "assert literal",
-			prog: `assert(true, "")`,
+			prog: `try assert(true, "")`,
 			want: nil,
 		},
 		{
 			name: "assert function call",
-			prog: `fn call() bool {return false} assert(call(), "want")`,
+			prog: `fn call() bool {return false} try assert(call(), "want")`,
 			want: &Return{[]any{&Error{Err: "want"}}},
 		},
 	}
@@ -1237,7 +1296,7 @@ func TestMutable(t *testing.T) {
 		{
 			name: "modify array using index expression",
 			prog: `
-			let buf = make([]i64, 3)
+			let buf = try make([]i64, 3)
 			buf[0] = 1
 			buf[1] = 2
 			buf`,
@@ -1246,7 +1305,7 @@ func TestMutable(t *testing.T) {
 		{
 			name: "modify array using slice expression",
 			prog: `
-			let buf = make([]i64, 3)
+			let buf = try make([]i64, 3)
 		    buf[0:3] = [3,2,1]
 			buf`,
 			want: []any{int64(3), int64(2), int64(1)},
@@ -1421,7 +1480,7 @@ func TestMatchStatement(t *testing.T) {
 					}
 					return x
 				}
-				test()
+				try test()
 			`,
 			want: &Return{Values: []any{&Error{Err: "main.some_err"}}},
 		},
@@ -1853,14 +1912,14 @@ func TestAppend(t *testing.T) {
 		{
 			name: "append single element to array without len",
 			prog: `
-			let arr = make([]byte, 2)
+			let arr = try make([]byte, 2)
 			append(arr, 3)`,
 			want: &Return{[]any{[]any{nil, nil, int64(3)}}},
 		},
 		{
 			name: "append single element to array",
 			prog: `
-			let arr = make([]byte, 0, 2)
+			let arr = try make([]byte, 0, 2)
 			append(arr, 3)`,
 			want: &Return{[]any{[]any{int64(3)}}},
 		},
@@ -1892,28 +1951,28 @@ func TestBuiltinArrayFunctions(t *testing.T) {
 			name: "put element in array",
 			prog: `
 			let arr = [1, 2, 3]
-			put(arr, 1, 99)`,
+			try put(arr, 1, 99)`,
 			want: &Return{[]any{[]any{int64(1), int64(99), int64(3)}}},
 		},
 		{
 			name: "get element from array",
 			prog: `
 			let arr = [1, 2, 3]
-			get(arr, 1)`,
+			try get(arr, 1)`,
 			want: &Return{[]any{int64(2)}},
 		},
 		{
 			name: "slice array",
 			prog: `
 			let arr = [1, 2, 3, 4, 5]
-			slice(arr, 1, 3)`,
+			try slice(arr, 1, 3)`,
 			want: &Return{[]any{[]any{int64(2), int64(3)}}},
 		},
 		{
 			name: "put preserves original array",
 			prog: `
 			let arr = [1, 2, 3]
-			let new_arr = put(arr, 0, 99)
+			let new_arr = try put(arr, 0, 99)
 			arr`,
 			want: []any{int64(1), int64(2), int64(3)},
 		},
@@ -1921,7 +1980,7 @@ func TestBuiltinArrayFunctions(t *testing.T) {
 			name: "slice entire array",
 			prog: `
 			let arr = [1, 2, 3]
-			slice(arr, 0, 3)`,
+			try slice(arr, 0, 3)`,
 			want: &Return{[]any{[]any{int64(1), int64(2), int64(3)}}},
 		},
 	}

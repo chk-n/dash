@@ -25,6 +25,11 @@ const (
 	NEXT
 )
 
+// Global error type descriptors to avoid recomputation
+var (
+	errDescIndexOutOfBounds = generateTypeDescriptor("runtime.index_out_of_bounds")
+)
+
 type Error struct {
 	descriptor uint32
 	Err        string
@@ -854,9 +859,11 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 	if leftValue == nil {
 		panic("this is a compiler error. please report")
 	}
-
 	if ret, ok := leftValue.(*Return); ok {
 		leftValue = unwrapFunctionResult(ret, 0)
+		if _, isError := leftValue.(*Error); isError {
+			return ret
+		}
 	}
 
 	return e.evalLocalAccess(leftValue, n.Right, stk)
@@ -1111,12 +1118,18 @@ func (e *Evaluator) evalPrefixOptional(v any) any {
 
 func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) any {
 	l := e.eval(n.Left, ctx)
-	if _, ok := l.(*Return); ok {
-		l = unwrapFunctionResult(l, 0)
+	if ret, ok := l.(*Return); ok {
+		l = unwrapFunctionResult(ret, 0)
+		if _, isError := l.(*Error); isError {
+			return ret
+		}
 	}
 	r := e.eval(n.Right, ctx)
-	if _, ok := r.(*Return); ok {
-		r = unwrapFunctionResult(r, 0)
+	if ret, ok := r.(*Return); ok {
+		r = unwrapFunctionResult(ret, 0)
+		if _, isError := r.(*Error); isError {
+			return ret
+		}
 	}
 
 	var val any
@@ -1714,6 +1727,8 @@ func (e *Evaluator) evalLen(args []ast.Expression, stk *Context) any {
 		val = e.eval(args[0], stk)
 	}
 
+	val = unwrapFunctionResult(val, 0)
+
 	var n int64
 	switch v := val.(type) {
 	case []any:
@@ -1798,6 +1813,7 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
+	arr = unwrapFunctionResult(arr, 0)
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
@@ -1873,16 +1889,22 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
 	idx := e.eval(args[1], ctx).(int64)
 
+	arr = unwrapFunctionResult(arr, 0)
 	var result any
 	switch arr := arr.(type) {
 	case []any:
 		if idx < 0 || idx >= int64(len(arr)) {
-			panic("index out of bounds")
+			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
 		}
 		result = arr[idx]
 	case []uint8:
 		if idx < 0 || idx >= int64(len(arr)) {
-			panic("index out of bounds")
+			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+		}
+		result = arr[idx]
+	case string:
+		if idx < 0 || idx >= int64(len(arr)) {
+			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
 		}
 		result = arr[idx]
 	default:
@@ -1900,12 +1922,12 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if start < 0 || end > int64(len(arr)) || start > end {
-			panic("slice bounds out of range")
+			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
 		}
 		newArr = arr[start:end]
 	case []uint8:
 		if start < 0 || end > int64(len(arr)) || start > end {
-			panic("slice bounds out of range")
+			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
 		}
 		newArr = arr[start:end]
 	default:

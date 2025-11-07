@@ -131,7 +131,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.IF, p.parseIfElseExpression)
 	p.registerPrefix(token.MATCH, p.parseMatchExpression)
 	p.registerPrefix(token.LBRACE, p.parseAnonymousStructLiteral)
-	// p.registerPrefix(token.TRY, p.parseTryExpression)
 	p.registerPrefix(token.LBRACK, p.parseArrayLiteralTypeOrCast)
 	// Types
 	p.registerPrefix(token.STRINGTYPE, p.parseTypeLiteral)
@@ -1625,11 +1624,9 @@ func (p *Parser) parseTryExpression() ast.Expression {
 	exp := &ast.TryExpression{Token: p.curToken}
 	p.nextToken()
 
-	if !p.curTokenIs(token.IDENT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	exp.Right = p.parseExpression(CALL)
+	// Allow any expression after try (function calls, dot access, etc.)
+	// Use LOWEST precedence to capture the entire expression
+	exp.Right = p.parseExpression(LOWEST)
 	return exp
 }
 
