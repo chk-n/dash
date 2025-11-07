@@ -1195,7 +1195,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 	case *ast.IntegerLiteral:
 		n.T = &types.ConstI64
 	case *ast.HexLiteral:
-		n.T = &types.ConstI64
+		n.T = &types.ConstU64
 	case *ast.FloatLiteral:
 		n.T = &types.ConstF64
 	case *ast.CharacterLiteral:

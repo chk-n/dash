@@ -86,12 +86,12 @@ func TestHexLiterals(t *testing.T) {
 		{
 			name:  "simple hex literal",
 			input: "let a = 0xFF",
-			want:  "lib main pub fn main() { let a i64 = 0xFF }",
+			want:  "lib main pub fn main() { let a u64 = 0xFF }",
 		},
 		{
 			name:  "hex literal with underscore",
 			input: "let a = 0xFF_FF",
-			want:  "lib main pub fn main() { let a i64 = 0xFF_FF }",
+			want:  "lib main pub fn main() { let a u64 = 0xFF_FF }",
 		},
 		{
 			name:  "hex literal cast to u8",
@@ -101,7 +101,7 @@ func TestHexLiterals(t *testing.T) {
 		{
 			name:  "hex literal in expression",
 			input: "let a = 0x10 + 0x20",
-			want:  "lib main pub fn main() { let a i64 = (0x10 + 0x20) }",
+			want:  "lib main pub fn main() { let a u64 = (0x10 + 0x20) }",
 		},
 		{
 			name:  "hex literal comparison",
