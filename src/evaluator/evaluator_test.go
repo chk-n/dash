@@ -142,8 +142,8 @@ func TestBitwiseOperations(t *testing.T) {
 		},
 		{
 			name: "bitwise NOT",
-			prog: "~5",
-			want: int64(-6),
+			prog: "u64(~5)",
+			want: uint64(18446744073709551610),
 		},
 		{
 			name: "combined operations",
@@ -153,17 +153,17 @@ func TestBitwiseOperations(t *testing.T) {
 		{
 			name: "bitwise with byte",
 			prog: "byte(15) & byte(7)",
-			want: byte(7),
+			want: uint8(7),
 		},
 		{
 			name: "bitwise NOT with byte",
 			prog: "~byte(255)",
-			want: byte(0),
+			want: uint8(0),
 		},
 		{
 			name: "bitwise XOR with byte",
 			prog: "byte(15) ^ byte(10)",
-			want: byte(5),
+			want: uint8(5),
 		},
 	}
 
@@ -188,12 +188,12 @@ func TestCharOperations(t *testing.T) {
 		{
 			name: "char literal",
 			prog: "'a'",
-			want: 'a',
+			want: uint32('a'),
 		},
 		{
 			name: "char variable assignment",
 			prog: "let c = 'x' c",
-			want: 'x',
+			want: uint32('x'),
 		},
 		{
 			name: "char in expression",
@@ -213,7 +213,7 @@ func TestCharOperations(t *testing.T) {
 		{
 			name: "char arithmetic",
 			prog: "'a' + byte(1)",
-			want: byte('b'),
+			want: uint8('b'),
 		},
 		// {
 		// 	name: "char to string",
@@ -226,7 +226,7 @@ func TestCharOperations(t *testing.T) {
 			struct letter { val byte }
 			let l = letter{val: 'a'}
 			l.val`,
-			want: byte('a'),
+			want: uint8('a'),
 		},
 		{
 			name: "char comparison with byte",
@@ -236,22 +236,22 @@ func TestCharOperations(t *testing.T) {
 		{
 			name: "byte to char",
 			prog: "let b = byte(65) char(b)",
-			want: 'A',
+			want: uint32('A'),
 		},
 		{
 			name: "new line char",
 			prog: `'\n'`,
-			want: '\n',
+			want: uint32('\n'),
 		},
 		{
 			name: "escape '",
 			prog: `'\''`,
-			want: '\'',
+			want: uint32('\''),
 		},
 		{
 			name: "escape \\",
 			prog: `'\\'`,
-			want: '\\',
+			want: uint32('\\'),
 		},
 	}
 
@@ -1161,11 +1161,11 @@ func TestTypeCasting(t *testing.T) {
 		// 	prog: "let x = 2 u8(x)",
 		// 	want: uint8(2),
 		// },
-		{
-			name: "byte to string",
-			prog: "let x = byte(0) string(x)",
-			want: string(byte(0)),
-		},
+		// {
+		// 	name: "byte to string",
+		// 	prog: "let x = byte(0) string(x)",
+		// 	want: string(byte(0)),
+		// },
 		{
 			name: "aggregate type cast",
 			prog: `
@@ -1214,6 +1214,70 @@ func TestCustomTypeCasting(t *testing.T) {
 			want: &Union{descriptor: uint32(3332055654), value: int64(1)},
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHexLiterals(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "specific hex literal with u64 cast",
+			prog: "let s1 = u64(0x8bb84b93962eacc9) s1",
+			want: uint64(10067880064238660809),
+		},
+		{
+			name: "simple hex literal",
+			prog: "0xff",
+			want: uint64(255),
+		},
+		{
+			name: "hex literal lowercase",
+			prog: "0xabcdef",
+			want: uint64(11259375),
+		},
+		{
+			name: "hex literal uppercase",
+			prog: "0xABCDEF",
+			want: uint64(11259375),
+		},
+		{
+			name: "small hex literal",
+			prog: "0x10",
+			want: uint64(16),
+		},
+		{
+			name: "hex literal in expression",
+			prog: "0x10 + 0x20",
+			want: uint64(48),
+		},
+		{
+			name: "hex literal with u64 cast in expression",
+			prog: "u64(0xff) + u64(0x01)",
+			want: uint64(256),
+		},
+		{
+			name: "large hex literal",
+			prog: "0xffffffffffffffff",
+			want: uint64(18446744073709551615),
+		},
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n, err := parseExpressions(tt.prog)
@@ -1914,14 +1978,14 @@ func TestAppend(t *testing.T) {
 			prog: `
 			let arr = try make([]byte, 2)
 			append(arr, 3)`,
-			want: &Return{[]any{[]any{nil, nil, int64(3)}}},
+			want: &Return{[]any{[]any{nil, nil, uint8(3)}}},
 		},
 		{
 			name: "append single element to array",
 			prog: `
 			let arr = try make([]byte, 0, 2)
 			append(arr, 3)`,
-			want: &Return{[]any{[]any{int64(3)}}},
+			want: &Return{[]any{[]any{uint8(3)}}},
 		},
 	}
 

@@ -14,10 +14,6 @@ import (
 	"dash-lang.io/src/types"
 )
 
-// NOTE: evaluator treats all integers as i64
-
-// TODO: adjust evaluator to check symbol tables when dot expression used
-// on non struct or enum variable
 type keyword uint8
 
 const (
@@ -253,16 +249,34 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 	case *ast.StringLiteral:
 		return n.TokenLiteral()
 	case *ast.CharacterLiteral:
-		switch n.T.(type) {
+		switch n.Type().(type) {
 		case *types.Byte:
-			return byte(n.Value)
+			return uint8(n.Value)
+		case *types.Char:
+			return uint32(n.Value)
 		default:
-			return rune(n.Value)
+			panic("this is a compiler error. please report")
 		}
 	case *ast.IntegerLiteral:
-		return n.Value
+		underlyingType := types.GetUnderlyingType(n.Type())
+		switch t := underlyingType.(type) {
+		case *types.Int:
+			return e.evalIntCast(t, n.Value)
+		case *types.Byte:
+			return e.evalByteCast(t, n.Value)
+		case *types.Char:
+			return e.evalCharCast(t, n.Value)
+		default:
+			panic("this is a compiler error. please report")
+		}
 	case *ast.HexLiteral:
-		return n.Value
+		underlyingType := types.GetUnderlyingType(n.Type())
+		switch t := underlyingType.(type) {
+		case *types.Int:
+			return e.evalIntCast(t, n.Value)
+		default:
+			panic("this is a compiler error. please report")
+		}
 	case *ast.BooleanLiteral:
 		return n.Value
 	case *ast.FloatLiteral:
@@ -350,54 +364,153 @@ func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Conte
 
 func (e *Evaluator) evalIntCast(t *types.Int, v any) any {
 	switch t.Signed + t.Width {
-	// 8, 9
 	case 8:
-		fallthrough
-		// return toUint8(v)
+		return e.toUint8(v)
 	case 16:
-		fallthrough
-	case 17:
-		fallthrough
+		return e.toUint16(v)
 	case 32:
-		fallthrough
-		// return e.toUint32(v)
-	case 33:
-		fallthrough
+		return e.toUint32(v)
 	case 64:
-		fallthrough
-		// toUint64()
-	case 65:
+		return e.toUint64(v)
+	case 17, 33, 65:
 		return e.toInt64(v)
 	}
 	panic("invalid int cast")
 }
-
-func (e *Evaluator) toUint32(v any) any {
+func (e *Evaluator) toUint8(v any) uint8 {
 	switch v := v.(type) {
-	case byte:
-		return uint32(v)
-	case rune:
-		return uint32(v)
+	case uint8:
+		return v
+	case uint16:
+		return uint8(v)
+	case uint32:
+		return uint8(v)
+	case uint64:
+		return uint8(v)
+	case int8:
+		return uint8(v)
+	case int16:
+		return uint8(v)
+	case int32:
+		return uint8(v)
 	case int64:
+		return uint8(v)
+	}
+	panic("invalid cast to u8")
+}
+
+func (e *Evaluator) toUint16(v any) uint16 {
+	switch v := v.(type) {
+	case uint8:
+		return uint16(v)
+	case uint16:
+		return v
+	case uint32:
+		return uint16(v)
+	case uint64:
+		return uint16(v)
+	case int8:
+		return uint16(v)
+	case int16:
+		return uint16(v)
+	case int32:
+		return uint16(v)
+	case int64:
+		return uint16(v)
+	}
+	panic("invalid cast to u16")
+}
+
+func (e *Evaluator) toUint32(v any) uint32 {
+	switch v := v.(type) {
+	case uint8:
+		return uint32(v)
+	case uint16:
 		return uint32(v)
 	case uint32:
 		return v
+	case uint64:
+		return uint32(v)
+	case int8:
+		return uint32(v)
+	case int16:
+		return uint32(v)
+	case int32:
+		return uint32(v)
+	case int64:
+		return uint32(v)
 	}
 	panic("invalid cast to u32")
 }
 
-func (e *Evaluator) toInt64(v any) any {
+func (e *Evaluator) toUint64(v any) uint64 {
 	switch v := v.(type) {
-	case byte:
+	case uint8:
+		return uint64(v)
+	case uint16:
+		return uint64(v)
+	case uint32:
+		return uint64(v)
+	case uint64:
+		return v
+	case int8:
+		return uint64(v)
+	case int16:
+		return uint64(v)
+	case int32:
+		return uint64(v)
+	case int64:
+		return uint64(v)
+	}
+	panic(fmt.Sprintf("invalid cast to u64 from %T", v))
+}
+
+func (e *Evaluator) toInt64(v any) int64 {
+	switch v := v.(type) {
+	case uint8:
 		return int64(v)
-	case rune:
+	case uint16:
+		return int64(v)
+	case uint32:
+		return int64(v)
+	case uint64:
+		return int64(v)
+	case int8:
+		return int64(v)
+	case int16:
+		return int64(v)
+	case int32:
 		return int64(v)
 	case int64:
 		return v
-		// TODO i8 to i32
-		// TODO u8 to u64
 	}
-	panic("invalid cast to i64")
+	panic(fmt.Sprintf("invalid cast to i64 from %T", v))
+}
+
+func (e *Evaluator) toFloat64(v any) float64 {
+	switch v := v.(type) {
+	case uint8:
+		return float64(v)
+	case uint16:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case int8:
+		return float64(v)
+	case int16:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	}
+	panic(fmt.Sprintf("invalid cast to float64 from %T", v))
 }
 
 // Byte casting
@@ -405,8 +518,22 @@ func (e *Evaluator) toInt64(v any) any {
 func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
+	case uint8:
+		return v
+	case uint16:
+		return uint8(v)
+	case uint32:
+		return uint8(v)
+	case uint64:
+		return uint8(v)
+	case int8:
+		return uint8(v)
+	case int16:
+		return uint8(v)
+	case int32:
+		return uint8(v)
 	case int64:
-		return byte(v)
+		return uint8(v)
 	}
 	panic("invalid cast to byte")
 }
@@ -415,10 +542,22 @@ func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
 	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
-	case byte:
-		return rune(v)
+	case uint8:
+		return uint32(v)
+	case uint16:
+		return uint32(v)
+	case uint32:
+		return v
+	case uint64:
+		return uint32(v)
+	case int8:
+		return uint32(v)
+	case int16:
+		return uint32(v)
+	case int32:
+		return uint32(v)
 	case int64:
-		return rune(v)
+		return uint32(v)
 	}
 	panic("invalid cast to char")
 }
@@ -553,7 +692,7 @@ func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, res any
 	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	idx := e.eval(exp.Indices[0], stk).(int64)
+	idx := e.toInt64(e.eval(exp.Indices[0], stk))
 	arr.([]any)[idx] = res
 }
 
@@ -568,8 +707,8 @@ func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, res any
 		panic("this is a compiler error. please report")
 	}
 	rng := e.eval(exp.Indices[0], stk).([]any)
-	start := rng[0].(int64)
-	end := rng[1].(int64)
+	start := e.toInt64(rng[0])
+	end := e.toInt64(rng[1])
 	copy(arr.([]any)[start:end], res.([]any))
 }
 
@@ -685,10 +824,7 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 
 func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement, stk *Context) any {
 	scrutinee := e.eval(n.Scrutinee, stk)
-
-	if _, ok := n.Scrutinee.(*ast.FunctionCallExpression); ok {
-		scrutinee = unwrapFunctionResult(scrutinee, 0)
-	}
+	scrutinee = unwrapFunctionResult(scrutinee, 0)
 
 	stk.Scope()
 	defer stk.Unscope()
@@ -758,7 +894,7 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 			// Check each predicate in the case
 			for _, pred := range c.Predicates {
 				predValue := e.eval(pred, stk)
-				if predValue == scrutinee {
+				if e.evalInfixEqual(predValue, scrutinee).(bool) {
 					return e.evalMatchCase(c, stk)
 				}
 			}
@@ -936,8 +1072,8 @@ func (e *Evaluator) evalSliceExpression(n *ast.SliceExpression, ctx *Context) an
 
 	rng := n.Indices[0].(*ast.InfixExpression)
 
-	start := e.eval(rng.Left, ctx).(int64)
-	end := e.eval(rng.Right, ctx).(int64)
+	start := e.toInt64(e.eval(rng.Left, ctx))
+	end := e.toInt64(e.eval(rng.Right, ctx))
 
 	return sliceArray(arr, start, end)
 }
@@ -978,11 +1114,7 @@ func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) an
 	indices := make([]int, len(n.Indices))
 	for i, idx := range n.Indices {
 		val := e.eval(idx, stk)
-		idx, err := castTo[int64](val)
-		if err != nil {
-			panic("this is a compiler error. please report")
-		}
-		indices[i] = int(idx)
+		indices[i] = int(e.toInt64(val))
 	}
 	// perform indexing and handle multiple dimensions
 	curr := arr
@@ -1045,8 +1177,6 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) 
 
 func (e *Evaluator) evalPrefixMinus(v any) (any, error) {
 	switch v := v.(type) {
-	case int:
-		return -v, nil
 	case int8:
 		return -v, nil
 	case int16:
@@ -1054,8 +1184,6 @@ func (e *Evaluator) evalPrefixMinus(v any) (any, error) {
 	case int32:
 		return -v, nil
 	case int64:
-		return -v, nil
-	case uint:
 		return -v, nil
 	case uint8:
 		return -v, nil
@@ -1089,9 +1217,11 @@ func (e *Evaluator) evalPrefixBitwiseNot(v any) (any, error) {
 	switch v := v.(type) {
 	case int64:
 		return ^v, nil
-	case byte:
+	case uint8:
 		return ^v, nil
-	case rune:
+	case uint32:
+		return ^v, nil
+	case uint64:
 		return ^v, nil
 	default:
 		return nil, fmt.Errorf("cannot apply bitwise NOT to type %T", v)
@@ -1202,6 +1332,22 @@ func (e *Evaluator) evalInfixAdd(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l + r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l + r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l + r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l + r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l + r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
@@ -1209,14 +1355,6 @@ func (e *Evaluator) evalInfixAdd(l, r any) (res any, err error) {
 	case string:
 		var r_ string
 		r_, err = castTo[string](r)
-		res = l + r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l + r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
 		res = l + r_
 	}
 
@@ -1228,6 +1366,22 @@ func (e *Evaluator) evalInfixSub(l, r any) (res any, err error) {
 	case int64:
 		var r_ int64
 		r_, err = castTo[int64](r)
+		res = l - r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l - r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l - r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l - r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
 		res = l - r_
 	case float64:
 		var r_ float64
@@ -1243,6 +1397,22 @@ func (e *Evaluator) evalInfixMul(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l * r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l * r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l * r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l * r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l * r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
@@ -1256,6 +1426,34 @@ func (e *Evaluator) evalInfixDiv(l, r any) (res any, err error) {
 	case int64:
 		var r_ int64
 		r_, err = castTo[int64](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		res = l / r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		res = l / r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		res = l / r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		res = l / r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
 		if r_ == 0 {
 			return nil, fmt.Errorf("division by zero")
 		}
@@ -1280,6 +1478,34 @@ func (e *Evaluator) evalInfixMod(l, r any) (res any, err error) {
 			return nil, fmt.Errorf("modulo by zero")
 		}
 		res = l % r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("modulo by zero")
+		}
+		res = l % r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("modulo by zero")
+		}
+		res = l % r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("modulo by zero")
+		}
+		res = l % r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		if r_ == 0 {
+			return nil, fmt.Errorf("modulo by zero")
+		}
+		res = l % r_
 	default:
 		err = fmt.Errorf("unsupported type for modulo %T", l)
 	}
@@ -1288,17 +1514,20 @@ func (e *Evaluator) evalInfixMod(l, r any) (res any, err error) {
 
 func (e *Evaluator) evalInfixLeftShift(l, r any) (res any, err error) {
 	switch l := l.(type) {
+	case uint8:
+		r_, _ := castTo[uint8](r)
+		res = l << r_
+	case uint16:
+		r_, _ := castTo[uint16](r)
+		res = l << r_
+	case uint32:
+		r_, _ := castTo[uint32](r)
+		res = l << r_
+	case uint64:
+		r_, _ := castTo[uint64](r)
+		res = l << r_
 	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l << r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l << r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
+		r_, _ := castTo[int64](r)
 		res = l << r_
 	default:
 		err = fmt.Errorf("unsupported type for left shift %T", l)
@@ -1308,80 +1537,122 @@ func (e *Evaluator) evalInfixLeftShift(l, r any) (res any, err error) {
 
 func (e *Evaluator) evalInfixRightShift(l, r any) (res any, err error) {
 	switch l := l.(type) {
+	case uint8:
+		r_, _ := castTo[uint8](r)
+		res = l >> r_
+	case uint16:
+		r_, _ := castTo[uint16](r)
+		res = l >> r_
+	case uint32:
+		r_, _ := castTo[uint32](r)
+		res = l >> r_
+	case uint64:
+		r_, _ := castTo[uint64](r)
+		res = l >> r_
 	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l >> r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l >> r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
+		r_, _ := castTo[int64](r)
 		res = l >> r_
 	default:
-		err = fmt.Errorf("unsupported type for right shift %T", l)
+		err = fmt.Errorf("unsupported type for left shift %T", l)
 	}
 	return
 }
 
 func (e *Evaluator) evalInfixBitwiseAnd(l, r any) (res any, err error) {
+	// Preserve the type of the left operand for the result
 	switch l := l.(type) {
 	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l & r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l & r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
-		res = l & r_
+		r64, err := castTo[int64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l & r64
+	case uint64:
+		r64, err := castTo[uint64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l & r64
+	case uint8:
+		r8, err := castTo[uint8](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l & r8
+	case uint32:
+		r32, err := castTo[uint32](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l & r32
 	default:
-		err = fmt.Errorf("unsupported type for bitwise AND %T", l)
+		return nil, fmt.Errorf("unsupported type for bitwise AND %T", l)
 	}
 	return
 }
 
 func (e *Evaluator) evalInfixBitwiseOr(l, r any) (res any, err error) {
+	// Preserve the type of the left operand for the result
 	switch l := l.(type) {
 	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l | r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l | r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
-		res = l | r_
+		r64, err := castTo[int64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l | r64
+	case uint64:
+		r64, err := castTo[uint64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l | r64
+	case uint8:
+		r8, err := castTo[uint8](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l | r8
+	case uint32:
+		r32, err := castTo[uint32](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l | r32
 	default:
-		err = fmt.Errorf("unsupported type for bitwise OR %T", l)
+		return nil, fmt.Errorf("unsupported type for bitwise OR %T", l)
 	}
 	return
 }
 
 func (e *Evaluator) evalInfixBitwiseXor(l, r any) (res any, err error) {
+	// Preserve the type of the left operand for the result
 	switch l := l.(type) {
 	case int64:
-		var r_ int64
-		r_, err = castTo[int64](r)
-		res = l ^ r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l ^ r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
-		res = l ^ r_
+		r64, err := castTo[int64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l ^ r64
+	case uint64:
+		r64, err := castTo[uint64](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l ^ r64
+	case uint8:
+		r8, err := castTo[uint8](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l ^ r8
+	case uint32:
+		r32, err := castTo[uint32](r)
+		if err != nil {
+			return nil, err
+		}
+		res = l ^ r32
 	default:
-		err = fmt.Errorf("unsupported type for bitwise XOR %T", l)
+		return nil, fmt.Errorf("unsupported type for bitwise XOR %T", l)
 	}
 	return
 }
@@ -1412,17 +1683,25 @@ func (e *Evaluator) evalInfixLess(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l < r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l < r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l < r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l < r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l < r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
-		res = l < r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l < r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
 		res = l < r_
 	}
 	return
@@ -1434,17 +1713,25 @@ func (e *Evaluator) evalInfixGreater(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l > r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l > r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l > r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l > r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l > r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
-		res = l > r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l > r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
 		res = l > r_
 	}
 	return
@@ -1456,17 +1743,25 @@ func (e *Evaluator) evalInfixLessEqual(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l <= r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l <= r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l <= r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l <= r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l <= r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
-		res = l <= r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l <= r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
 		res = l <= r_
 	}
 	return
@@ -1478,17 +1773,25 @@ func (e *Evaluator) evalInfixGreaterEqual(l, r any) (res any, err error) {
 		var r_ int64
 		r_, err = castTo[int64](r)
 		res = l >= r_
+	case uint8:
+		var r_ uint8
+		r_, err = castTo[uint8](r)
+		res = l >= r_
+	case uint16:
+		var r_ uint16
+		r_, err = castTo[uint16](r)
+		res = l >= r_
+	case uint32:
+		var r_ uint32
+		r_, err = castTo[uint32](r)
+		res = l >= r_
+	case uint64:
+		var r_ uint64
+		r_, err = castTo[uint64](r)
+		res = l >= r_
 	case float64:
 		var r_ float64
 		r_, err = castTo[float64](r)
-		res = l >= r_
-	case byte:
-		var r_ byte
-		r_, err = castTo[byte](r)
-		res = l >= r_
-	case rune:
-		var r_ rune
-		r_, err = castTo[rune](r)
 		res = l >= r_
 	}
 	return
@@ -1606,19 +1909,54 @@ func (e *Evaluator) evalInfixPipe(l, r any, ctx *Context) any {
 
 func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context) {
 	left := e.eval(n.Left, stk)
-	val, ok := left.(int64)
-	if !ok {
-		panic("this is a compiler error. please report")
-	}
 
+	var isIncr bool
 	switch n.Token.Type {
 	case token.INCR:
-		stk.Set(n.Left.String(), val+1)
+		isIncr = true
 	case token.DECR:
-		stk.Set(n.Left.String(), val-1)
+		isIncr = false
 	default:
 		panic("this is a compiler error. please report")
 	}
+
+	var newVal any
+	switch v := left.(type) {
+	case uint8:
+		if isIncr {
+			newVal = v + 1
+		} else {
+			newVal = v - 1
+		}
+	case uint16:
+		if isIncr {
+			newVal = v + 1
+		} else {
+			newVal = v - 1
+		}
+	case uint32:
+		if isIncr {
+			newVal = v + 1
+		} else {
+			newVal = v - 1
+		}
+	case uint64:
+		if isIncr {
+			newVal = v + 1
+		} else {
+			newVal = v - 1
+		}
+	case int64:
+		if isIncr {
+			newVal = v + 1
+		} else {
+			newVal = v - 1
+		}
+	default:
+		panic("this is a compiler error. please report")
+	}
+
+	stk.Set(n.Left.String(), newVal)
 }
 
 // -------- //
@@ -1643,6 +1981,20 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 		val := e.eval(field.Value, stk)
 		// Unwrap Return structs to get the actual value
 		val = unwrapFunctionResult(val, 0)
+
+		// Cast the value to the correct type based on the field's type
+		if field.T != nil {
+			underlyingType := types.GetUnderlyingType(field.T)
+			switch t := underlyingType.(type) {
+			case *types.Int:
+				val = e.evalIntCast(t, val)
+			case *types.Byte:
+				val = e.evalByteCast(t, val)
+			case *types.Char:
+				val = e.evalCharCast(t, val)
+			}
+		}
+
 		strct[name] = val
 	}
 	if _, ok := n.T.(*types.Error); ok {
@@ -1858,7 +2210,7 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	// Handle array/map case: put(arr, idx, val)
 	arr := e.eval(args[0], ctx)
-	idx := e.eval(args[1], ctx).(int64)
+	idx := e.toInt64(e.eval(args[1], ctx))
 	val := e.eval(args[2], ctx)
 	val = unwrapFunctionResult(val, 0)
 
@@ -1887,7 +2239,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
-	idx := e.eval(args[1], ctx).(int64)
+	idx := e.toInt64(e.eval(args[1], ctx))
 
 	arr = unwrapFunctionResult(arr, 0)
 	var result any
@@ -1915,8 +2267,8 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
-	start := e.eval(args[1], ctx).(int64)
-	end := e.eval(args[2], ctx).(int64)
+	start := e.toInt64(e.eval(args[1], ctx))
+	end := e.toInt64(e.eval(args[2], ctx))
 
 	var newArr any
 	switch arr := arr.(type) {
