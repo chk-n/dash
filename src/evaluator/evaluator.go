@@ -2281,6 +2281,7 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
+	arr = unwrapFunctionResult(arr, 0)
 	start := e.toInt64(e.eval(args[1], ctx))
 	end := e.toInt64(e.eval(args[2], ctx))
 
