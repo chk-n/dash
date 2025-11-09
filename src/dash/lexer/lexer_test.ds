@@ -98,7 +98,7 @@ fn test_next_token()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -122,7 +122,7 @@ fn test_string()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -150,7 +150,7 @@ fn test_number()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -169,7 +169,7 @@ fn test_bool()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -191,7 +191,7 @@ fn test_char()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -218,7 +218,7 @@ fn test_comment()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
     }
@@ -236,7 +236,7 @@ fn test_whitespace()! {
     for i = 0; i < len(tests); i++ {
         let tc = tests[i]
         let l = new([]byte(tc.0), 0)
-        let l, let tkn = next_tkn(l)
+        let l, let tkn = try next_tkn(l)
        
         try assert(tkn.tag == tc.1, "token type mismatch")
 
@@ -261,7 +261,7 @@ fn test_sequential()! {
         
         var count = 0
         for {
-            let l, let tkn = next_tkn(l)
+            let l, let tkn = try next_tkn(l)
             let lit = get_literal(l, tkn)
             if tkn.tag == tag.EOF {
                 break

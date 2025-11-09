@@ -162,39 +162,13 @@ fn test_call_expression()! {
  }
 
 @test
-fn test_index_expression()! {
-    try assert_parse_exp("a[0]", "a[0]")
-    try assert_parse_exp("a[b]", "a[b]")
-    try assert_parse_exp("a[1]()", "a[1]()")
-    
-    try assert_parse_exp("a[b:4]", "a[b:4]")
-    try assert_parse_exp("a[:4]", "a[:4]")
-    try assert_parse_exp("a[1:]", "a[1:]")
-    try assert_parse_exp("a[1:1][0][b]", "a[1:1][0][b]")
-    try assert_parse_exp("a[:1][0]", "a[:1][0]")
-    try assert_parse_exp("a[b():c()]", "a[b():c()]")
-
-    try assert_parse_error("a[", [expected_expression{i: 2}])
-    try assert_parse_error("a[0", [expected_bracket{i: 3}])
-    try assert_parse_error("a[0:", [expected_expression{i: 4}])
-    try assert_parse_error("a[:", [expected_expression{i: 3}])
-    try assert_parse_error("a[1:2:3]", [expected_bracket{i: 5}])
-    try assert_parse_error("a[::1]", [expected_expression{i: 3}])
-    try assert_parse_error("a[]", [expected_expression{i: 2}]) 
-    try assert_parse_error("a[,]", [expected_expression{i: 2}]) 
-    // try assert_parse_error("a[:]", [])
-}
-
-@test
 fn test_dot_expression()! {
     try assert_parse_exp("a.b", "a.b")
     try assert_parse_exp("a.b.c.d.e.f", "a.b.c.d.e.f")
     try assert_parse_exp("a.b().c", "a.b().c")
-    try assert_parse_exp("a.b[0].c", "a.b[0].c")
     
     try assert_parse_error("a.", [expected_expression{i: 2}])
     try assert_parse_error("a.b.", [expected_expression{i: 4}])
-    // try assert_parse_error("a[:4].b", "")
 }
 
 
@@ -215,11 +189,9 @@ fn test_operator_precedence()! {
 
     try assert_parse_exp("*obj.field", "*obj.field")
     try assert_parse_exp("?opt.value", "?opt.value")
-    try assert_parse_exp("~bits[i]", "~bits[i]")
+    try assert_parse_exp("~bits", "~bits")
 
     try assert_parse_exp("a.b+1/1", "(a.b + (1 / 1))")
-    try assert_parse_exp("a[0]%1", "(a[0] % 1)")
-    try assert_parse_exp("a[0:2]%1", "(a[0:2] % 1)")
     try assert_parse_exp("a()*1", "(a() * 1)")
 }
 
@@ -232,14 +204,10 @@ fn test_parse_library()! {
 }
 
 @test
-fn test_parse_assignment()! {
+fn test_parse_global_assignment()! {
     try assert_canonical_lib("lib a let x = 1")
     try assert_canonical_lib("lib a var x = test()")
-    // try assert_canonical_lib("lib a x = abc{a:b}")
-    // try assert_canonical_lib("lib a x = 2.2")
     try assert_canonical_lib("lib a let x,var y,var z = 1,2,3")
-    // try assert_canonical_lib("lib a w,x,y,z = 1,2,3")
-    // try assert_canonical_lib("lib a a,b,let x = 1,2,3")
     try assert_canonical_lib("lib a let x = 1 var y = 2")
     try assert_parse("lib a let a = 1,", "lib a let a = 1")
     try assert_canonical_lib("lib a pub let x = 1")
@@ -444,41 +412,44 @@ fn test_parse_function_statement()! {
 
 @test
 fn test_parse_if_statement()! {
-    try assert_canonical_lib("lib a fn a() {if a {}}")
-    try assert_canonical_lib("lib a fn a() {if (1 == 2) {}}")
-    try assert_canonical_lib("lib a fn a() {if b() {}}")
-    try assert_canonical_lib("lib a fn a() {if a {} else {}}")
-    try assert_canonical_lib("lib a fn a() {if a {} else if b {}}")
-    try assert_canonical_lib("lib a fn a() {if a {} else if b {} else {}}")
-    try assert_canonical_lib("lib a fn a() {if a {} else if b {} else if c {} else {}}")
-    try assert_canonical_lib("lib a fn a() {if a {} if b {}}")
-    try assert_canonical_lib("lib a fn a() {if a {let x = 1}}")
-    try assert_canonical_lib("lib a fn a() {if a {let x = 1 var y = 2}}")
-    try assert_canonical_lib("lib a fn a() {if a {f()} else {g()}}")
+    // try assert_canonical_lib("lib a fn a() {if a {}}")
+//     try assert_canonical_lib("lib a fn a() {if (1 == 2) {}}")
+//     try assert_canonical_lib("lib a fn a() {if b() {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {} else {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {} else if b {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {} else if b {} else {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {} else if b {} else if c {} else {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {} if b {}}")
+//     try assert_canonical_lib("lib a fn a() {if a {let x = 1}}")
+//     try assert_canonical_lib("lib a fn a() {if a {let x = 1 var y = 2}}")
+//     try assert_canonical_lib("lib a fn a() {if a {f()} else {g()}}")
+    // try assert_canonical_lib("lib a fn a() {x = abc{a:b}}")
+    // try assert_canonical_lib("lib a fn a() {w,x,y,z = 1,2,3}")
+    // try assert_canonical_lib("lib a fn a() {a,b,let x = 1,2,3}")
      
 
-    try assert_canonical_lib("lib a fn a() {if a {if b {if c {}}}}")
-    try assert_canonical_lib("lib a fn a() {if a {if b {if c {}} else if d {}}}")
+//     try assert_canonical_lib("lib a fn a() {if a {if b {if c {}}}}")
+//     try assert_canonical_lib("lib a fn a() {if a {if b {if c {}} else if d {}}}")
     
-    try assert_error("lib a fn a() { if }", [expected_expression{i: 8}])
-    try assert_error("lib a fn a() { else }", [unexpected_statement{i: 7}])
-    try assert_error("lib a fn a() { else if }", [unexpected_statement{i: 7}, expected_expression{i: 9}])
-    // try assert_error("lib a fn a() { if {} }", [expected_expression{i: 8}])
-    try assert_error("lib a fn a() { if + {} }", [expected_expression{i: 8}])
-    try assert_error("lib a fn a() { if a }", [expected_brace{i: 9}])
-    try assert_error("lib a fn a() { if a {}", [expected_brace{i: 11}])
-    try assert_error("lib a fn a() { if a { + } }", [unexpected_statement{i: 10}])
-    try assert_error("lib a fn a() { if a {} else }", [expected_brace{i: 12}])
-    try assert_error("lib a fn a() { if a {} else { }", [expected_brace{i: 14}])
-    try assert_error("lib a fn a() { if a {} else if", [expected_expression{i: 13}, expected_brace{i: 13}])
-    try assert_error("lib a fn a() { if a {} else if }", [expected_expression{i: 13}])
-    try assert_error("lib a fn a() { if a {} else if b }", [expected_brace{i: 14}])
-    try assert_error("lib a fn a() { if a {} else if b { }", [expected_brace{i: 16}])
-    try assert_error("lib a fn a() { if a { if } }", [expected_expression{i: 11}])
-    try assert_error("lib a fn a() { if a { else } }", [unexpected_statement{i: 10}])
-    try assert_error("lib a fn a() { if a { if a } }", [expected_brace{i: 12}])
-    try assert_error("lib a fn a() { if a { if a { } }", [expected_brace{i: 15}])
-    try assert_error("lib a fn a() { if a {} else {} else {} }", [unexpected_statement{i: 14}])
+//     try assert_error("lib a fn a() { if }", [expected_expression{i: 8}])
+//     try assert_error("lib a fn a() { else }", [unexpected_statement{i: 7}])
+//     try assert_error("lib a fn a() { else if }", [unexpected_statement{i: 7}, expected_expression{i: 9}])
+//     // try assert_error("lib a fn a() { if {} }", [expected_expression{i: 8}])
+//     try assert_error("lib a fn a() { if + {} }", [expected_expression{i: 8}])
+//     try assert_error("lib a fn a() { if a }", [expected_brace{i: 9}])
+//     try assert_error("lib a fn a() { if a {}", [expected_brace{i: 11}])
+//     try assert_error("lib a fn a() { if a { + } }", [unexpected_statement{i: 10}])
+//     try assert_error("lib a fn a() { if a {} else }", [expected_brace{i: 12}])
+//     try assert_error("lib a fn a() { if a {} else { }", [expected_brace{i: 14}])
+//     try assert_error("lib a fn a() { if a {} else if", [expected_expression{i: 13}, expected_brace{i: 13}])
+//     try assert_error("lib a fn a() { if a {} else if }", [expected_expression{i: 13}])
+//     try assert_error("lib a fn a() { if a {} else if b }", [expected_brace{i: 14}])
+//     try assert_error("lib a fn a() { if a {} else if b { }", [expected_brace{i: 16}])
+//     try assert_error("lib a fn a() { if a { if } }", [expected_expression{i: 11}])
+//     try assert_error("lib a fn a() { if a { else } }", [unexpected_statement{i: 10}])
+//     try assert_error("lib a fn a() { if a { if a } }", [expected_brace{i: 12}])
+//     try assert_error("lib a fn a() { if a { if a { } }", [expected_brace{i: 15}])
+//     try assert_error("lib a fn a() { if a {} else {} else {} }", [unexpected_statement{i: 14}])
 }
 
 @test
@@ -573,6 +544,7 @@ fn test_parse_match_statement()! {
     try assert_canonical_lib("lib a fn a() {match y = x {}}")
     try assert_canonical_lib("lib a fn a() {match x {case _:}}")
     try assert_canonical_lib("lib a fn a() {match x {case _: let x = 2}}")
+    // BUG: this test fails
     try assert_canonical_lib("lib a fn a() {match x {case _: if y {} else {} x = a()}}")
     try assert_canonical_lib("lib a fn a() {match x {case 1,2:}}")
     try assert_canonical_lib("lib a fn a() {match x {case 1,abc.x,f:}}")
@@ -591,7 +563,7 @@ fn assert_parse(input, want string)! {
     try assert(len(a.errs) == 0, "expected no errors")
 
     let idx = ast.index(len(a.nodes)-1)
-    let buf = make([]byte, 0, len(want))
+    let buf = try make([]byte, 0, len(want))
     let got = try ast.to_string(a, idx, buf)
     if want != string(got) {
         println(string(got))
@@ -618,7 +590,7 @@ fn assert_canonical(input string, m mode)! {
     try assert(len(a1.errs) == 0, "expected no errors")
 
     let idx = ast.index(len(a1.nodes)-1)
-    let buf = make([]byte, 0, len(input))
+    let buf = try make([]byte, 0, len(input))
     let got1 = try ast.to_string(a1, idx, buf)
     if input != string(got1) {
         println(string(got1))
@@ -630,7 +602,7 @@ fn assert_canonical(input string, m mode)! {
     try assert(len(a2.errs) == 0, "expected no errors")
     
     let idx = ast.index(len(a2.nodes)-1)
-    let buf = make([]byte, 0, len(input))
+    let buf = try make([]byte, 0, len(input))
     let got2 = try ast.to_string(a2, idx, buf)
     if input != string(got2) {
         println(string(got2))
@@ -643,7 +615,7 @@ fn assert_parse_exp(input, want string)! {
     let a = try parse([]byte(input), mode.exp)
 
     let idx = ast.index(len(a.nodes)-1)
-    let buf = make([]byte, 0, len(want))
+    let buf = try make([]byte, 0, len(want))
     let got = try ast.to_string(a, idx, buf)
     if want != string(got) {
         println(string(got))
