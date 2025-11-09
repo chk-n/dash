@@ -1174,6 +1174,23 @@ func TestTypeCasting(t *testing.T) {
 			y`,
 			want: []byte{104, 101, 108, 108, 111},
 		},
+		{
+			name: "string to []u8 cast",
+			prog: `
+			let x = "hello"
+			let y = []u8(x)
+			y`,
+			want: []uint8{104, 101, 108, 108, 111},
+		},
+		{
+			name: "[]byte to []u8 cast",
+			prog: `
+			let x = "hello"
+			let b = []byte(x)
+			let y = []u8(b)
+			y`,
+			want: []uint8{104, 101, 108, 108, 111},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

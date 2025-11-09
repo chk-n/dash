@@ -599,6 +599,23 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 			newArr[i] = str[i]
 		}
 		return newArr
+	case *types.Int:
+		switch v := v.(type) {
+		case string:
+			// we assume semsis caught any issues e.g. []u64(str)
+			newArr := make([]uint8, len(v))
+			for i := range v {
+				newArr[i] = v[i]
+			}
+			return newArr
+		case []byte:
+			// we assume semsis caught any issues e.g. []u64(str)
+			newArr := make([]uint8, len(v))
+			for i := range v {
+				newArr[i] = v[i]
+			}
+			return newArr
+		}
 	}
 	panic("invalid array cast")
 }
