@@ -2034,16 +2034,13 @@ func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 	}
 
 	// propagate error
-	ret := res.(*Return)
-	if len(ret.Values) > 0 {
-		if err, ok := ret.Values[0].(*Error); ok {
-			typeDesc := generateTypeDescriptor(err.Err)
-			newErr := &Error{descriptor: typeDesc, Err: err.Err, Args: err.Args}
-			return &Return{Values: []any{newErr}}
-		}
+	if err, ok := unwrapFunctionResult(res, 0).(*Error); ok {
+		typeDesc := generateTypeDescriptor(err.Err)
+		newErr := &Error{descriptor: typeDesc, Err: err.Err, Args: err.Args}
+		return &Return{Values: []any{newErr}}
 	}
 
-	return ret
+	return res
 }
 
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {
