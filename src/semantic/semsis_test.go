@@ -314,6 +314,16 @@ func TestOptionalType(t *testing.T) {
 			want:  "lib main fn test(a ?i64) { let a' i64 = (a ?? 1) } pub fn main() { }",
 		},
 		{
+			name:  "return non-optional as optional in generic function",
+			input: "fn test[T any](x T) ?T { return x }",
+			want:  "lib main fn test[T any](x T) ?T { return x } pub fn main() { }",
+		},
+		{
+			name:  "return non-optional as optional",
+			input: "fn test(x string) ?string { return x }",
+			want:  "lib main fn test(x string) ?string { return x } pub fn main() { }",
+		},
+		{
 			name:  "optional null equality",
 			input: "fn test(a ?i64) { let a' = a == null }",
 			want:  "lib main fn test(a ?i64) { let a' bool = (a == null) } pub fn main() { }",

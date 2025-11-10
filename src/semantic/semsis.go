@@ -2132,12 +2132,13 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	case *ast.Identifier:
-		if _, ok := targetType.(*types.Optional); ok {
-			if !types.CanCoalesce(exprType, targetType) {
-				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
-				return false
+		if optType, ok := targetType.(*types.Optional); ok {
+			// Check if the expression type can coalesce to the Optional's inner type
+			if exprType.Equal(optType.T) || optType.T.Equal(exprType) || types.CanCoalesce(exprType, optType.T) {
+				return true
 			}
-			return true
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
 		}
 		// we want to treat function values are literals
 		if _, ok := s.fnSt.Get(lit.TokenLiteral()); ok {
