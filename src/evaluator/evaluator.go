@@ -1300,6 +1300,7 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 			return ret
 		}
 	}
+	l = unwrapAny(l)
 	r := e.eval(n.Right, ctx)
 	if ret, ok := r.(*Return); ok {
 		r = unwrapFunctionResult(ret, 0)
@@ -1307,6 +1308,7 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 			return ret
 		}
 	}
+	r = unwrapAny(r)
 
 	var val any
 	var err error

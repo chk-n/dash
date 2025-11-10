@@ -1621,6 +1621,22 @@ func TestOptionalTypes(t *testing.T) {
 			want: int64(7),
 		},
 		{
+			name: "coalesce generic optional with any constraint",
+			prog: `
+			fn test[T any](x T) ?T { return x }
+			let got = test[u64](u64(10)) ?? u64(0)
+			got`,
+			want: uint64(10),
+		},
+		{
+			name: "equality check with generic optional with any constraint",
+			prog: `
+			fn test[T any](x T) ?T { return x }
+			let got = test[u64](u64(10)) 
+			got == 10`,
+			want: true,
+		},
+		{
 			name: "force unwrap non-null function call",
 			prog: `
 			fn get_value() ?i64 { return 42 }
