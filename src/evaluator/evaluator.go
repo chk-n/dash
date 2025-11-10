@@ -316,7 +316,21 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, stk)
 
+		// Wrap value in Any if parameter is 'any' type or generic with 'any' constraint
+		shouldWrapInAny := false
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
+			shouldWrapInAny = true
+		} else if genType, isGeneric := fn.arguments[i].Type.(*types.Generic); isGeneric {
+			// Check if generic has 'any' constraint
+			for _, constraint := range genType.Constraints {
+				if _, isAny := constraint.(*types.Any); isAny {
+					shouldWrapInAny = true
+					break
+				}
+			}
+		}
+
+		if shouldWrapInAny {
 			argValue = e.evalToAny(argValue)
 		}
 
@@ -591,6 +605,7 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 
 func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 	v = unwrapFunctionResult(v, 0)
+	v = unwrapAny(v)
 	switch t.T.(type) {
 	case *types.Byte:
 		str := v.(string)
@@ -848,7 +863,21 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 
 	typ := types.GetUnderlyingType(n.Scrutinee.Type())
 	// TODO: handle multiple predicates in one case
+
+	// Check if type is 'any' or a generic with 'any' constraint
+	isAnyType := false
 	if _, ok := typ.(*types.Any); ok {
+		isAnyType = true
+	} else if genType, ok := typ.(*types.Generic); ok {
+		for _, constraint := range genType.Constraints {
+			if _, isAny := constraint.(*types.Any); isAny {
+				isAnyType = true
+				break
+			}
+		}
+	}
+
+	if isAnyType {
 		// Handle matching against 'any' type
 		anyVal, ok := scrutinee.(*Any)
 		if !ok {
@@ -2386,6 +2415,14 @@ func unwrapFunctionResult(res any, idx int) any {
 	}
 
 	return ret.Values[idx]
+}
+
+func unwrapAny(val any) any {
+	a, ok := val.(*Any)
+	if !ok {
+		return val
+	}
+	return a.value
 }
 
 func castTo[T any](v any) (T, error) {

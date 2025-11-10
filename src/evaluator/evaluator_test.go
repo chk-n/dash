@@ -2242,6 +2242,107 @@ func TestGenerics(t *testing.T) {
 	}
 }
 
+func TestGenericMatchTypeCase(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "match string type in generic function",
+			prog: `
+			fn test[T any](x T) i64 {
+				return match x {
+					case string: 1
+					case _: 0
+				}
+			}
+			test[string]("hello")`,
+			want: &Return{Values: []any{int64(1)}},
+		},
+		{
+			name: "match string type in generic function - no type param",
+			prog: `
+			fn test[T any](x T) i64 {
+				return match x {
+					case string: 1
+					case _: 0
+				}
+			}
+			test("hello")`,
+			want: &Return{Values: []any{int64(1)}},
+		},
+		{
+			name: "match u64 type in generic function",
+			prog: `
+			fn test[T any](x T) i64 {
+				return match x {
+					case u64: 1
+					case _: 0
+				}
+			}
+			test[u64](42)`,
+			want: &Return{Values: []any{int64(1)}},
+		},
+		{
+			name: "nested generic call with match",
+			prog: `
+			fn inner[T any](x T) i64 {
+				return match x {
+					case string: 1
+					case _: 0
+				}
+			}
+			fn outer[T any](x T) i64 {
+				return inner[T](x)
+			}
+			outer[string]("test")`,
+			want: &Return{Values: []any{int64(1)}},
+		},
+		// {
+		// 	name: "match on generic array element",
+		// 	prog: `
+		// 	fn test[T any](arr []T)! i64 {
+		// 		let e = try get(arr, 0)
+		// 		return match e {
+		// 			case string: 1
+		// 			case _: 0
+		// 		}
+		// 	}
+		// 	try test[string](["hello"])`,
+		// 	want: &Return{Values: []any{int64(1)}},
+		// },
+		// {
+		// 	name: "match on generic struct field",
+		// 	prog: `
+		// 	struct Box[T any] { value T }
+		// 	fn test[T any](b Box[T]) i64 {
+		// 		return match b.value {
+		// 			case string: 1
+		// 			case u64: 2
+		// 			case _: 0
+		// 		}
+		// 	}
+		// 	test[string](Box[string]{value: "hello"})`,
+		// 	want: &Return{Values: []any{int64(1)}},
+		// },
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.eval(n, NewContext(nil))
+
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // ------ //
 // Helper //
 // ------ //
