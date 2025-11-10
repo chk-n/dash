@@ -1191,6 +1191,13 @@ func TestTypeCasting(t *testing.T) {
 			y`,
 			want: []uint8{104, 101, 108, 108, 111},
 		},
+		{
+			name: "array literal to []u8 cast",
+			prog: `
+			let arr = []u8([0])
+			arr`,
+			want: []any{uint8(0)},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
