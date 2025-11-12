@@ -907,6 +907,26 @@ func GetUnderlyingType(t Type) Type {
 	return t
 }
 
+// Recursively strips parent types away to
+// get to underlying array type
+func GetUnderlyingTypeArray(t Type) *Array {
+	switch t := t.(type) {
+	case *Array:
+		return t
+	case *Definition:
+		return GetUnderlyingTypeArray(t.Underlying)
+	case *Dirty:
+		return GetUnderlyingTypeArray(t.T)
+	case *Pointer:
+		return GetUnderlyingTypeArray(t.T)
+	case *Alias:
+		return GetUnderlyingTypeArray(t.Underlying)
+	case *Mutable:
+		return GetUnderlyingTypeArray(t.T)
+	}
+	return nil
+}
+
 // Recursively strips 'Definition', 'Dirty' and 'Optional'
 // away exposing a type ripe to be checked against if
 // we know we are working with a literal
