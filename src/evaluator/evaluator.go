@@ -53,6 +53,11 @@ type Union struct {
 	value      any
 }
 
+type Pointer struct {
+	id    uint64 // unique identifier for this pointer
+	value any    // the value being pointed to
+}
+
 type Function struct {
 	ctx       *Context
 	arguments []*ast.ParameterStatement
@@ -65,12 +70,18 @@ type Evaluator struct {
 	// Keeps track of computed contextes for
 	// each library with 'prev' == nil
 	ctxs map[string]*Context
+	// Counter for generating unique pointer IDs
+	nextPointerID uint64
+	// Maps variable locations to existing pointers (for pointer identity)
+	// Key is a hash of context+variable path
+	pointerCache map[uint64]*Pointer
 }
 
 func New(libs map[string]*ast.Library) *Evaluator {
 	return &Evaluator{
-		libs: libs,
-		ctxs: make(map[string]*Context),
+		libs:         libs,
+		ctxs:         make(map[string]*Context),
+		pointerCache: make(map[uint64]*Pointer),
 	}
 }
 
@@ -1060,6 +1071,8 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 			return ret
 		}
 	}
+	// Auto-dereference pointers for field access
+	leftValue = unwrapPointer(leftValue)
 
 	return e.evalLocalAccess(leftValue, n.Right, stk)
 }
@@ -1210,6 +1223,11 @@ func indexArray(arr any, idx int) any {
 // ----------------- //
 
 func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) any {
+	// Special handling for address-of op
+	if n.Token.Type == token.AMPERSAND {
+		return e.evalPrefixAddressOf(n.Right, stk)
+	}
+
 	val := e.eval(n.Right, stk)
 	var err error
 	switch n.Token.Type {
@@ -1224,8 +1242,8 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) 
 			val = unwrapFunctionResult(val, 0)
 		}
 		val = e.evalPrefixOptional(val)
-	case token.AMPERSAND, token.ASTERISK:
-		return val
+	case token.ASTERISK:
+		val = e.evalPrefixDereference(val)
 	}
 
 	if err != nil {
@@ -1299,6 +1317,47 @@ func (e *Evaluator) evalPrefixOptional(v any) any {
 		panic("this is a compiler error. please report")
 	}
 	return v
+}
+
+func (e *Evaluator) evalPrefixAddressOf(expr ast.Expression, ctx *Context) any {
+	var locationID uint64
+	switch expr := expr.(type) {
+	case *ast.Identifier:
+		// For identifiers, hash the context + variable name to ensure
+		// &x always returns the same pointer
+		locationID = computeLocationHash(ctx, expr.Value)
+
+	default:
+		// For other expressions evaluate and create a new pointer
+		val := e.eval(expr, ctx)
+		ptr := &Pointer{
+			id:    e.nextPointerID,
+			value: val,
+		}
+		e.nextPointerID++
+		return ptr
+	}
+
+	if ptr, exists := e.pointerCache[locationID]; exists {
+		return ptr
+	}
+
+	// Create a new pointer for this location
+	val := e.eval(expr, ctx)
+	ptr := &Pointer{
+		id:    locationID,
+		value: val,
+	}
+	e.pointerCache[locationID] = ptr
+	return ptr
+}
+
+func (e *Evaluator) evalPrefixDereference(v any) any {
+	ptr, ok := v.(*Pointer)
+	if !ok {
+		panic(fmt.Sprintf("cannot dereference non-pointer type %T", v))
+	}
+	return ptr.value
 }
 
 // ---------------- //
@@ -1895,6 +1954,18 @@ func (e *Evaluator) evalInfixEqual(l, r any) any {
 	if _, ok := r.(*Error); ok {
 		return false
 	}
+
+	// special handling for dash pointers
+	if lPtr, ok := l.(*Pointer); ok {
+		if rPtr, ok := r.(*Pointer); ok {
+			return lPtr.id == rPtr.id
+		}
+		return false
+	}
+	if _, ok := r.(*Pointer); ok {
+		return false
+	}
+
 	return l == r
 }
 
@@ -2441,6 +2512,26 @@ func unwrapAny(val any) any {
 		return val
 	}
 	return a.value
+}
+
+func unwrapPointer(val any) any {
+	ptr, ok := val.(*Pointer)
+	if !ok {
+		return val
+	}
+	return ptr.value
+}
+
+// computeLocationHash generates a hash for a variable location
+func computeLocationHash(ctx *Context, varName string) uint64 {
+	h := fnv.New64a()
+
+	// we include context pointer to distinguish between variables
+	// defined in different scopes within program
+	key := fmt.Sprintf("%p%s", ctx, varName)
+	h.Write([]byte(key))
+
+	return h.Sum64()
 }
 
 func castTo[T any](v any) (T, error) {
