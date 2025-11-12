@@ -1271,15 +1271,20 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 
 	// Check arguments of same type
 	for i, arg := range n.Arguments {
-
-		switch arg := arg.(type) {
+		switch a := arg.(type) {
 		case *ast.StructLiteral:
 			// for anonymous struct literals we need
 			// to coalesce literal to the expected type
-			if arg.Name == nil {
-				s.coalesceAnonymousStruct(arg, expectedTs[i])
+			if a.Name == nil {
+				s.coalesceAnonymousStruct(a, expectedTs[i])
 			} else {
 				s.analyse(arg, "")
+			}
+		case ast.Literal:
+			if s.analyseExpressionType(arg, arg.Type(), expectedTs[i]) {
+				arg.SetType(expectedTs[i])
+			} else {
+				continue
 			}
 		default:
 			s.analyse(arg, "")
@@ -2083,7 +2088,7 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 	}
 
 	// special case handling for error and union
-	switch targetType.(type) {
+	switch tt := targetType.(type) {
 	case *types.Error, *types.Union:
 		if !types.CanCoalesce(exprType, targetType) {
 			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
@@ -2092,6 +2097,12 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 	case *types.Any:
 		return true
+	case *types.Generic:
+		for _, c := range tt.Constraints {
+			if _, ok := c.(*types.Any); ok {
+				return true
+			}
+		}
 	}
 
 	switch lit := expr.(type) {
@@ -2257,7 +2268,9 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			arrayType = mutType.T
 		}
 		// lit.T = expectedT
-		s.analyseArrayLiteral(lit, arrayType.(*types.Array))
+		if arrayType, ok := arrayType.(*types.Array); ok {
+			s.analyseArrayLiteral(lit, arrayType)
+		}
 
 		// TODO:
 		return true

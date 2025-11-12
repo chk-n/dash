@@ -266,6 +266,10 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 			return e.evalByteCast(t, n.Value)
 		case *types.Char:
 			return e.evalCharCast(t, n.Value)
+		case *types.Any:
+			return n.Value
+		case *types.Generic:
+			return n.Value
 		default:
 			panic("this is a compiler error. please report")
 		}
@@ -358,6 +362,7 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Context) any {
 	val := e.eval(n.Argument, stk)
 	val = unwrapFunctionResult(val, 0)
+	val = unwrapAny(val)
 	switch t := n.Typ.(type) {
 	case *types.Int:
 		return e.evalIntCast(t, val)
@@ -2219,6 +2224,9 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
 	arr = unwrapFunctionResult(arr, 0)
+	if _, ok := arr.(*Error); ok {
+		return arr
+	}
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:

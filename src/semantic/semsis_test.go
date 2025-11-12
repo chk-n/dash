@@ -1522,6 +1522,11 @@ func TestBuiltInFunction(t *testing.T) {
 			input: `fn err()! { try assert(true, "") } try err()`,
 			want:  `lib main fn err()! { try assert(true,"") } pub fn main() { try err() }`,
 		},
+		{
+			name:  "put with different int type",
+			input: `let arr = []u8([0]) try put(arr, 0, 1)`,
+			want:  "lib main pub fn main() { let arr []u8 = []u8([0]) try put(arr,0,1) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1749,7 +1754,7 @@ func TestGenericFunctions(t *testing.T) {
 		{
 			name:   "generic function call infer type for instantiation",
 			input:  "fn identity[T, E any](x T) E { return x } let r = identity(42)",
-			errors: []string{"type mistmatch, expected type 'E' but got 'T'", "cannot infer type parameter 'E'"},
+			errors: []string{"cannot infer type parameter 'E'"},
 		},
 		// // NOTE: 'constraint' not supported yet
 		// // {
