@@ -635,34 +635,39 @@ error error_mismatch {
     want error
 }
 
-fn assert_error(input string, want []error)! {
+fn assert_error(input string, want_errs []error)! {
     let a = try parse([]byte(input), mode.lib)
 
     if len(a.errs) == 0 {
         raise expected_error
     }
-    if len(a.errs) != len(want) {
-        raise error_len_mismatch{got: a.errs, want: want}
+    if len(a.errs) != len(want_errs) {
+        raise error_len_mismatch{got: a.errs, want: want_errs}
     }
-    for i = 0; i < len(want); i++ {
-        if want[i] != a.errs[i] {
-            raise error_mismatch{got: a.errs[i], want: want[i]}
+    for i = 0; i < len(want_errs); i++ {
+        let want = try get(want_errs, i)
+        let got = try get(a.errs, i)
+        if want != got {
+            raise error_mismatch{got: got, want: want}
         }
     }
 }
 
-fn assert_parse_error(input string, want []error)! {
+fn assert_parse_error(input string, want_errs []error)! {
     let a = try parse([]byte(input), mode.exp)
 
     if len(a.errs) == 0 {
         raise expected_error
     }
-    if len(a.errs) != len(want) {
-        raise error_len_mismatch{got: a.errs, want: want}
+    if len(a.errs) != len(want_errs) {
+        raise error_len_mismatch{got: a.errs, want: want_errs}
     }
-    for i = 0; i < len(want); i++ {
-        if want[i] != a.errs[i] {
-            raise error_mismatch{got: a.errs[i], want: want[i]}
+    
+    for i = 0; i < len(want_errs); i++ {
+        let want = try get(want_errs, i)
+        let got = try get(a.errs, i)
+        if want != got {
+            raise error_mismatch{got: got, want: want}
         }
     }
 }

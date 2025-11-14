@@ -844,26 +844,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				n.SetType(left)
 			}
 		}
-	case *ast.IndexExpression:
-		s.analyse(n.Left, "")
-		if n.Left.Type() == nil {
-			// another error occured
-			return
-		}
-		arrTyp := types.GetUnderlyingIndexable(n.Left.Type())
-		typ := types.ArrayTypeAt(arrTyp, len(n.Indices))
-		n.SetType(typ)
-
-		s.varSt.Set(n.String(), &VarInfo{Type: n.Type()})
-
-		for _, idx := range n.Indices {
-			s.analyse(idx, "")
-		}
-	case *ast.SliceExpression:
-		s.analyse(n.Left, "")
-		for _, idx := range n.Indices {
-			s.analyse(idx, "")
-		}
 	case *ast.ForStatement:
 		s.scope.Push(FOR)
 		s.varSt.Scope()
@@ -1327,10 +1307,6 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 			ident = decl.TokenLiteral()
 		case *ast.DotExpression:
 			ident = decl.Left.TokenLiteral()
-		case *ast.IndexExpression:
-			ident = decl.Left.TokenLiteral()
-		case *ast.SliceExpression:
-			ident = decl.Left.TokenLiteral()
 		}
 		ra, ok := s.varSt.Get(ident)
 		if !ok && ra == nil {
@@ -1395,8 +1371,8 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 		default:
 			decl := n.Declerations[i]
 			switch decl := decl.(type) {
-			case *ast.IndexExpression, *ast.SliceExpression, *ast.DotExpression:
-				exp := decl.(ast.Expression)
+			case *ast.DotExpression:
+				exp := decl
 				s.analyse(exp, "")
 				if exp.Type() == nil {
 					// another error occured

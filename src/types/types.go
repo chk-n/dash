@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-
 	"strings"
 
 	"dash-lang.io/src/internal"

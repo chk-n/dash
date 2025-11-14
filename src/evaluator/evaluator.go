@@ -24,6 +24,7 @@ const (
 // Global error type descriptors to avoid recomputation
 var (
 	errDescIndexOutOfBounds = generateTypeDescriptor("runtime.index_out_of_bounds")
+	errForceUnwrapNull      = generateTypeDescriptor("runtime.force_unwrap_null")
 )
 
 type Error struct {
@@ -75,6 +76,7 @@ type Evaluator struct {
 	// Maps variable locations to existing pointers (for pointer identity)
 	// Key is a hash of context+variable path
 	pointerCache map[uint64]*Pointer
+	err          *Error
 }
 
 func New(libs map[string]*ast.Library) *Evaluator {
@@ -153,10 +155,21 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 	defer recoverPanic(&result)
 
-	return e.eval(n, ctx)
+	result = e.eval(n, ctx)
+	if e.err != nil {
+		// reset error after evaluation
+		err := e.err
+		e.err = nil
+		return err
+	}
+	return
 }
 
 func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
+	if e.err != nil {
+		return e.err
+	}
+
 	switch n := n.(type) {
 	// Recursively initialise libraries top down
 	case *ast.Library:
@@ -229,10 +242,6 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		return e.evalReturnStatement(n, ctx)
 	case *ast.DotExpression:
 		return e.evalDotExpression(n, ctx)
-	case *ast.SliceExpression:
-		return e.evalSliceExpression(n, ctx)
-	case *ast.IndexExpression:
-		return e.evalIndexExpression(n, ctx)
 	case *ast.PrefixExpression:
 		return e.evalPrefixExpression(n, ctx)
 	case *ast.InfixExpression:
@@ -669,24 +678,14 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 		switch val.Type().(type) {
 		case *types.Multi:
 			res := e.eval(val, ctx).(*Return)
-			if _, ok := res.Values[0].(*Error); ok {
-				return res
-			}
 			for j := range len(res.Values) {
 				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
 			}
 		case *types.ImportedNamed:
 			res := e.eval(val, ctx)
 			if ret, ok := res.(*Return); ok {
-				if _, ok := ret.Values[0].(*Error); ok {
-					return ret
-				}
 				for j := range len(ret.Values) {
 					switch decl := n.Declerations[i+j].(type) {
-					case *ast.IndexExpression:
-						e.evalAssignmentToArrayIndex(decl, ret.Values[j], ctx)
-					case *ast.SliceExpression:
-						e.evalAssignmentToArraySlice(decl, ret.Values[j], ctx)
 					case *ast.DotExpression:
 						e.evalAssignmentToStructField(decl, ret.Values[j], ctx)
 					default:
@@ -695,10 +694,6 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 				}
 			} else {
 				switch decl := n.Declerations[i].(type) {
-				case *ast.IndexExpression:
-					e.evalAssignmentToArrayIndex(decl, res, ctx)
-				case *ast.SliceExpression:
-					e.evalAssignmentToArraySlice(decl, res, ctx)
 				case *ast.DotExpression:
 					e.evalAssignmentToStructField(decl, res, ctx)
 				default:
@@ -707,20 +702,12 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 			}
 		default:
 			res := e.eval(val, ctx)
-			unwrapped := unwrapFunctionResult(res, 0)
-			if _, ok := unwrapped.(*Error); ok {
-				return res
-			}
-			res = unwrapped
+			res = unwrapFunctionResult(res, 0)
 			switch decl := n.Declerations[i].(type) {
 			case *ast.Identifier:
 				ctx.SetAll(n.VarNameAt(i), res)
 			case *ast.DeclarationStatement:
 				ctx.Set(n.VarNameAt(i), res)
-			case *ast.IndexExpression:
-				e.evalAssignmentToArrayIndex(decl, res, ctx)
-			case *ast.SliceExpression:
-				e.evalAssignmentToArraySlice(decl, res, ctx)
 			case *ast.DotExpression:
 				e.evalAssignmentToStructField(decl, res, ctx)
 			}
@@ -736,36 +723,6 @@ func setOrUpdateForAssignment(assgn ast.Node, name string, res any, ctx *Context
 	} else {
 		ctx.Set(name, res)
 	}
-}
-
-func (e *Evaluator) evalAssignmentToArrayIndex(exp *ast.IndexExpression, res any, stk *Context) {
-	// we know that LHS has to be an identifier as
-	// assigning to index of array is only possible
-	// within an use expression
-	ident := exp.Left.(*ast.Identifier)
-
-	arr, ok := stk.Get(ident.Value)
-	if !ok {
-		panic("this is a compiler error. please report")
-	}
-	idx := e.toInt64(e.eval(exp.Indices[0], stk))
-	arr.([]any)[idx] = res
-}
-
-func (e *Evaluator) evalAssignmentToArraySlice(exp *ast.SliceExpression, res any, stk *Context) {
-	// we know that LHS has to be an identifier as
-	// assigning to slice of array is only possible
-	// within an use expression
-	ident := exp.Left.(*ast.Identifier)
-
-	arr, ok := stk.Get(ident.Value)
-	if !ok {
-		panic("this is a compiler error. please report")
-	}
-	rng := e.eval(exp.Indices[0], stk).([]any)
-	start := e.toInt64(rng[0])
-	end := e.toInt64(rng[1])
-	copy(arr.([]any)[start:end], res.([]any))
 }
 
 func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, res any, stk *Context) {
@@ -1000,14 +957,10 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 		if _, ok := exp.(*Return); ok {
 			switch stmt.(type) {
 			case *ast.TryExpression:
-				ret := exp.(*Return)
-				// if !ok {
-				// 	continue
-				// }
-				if len(ret.Values) > 0 {
-					if _, isError := ret.Values[len(ret.Values)-1].(*Error); isError {
-						return exp
-					}
+				// we want to avoid causing early return
+				// so we wonly return if an error was found
+				if e.err != nil {
+					return &Return{}
 				}
 			default:
 				return exp
@@ -1067,9 +1020,6 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 	}
 	if ret, ok := leftValue.(*Return); ok {
 		leftValue = unwrapFunctionResult(ret, 0)
-		if _, isError := leftValue.(*Error); isError {
-			return ret
-		}
 	}
 	// Auto-dereference pointers for field access
 	leftValue = unwrapPointer(leftValue)
@@ -1137,63 +1087,6 @@ func (e *Evaluator) evalLocalAccess(leftValue any, right ast.Expression, stk *Co
 		// 	}
 	}
 	return nil
-}
-
-func (e *Evaluator) evalSliceExpression(n *ast.SliceExpression, ctx *Context) any {
-	arr := e.eval(n.Left, ctx)
-
-	rng := n.Indices[0].(*ast.InfixExpression)
-
-	start := e.toInt64(e.eval(rng.Left, ctx))
-	end := e.toInt64(e.eval(rng.Right, ctx))
-
-	return sliceArray(arr, start, end)
-}
-
-func sliceArray(arr any, s, e int64) any {
-	if s > e {
-		panic("start index greater than end index")
-	}
-	switch arr := arr.(type) {
-	case []any:
-		if s < 0 || e > int64(len(arr)) {
-			// TODO: add dash error handling
-			panic("end index out of bounds")
-		}
-		return arr[s:e]
-	case []uint8:
-		if s < 0 || e > int64(len(arr)) {
-			// TODO: add dash error handling
-			panic("end index out of bounds")
-		}
-		return arr[s:e]
-	case string:
-		if s < 0 || e > int64(len(arr)) {
-			// TODO: add dash error handling
-			panic("end index out of bounds")
-		}
-		return arr[s:e]
-	default:
-		panic("this is a compiler error. please report")
-
-	}
-}
-
-func (e *Evaluator) evalIndexExpression(n *ast.IndexExpression, stk *Context) any {
-	arr := e.eval(n.Left, stk)
-
-	// evaluate all indices
-	indices := make([]int, len(n.Indices))
-	for i, idx := range n.Indices {
-		val := e.eval(idx, stk)
-		indices[i] = int(e.toInt64(val))
-	}
-	// perform indexing and handle multiple dimensions
-	curr := arr
-	for _, idx := range indices {
-		curr = indexArray(curr, idx)
-	}
-	return curr
 }
 
 func indexArray(arr any, idx int) any {
@@ -1308,8 +1201,8 @@ func (e *Evaluator) evalPrefixBitwiseNot(v any) (any, error) {
 func (e *Evaluator) evalPrefixOptional(v any) any {
 	if opt, ok := v.(Optional); ok {
 		if !opt.isValid {
-			// NOTE: here Dash error handling would kick in
-			panic("attempted to force unwrap null value")
+			e.err = &Error{descriptor: errForceUnwrapNull, Err: "runtime.force_unwrap_null"}
+			return nil
 		}
 		return opt.value
 	}
@@ -1368,17 +1261,11 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 	l := e.eval(n.Left, ctx)
 	if ret, ok := l.(*Return); ok {
 		l = unwrapFunctionResult(ret, 0)
-		if _, isError := l.(*Error); isError {
-			return ret
-		}
 	}
 	l = unwrapAny(l)
 	r := e.eval(n.Right, ctx)
 	if ret, ok := r.(*Return); ok {
 		r = unwrapFunctionResult(ret, 0)
-		if _, isError := r.(*Error); isError {
-			return ret
-		}
 	}
 	r = unwrapAny(r)
 
@@ -2143,29 +2030,20 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 // -------------- //
 
 func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
-	res := e.eval(n.Right, ctx)
-	if res == nil {
-		return nil
-	}
-
-	// propagate error
-	if err, ok := unwrapFunctionResult(res, 0).(*Error); ok {
-		typeDesc := generateTypeDescriptor(err.Err)
-		newErr := &Error{descriptor: typeDesc, Err: err.Err, Args: err.Args}
-		return &Return{Values: []any{newErr}}
-	}
-
-	return res
+	return e.eval(n.Right, ctx)
 }
 
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {
 	// Evaluate the error expression to get the actual error value/name
 	errVal := e.eval(n.Error, ctx)
 
-	if _, ok := errVal.(*Error); !ok {
+	err, ok := errVal.(*Error)
+	if !ok {
 		panic("this is a compiler error. please report")
 	}
-	return &Return{Values: []any{errVal}}
+	e.err = err
+
+	return &Return{Values: []any{}}
 }
 
 // ------------------ //
@@ -2287,7 +2165,7 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 	if !cond {
 		msg := e.eval(args[1], ctx).(string)
 		typeDesc := generateTypeDescriptor("std.assert")
-		return &Return{Values: []any{&Error{descriptor: typeDesc, Err: msg}}}
+		e.err = &Error{descriptor: typeDesc, Err: msg}
 	}
 	return nil
 }
@@ -2295,9 +2173,7 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
 	arr = unwrapFunctionResult(arr, 0)
-	if _, ok := arr.(*Error); ok {
-		return arr
-	}
+
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
@@ -2378,17 +2254,20 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if idx < 0 || idx >= int64(len(arr)) {
-			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case []uint8:
 		if idx < 0 || idx >= int64(len(arr)) {
-			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case string:
 		if idx < 0 || idx >= int64(len(arr)) {
-			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	default:
@@ -2407,12 +2286,14 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if start < 0 || end > int64(len(arr)) || start > end {
-			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
 	case []uint8:
 		if start < 0 || end > int64(len(arr)) || start > end {
-			return &Return{Values: []any{&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}}}
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
 	default:

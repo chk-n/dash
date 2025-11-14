@@ -108,7 +108,7 @@ pub fn next_tkn(l *lexer)! *lexer, token {
     case _:
         if is_letter(ch) {
             let l, let tkn = try read_identifier(l)
-            let typ = get_tag_by_keyword(string(try slice(l.buf, tkn.start, tkn.end+1)))
+            let typ = try get_tag_by_keyword(string(try slice(l.buf, tkn.start, tkn.end+1)))
             return l, token{tag: typ, start: tkn.start, end: tkn.end}
         } else if is_digit(ch) {
             return try read_number(l)

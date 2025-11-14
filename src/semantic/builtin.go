@@ -33,35 +33,37 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 
 	switch lit {
 	case "append":
-		// TODO: assert argsTypes[1] is *types.Int
+		// fn append[T any](arr []T, el T) []T
+		// fn append[T any](arr []T. arr2 []T) []T
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{argsTypes[0]}
 		errorProne = true
 	case "put":
-		// TODO: assert argsTypes[1] is *types.Int
+		// fn put[T any](arr []T, idx i64, T)! []T
 		arrType := types.GetUnderlyingTypeArray(argsTypes[0])
 		args = []types.Type{arrType, argsTypes[1], arrType.T}
 		rets = []types.Type{argsTypes[0]}
 		errorProne = true
-	case "insert":
-		// fn insert[T any](arr []T, idx i64, v T) []T
-		args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
-		rets = []types.Type{argsTypes[0]}
-		errorProne = true
 	case "get":
-		// fn get[T any]([]T, idx i64)! T
-		elemType := argsTypes[0].(*types.Array).T
-		// TODO: assert argsTypes[1] is *types.Int
+		// fn get[T any](arr []T, idx i64)! T
+		var elemType types.Type
+		switch argsTypes[0].(type) {
+		case *types.String:
+			elemType = &types.ConstByte
+		default:
+			elemType = types.GetUnderlyingTypeArray(argsTypes[0]).T
+		}
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{elemType}
 		errorProne = true
 	case "slice":
-		// fn slice[T any]([]T, start i64, end i64)! []T
+		// fn slice[T any](arr []T, start i64, end i64)! []T
 		// TODO: assert argsTypes[1] and argsTypes[2] is *types.Int
 		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
 		errorProne = true
 	case "len":
+		// fn len[T any](arr []T) i64
 		args = []types.Type{
 			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "len", T: &types.ConstI64}}},
@@ -73,6 +75,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 
 		rets = intRetT
 	case "cap":
+		// fn cap[T any](arr []T) i64
 		args = []types.Type{
 			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "cap", T: &types.ConstI64}}},
@@ -83,6 +86,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 
 		rets = intRetT
 	case "size":
+		// fn size[T any](x T) i64
 		args = genericArgT
 		rets = intRetT
 	case "make":

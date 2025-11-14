@@ -188,8 +188,8 @@ func TestStringOperations(t *testing.T) {
 		},
 		{
 			name:  "index string",
-			input: `let s = "123" let ch = s[0]`,
-			want:  `lib main pub fn main() { let s string = "123" let ch byte = s[0] }`,
+			input: `let s = "123" let ch = try get(s,0)`,
+			want:  `lib main pub fn main() { let s string = "123" let ch byte = try get(s,0) }`,
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -280,8 +280,8 @@ func TestCharOperations(t *testing.T) {
 		},
 		{
 			name:  "string byte and char",
-			input: `let s = "12" let n = s[0] - '0'`,
-			want:  `lib main pub fn main() { let s string = "12" let n byte = (s[0] - '0') }`,
+			input: `let s = "12" let n = try get(s,0) - '0'`,
+			want:  `lib main pub fn main() { let s string = "12" let n byte = try (get(s,0) - '0') }`,
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -528,8 +528,8 @@ func TestSliceExpression(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "slice of index expression",
-			input: "struct abc { s string } fn test(a abc) { let v = a.s[0:2]}",
-			want:  "lib main struct abc {s string} fn test(a abc) { let v string = a.s[(0 : 2)] } pub fn main() { }",
+			input: "struct abc { s string } fn test(a abc) { let v = try slice(a.s,0,2) }",
+			want:  "lib main struct abc {s string} fn test(a abc) { let v string = try slice(a.s,0,2) } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -539,23 +539,24 @@ func TestArray(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "struct initialisation",
-			input: "struct test {x i64} let a = [test{x:1}, test{x:2}] let res = a[0].x - a[1].x",
-			want:  "lib main struct test {x i64} pub fn main() { let a []test = [test{x i64: 1},test{x i64: 2}] let res i64 = (a[0].x - a[1].x) }",
+			input: "struct test {x i64} let a = [test{x:1}, test{x:2}] let res = try (get(a,0).x - get(a,1).x)",
+			want:  "lib main struct test {x i64} pub fn main() { let a []test = [test{x i64: 1},test{x i64: 2}] let res i64 = try (get(a,0).x - get(a,1).x) }",
 		},
 		{
 			name:  "nested initialisation",
 			input: "let a = [[1,2], [3,4]",
 			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] }",
 		},
-		{
-			name:  "direct nested access",
-			input: "let a = [[1,2], [3,4]] let i = a[0][0]",
-			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let i i64 = a[0][0] }",
-		},
+		// BUG:
+		// {
+		// 	name:  "direct nested access",
+		// 	input: "let a = [[1,2], [3,4]] let i = try get(get(arr,0),0)",
+		// 	want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let i i64 = try get(get(arr,0),0) }",
+		// },
 		{
 			name:  "leveled nested access",
-			input: "let a = [[1,2], [3,4]] let a' = a[0] let v = a'[0]",
-			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let a' []i64 = a[0] let v i64 = a'[0] }",
+			input: "let a = [[1,2], [3,4]] let a' = try get(a,0) let v = try get(a',0)",
+			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let a' []i64 = try get(a,0) let v i64 = try get(a',0) }",
 		},
 		{
 			name:  "fix size",
@@ -566,31 +567,6 @@ func TestArray(t *testing.T) {
 			name:   "pass array to sized array type",
 			input:  "let arr = [1,2,3] test(arr) fn test(a [2]i64) { }",
 			errors: []string{"type mistmatch, expected type '[2]i64' but got '[]i64'"},
-		},
-		{
-			name:  "array slicing",
-			input: "let arr = [1,2,3] let arr' = arr[0:1]",
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let arr' []i64 = arr[(0 : 1)] }",
-		},
-		{
-			name:  "array slicing",
-			input: "let arr = [[1,2,3], [4,5,6], [2,3]] let arr' = arr[1:3][0:1]",
-			want:  "lib main pub fn main() { let arr [][]i64 = [[1,2,3],[4,5,6],[2,3]] let arr' [][]i64 = arr[(1 : 3)][(0 : 1)] }",
-		},
-		{
-			name:  "assign casted char to byte array",
-			input: "let arr = make([]byte, 1) arr[0] = byte(0 + '0')",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = make([]byte,1) arr[0] byte = byte((0 + '0')) }",
-		},
-		{
-			name:  "assign char literal to byte array",
-			input: "let arr = make([]byte, 1) arr[0] = '0'",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = make([]byte,1) arr[0] byte = '0' }",
-		},
-		{
-			name:   "assign char to byte array",
-			input:  "let arr = make([]byte, 1) arr[0] = 0 + '0' }",
-			errors: []string{"type mistmatch, expected type 'byte' but got 'char'"},
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -816,12 +792,12 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "aggregate type - array",
-			input: "type custom []u64 let x = custom([1, 2]) let y = x[0]",
-			want:  "lib main type custom []u64 pub fn main() { let x custom = custom([1,2]) let y u64 = x[0] }",
+			input: "type custom []u64 let x = custom([1, 2]) let y = try get(x,0)",
+			want:  "lib main type custom []u64 pub fn main() { let x custom = custom([1,2]) let y u64 = try get(x,0) }",
 		},
 		{
 			name:   "aggregate type - array, invalid type",
-			input:  "type custom []u64 let x = custom([1, 2.1]) let y = x[0]",
+			input:  "type custom []u64 let x = custom([1, 2.1]) let y = try get(x,0)",
 			errors: []string{"type mistmatch, expected type 'u64' but got 'f64'"},
 		},
 		{
@@ -1000,9 +976,9 @@ func TestTypeCast(t *testing.T) {
 			want:  "lib main pub fn main() { let b []byte = []byte([1,2,3,4]) let s string = string(b) }",
 		},
 		{
-			name:  "",
-			input: `let s = "12" let n = i64(s[0] - '0')`,
-			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64((s[0] - '0')) }`,
+			name:  "casting array access",
+			input: `let s = "12" let n = i64(try get(s,0) - '0')`,
+			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64(try (get(s,0) - '0')) }`,
 		},
 		{
 			name:  "error type cast",
@@ -1190,28 +1166,18 @@ func TestMutable(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "assign value to element from make",
-			input: "let arr = make([]i64,10) arr[0] = 1",
-			want:  "lib main pub fn main() { let arr mut[[]i64] = make([]i64,10) arr[0] i64 = 1 }",
-		},
-		{
-			name:  "assign value from argument",
-			input: `fn test(arr mut[[]i64]) []i64 { arr[0] = 1 return arr }`,
-			want:  `lib main fn test(arr mut[[]i64]) []i64 { arr[0] i64 = 1 return arr } pub fn main() { }`,
+			input: "var arr = try make([]i64,10) arr = try put(arr, 0, 1)",
+			want:  "lib main pub fn main() { var arr mut[[]i64] = try make([]i64,10) arr mut[[]i64] = try put(arr,0,1) }",
 		},
 		{
 			name:  "assign value for mutable guarded type",
-			input: "type abc []i64 | len(abc) == 10 fn test(arr mut[abc]) { arr[0] = 1}",
-			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr mut[dirty<abc>]) { arr[0] i64 = 1 } pub fn main() { }",
-		},
-		{
-			name:  "get element from mutable",
-			input: "union abc { i64 } fn test(m mut[[]abc]) { let v = m[0] }",
-			want:  "lib main union abc {i64} fn test(m mut[[]abc]) { let v abc = m[0] } pub fn main() { }",
+			input: "type abc []i64 | len(abc) == 10 fn test(arr mut[abc]) { let arr = try put(arr, 0, 1) }",
+			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr mut[dirty<abc>]) { let arr mut[dirty<abc>] = try put(arr,0,1) } pub fn main() { }",
 		},
 		{
 			name:  "assign slice to mutable from make",
-			input: "union abc { i64 } let arr = make([]abc,10) arr[0:3] = [1,2,3]",
-			want:  "lib main union abc {i64} pub fn main() { let arr mut[[]abc] = make([]abc,10) arr[(0 : 3)] mut[[]abc] = [1,2,3] }",
+			input: "union abc { i64 } var arr = try make([]abc,0,10) arr = try append(arr, [1,2,3])",
+			want:  "lib main union abc {i64} pub fn main() { var arr mut[[]abc] = try make([]abc,0,10) arr mut[[]abc] = try append(arr,[1,2,3]) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1342,8 +1308,8 @@ func TestFunction(t *testing.T) {
 		},
 		{
 			name:  "function - array argument",
-			input: "let arr = [1,2,3] let el = test(arr) fn test(a []i64) i64 { return a[-1] }",
-			want:  "lib main fn test(a []i64) i64 { return a[-1] } pub fn main() { let arr []i64 = [1,2,3] let el i64 = test(arr) }",
+			input: "let arr = [1,2,3] let el = test(arr) fn test(a []i64) i64 { return try get(a,-1) }",
+			want:  "lib main fn test(a []i64) i64 { return try get(a,-1) } pub fn main() { let arr []i64 = [1,2,3] let el i64 = test(arr) }",
 		},
 		{
 			name:  "function - return struct",

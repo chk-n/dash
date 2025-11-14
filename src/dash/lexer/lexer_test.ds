@@ -96,13 +96,13 @@ fn test_next_token()! {
     ]
 
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.0, "literal mismatch")
     }
 }
@@ -120,13 +120,13 @@ fn test_string()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.0, "literal mismatch")
     }
 }
@@ -148,13 +148,13 @@ fn test_number()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.2, "literal mismatch")
     }
 }
@@ -167,13 +167,13 @@ fn test_bool()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.2, "literal mismatch")
     }
 }
@@ -189,13 +189,13 @@ fn test_char()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.0, "literal mismatch")
     }
 }
@@ -216,7 +216,7 @@ fn test_comment()! {
 ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
         
@@ -234,13 +234,13 @@ fn test_whitespace()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         let l, let tkn = try next_tkn(l)
        
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.2, "literal mismatch")
     }
 }
@@ -256,17 +256,18 @@ fn test_sequential()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
+        let tc = try get(tests, i)
         let l = new([]byte(tc.0), 0)
         
         var count = 0
         for {
             let l, let tkn = try next_tkn(l)
-            let lit = get_literal(l, tkn)
+            let lit = try get_literal(l, tkn)
             if tkn.tag == tag.EOF {
                 break
             }
-            try assert(tkn.tag == tc.1[count], "token type mismatch")
+            let want = try get(tc.1, count)
+            try assert(tkn.tag == want, "token type mismatch")
             count = count + 1
         }
     }

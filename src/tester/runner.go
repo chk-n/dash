@@ -129,21 +129,11 @@ func (tr *TestRunner) runTest(fn *ast.FunctionExpression, eval *evaluator.Evalua
 	res := eval.Eval(fn.Body, ctx)
 
 	// Check for errors
-	ret, ok := res.(*evaluator.Return)
-	if !ok {
-		// special case as evaluating function
-		// body will not always yield Return{}
-		result.Passed = true
-	} else if len(ret.Values) == 0 {
-		result.Passed = true
+	if err, ok := res.(*evaluator.Error); ok {
+		result.Passed = false
+		result.Error = err.String()
 	} else {
-		err := ret.Values[len(ret.Values)-1]
-		if err == nil {
-			result.Passed = true
-		} else if err, ok := err.(*evaluator.Error); ok {
-			result.Error = err.String()
-			result.Passed = false
-		}
+		result.Passed = true
 	}
 
 	result.Duration = time.Since(start)

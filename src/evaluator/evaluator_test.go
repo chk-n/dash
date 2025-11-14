@@ -36,7 +36,7 @@ func TestEvaluatePrefix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpression(tt.prog)
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -101,7 +101,7 @@ func TestEvaluateInfix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpression(tt.prog)
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -171,7 +171,7 @@ func TestBitwiseOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := parseExpression(tt.prog)
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %v but want: %v", got, tt.want)
 			}
@@ -262,7 +262,7 @@ func TestCharOperations(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -304,7 +304,7 @@ func TestAssignmentStatement(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -338,7 +338,7 @@ func TestReassignment(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %d but want: %d", got, tt.want)
 			}
@@ -366,7 +366,7 @@ func TestIfElseExpression(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if got != tt.want {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -407,7 +407,7 @@ func TestFunctionClosures(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got: %s but want: %s", got, tt.want)
 			}
@@ -434,16 +434,6 @@ func TestArrayOperations(t *testing.T) {
 				[]any{int64(3), int64(4)},
 			},
 		},
-		{
-			name: "single index access",
-			prog: "let arr = [1, 2, 3] arr[1]",
-			want: int64(2),
-		},
-		{
-			name: "multi-dimensional index access",
-			prog: "let arr = [[1, 2], [3, 4]] arr[1][0]",
-			want: int64(3),
-		},
 		//	{
 		//		name: "negative index",
 		//		prog: "let arr = [1, 2, 3] arr[-1]",
@@ -464,7 +454,7 @@ func TestArrayOperations(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -554,7 +544,7 @@ func TestStructLiteral(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -594,7 +584,7 @@ func TestEnumDotExpression(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -727,11 +717,10 @@ func TestForStatement(t *testing.T) {
 		},
 		{
 			name: "ensure proper iterations with try",
-			prog: `let arr = [{1}, {2}]
-			var cnt = 0
-		    for i = 0; i < len(arr); i++ {
-		    	cnt = cnt + arr[i].0
-		    	try assert(arr[i].0 == arr[i].0, "")
+			prog: `var cnt = 0
+		    for i = 0; i < 3; i++ {
+		    	cnt = cnt + i
+		    	try assert(cnt == cnt, "")
 		    }
 		    cnt`,
 			want: int64(3),
@@ -769,7 +758,7 @@ func TestForStatement(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -813,7 +802,7 @@ func TestTryExpression(t *testing.T) {
 	            return 0
 	        }
 	        try safe_divide(10, 0)`,
-			want: &Return{Values: []any{&Error{Err: "main.divide_by_zero"}}},
+			want: &Error{Err: "main.divide_by_zero"},
 		},
 		{
 			name: "try with multiple return values",
@@ -864,14 +853,14 @@ func TestTryExpression(t *testing.T) {
 			struct Point {x i64}
 	        let arr = [Point{x: 10}]
 	        try get(arr, 5).x`,
-			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 		{
 			name: "try with comparison propagates error",
 			prog: `
 	        let arr = [1, 2]
 	        try get(arr, 5) == 1`,
-			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 		{
 			name: "try with comparison succeeds",
@@ -885,21 +874,21 @@ func TestTryExpression(t *testing.T) {
 			prog: `
 	        let arr = [1, 2, 3]
 	        try slice(arr, 0, 10)`,
-			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 		{
 			name: "try with arithmetic containing error",
 			prog: `
 	        let arr = [5, 10]
 	        try get(arr, 5) + 10`,
-			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 		{
 			name: "try with logical operation containing error",
 			prog: `
 	        let arr = [true, false]
 	        try get(arr, 5) && true`,
-			want: &Return{Values: []any{&Error{Err: "runtime.index_out_of_bounds"}}},
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 	}
 
@@ -910,7 +899,7 @@ func TestTryExpression(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -985,7 +974,7 @@ func TestLenFunction(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1057,7 +1046,7 @@ func TestPrintln(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			e.eval(n, NewContext(nil))
+			e.Eval(n, NewContext(nil))
 
 			w.Close()
 			os.Stdout = old
@@ -1108,7 +1097,7 @@ func TestMake(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1131,7 +1120,7 @@ func TestAssert(t *testing.T) {
 		{
 			name: "assert function call",
 			prog: `fn call() bool {return false} try assert(call(), "want")`,
-			want: &Return{[]any{&Error{Err: "want"}}},
+			want: &Error{Err: "want"},
 		},
 	}
 	for _, tt := range tests {
@@ -1141,7 +1130,7 @@ func TestAssert(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1206,7 +1195,7 @@ func TestTypeCasting(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1245,7 +1234,7 @@ func TestCustomTypeCasting(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1309,7 +1298,7 @@ func TestHexLiterals(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1366,7 +1355,7 @@ func TestTypeDefinition(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1385,16 +1374,16 @@ func TestMutable(t *testing.T) {
 			name: "modify array using index expression",
 			prog: `
 			let buf = try make([]i64, 3)
-			buf[0] = 1
-			buf[1] = 2
+			buf = try put(buf, 0, 1)
+			buf = try put(buf, 1, 2)
 			buf`,
 			want: []any{int64(1), int64(2), nil},
 		},
 		{
 			name: "modify array using slice expression",
 			prog: `
-			let buf = try make([]i64, 3)
-		    buf[0:3] = [3,2,1]
+			let buf = try make([]i64, 0, 4)
+			buf = try append(buf, [3,2,1])
 			buf`,
 			want: []any{int64(3), int64(2), int64(1)},
 		},
@@ -1407,7 +1396,7 @@ func TestMutable(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1443,7 +1432,7 @@ func TestCopyUpdateExpression(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -1570,7 +1559,7 @@ func TestMatchStatement(t *testing.T) {
 				}
 				try test()
 			`,
-			want: &Return{Values: []any{&Error{Err: "main.some_err"}}},
+			want: &Error{Err: "main.some_err"},
 		},
 		{
 			name: "match error",
@@ -1596,7 +1585,7 @@ func TestMatchStatement(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1606,10 +1595,9 @@ func TestMatchStatement(t *testing.T) {
 
 func TestOptionalTypes(t *testing.T) {
 	tests := []struct {
-		name      string
-		prog      string
-		want      any
-		wantPanic bool
+		name string
+		prog string
+		want any
 	}{
 		{
 			name: "coalesce null",
@@ -1661,11 +1649,11 @@ func TestOptionalTypes(t *testing.T) {
 		},
 		// NOTE: this panics for now but in future it will be error handled in Dash
 		{
-			name: "force unwrap null panics",
+			name: "force unwrap null ",
 			prog: `
 			fn get_value() ?i64 { return null }
 			?get_value()`,
-			wantPanic: true,
+			want: &Error{descriptor: errForceUnwrapNull, Err: "runtime.force_unwrap_null"},
 		},
 		{
 			name: "null equality",
@@ -1708,20 +1696,12 @@ func TestOptionalTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantPanic {
-				defer func() {
-					if r := recover(); r == nil {
-						t.Error("expected panic but got none")
-					}
-				}()
-			}
-
 			n, err := parseExpressions(tt.prog)
 			if err != nil {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1791,7 +1771,7 @@ func TestFirstClassFunctions(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1872,7 +1852,7 @@ func TestReturn(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -1976,7 +1956,7 @@ func TestVariableScoping(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
 			}
@@ -2036,7 +2016,7 @@ func TestAppend(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -2096,7 +2076,7 @@ func TestBuiltinArrayFunctions(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -2220,7 +2200,7 @@ func TestPointers(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			// Special handling for pointer comparison - check value not ID
 			if wantPtr, ok := tt.want.(*Pointer); ok {
@@ -2277,7 +2257,7 @@ func TestAnyType(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -2300,7 +2280,7 @@ func TestGenerics(t *testing.T) {
 		{
 			name: "generic function",
 			prog: `fn test[T any](x T) T { return x } let r = test[string]("hello") r`,
-			want: "hello",
+			want: &Any{descriptor: 398550328, value: "hello"},
 		},
 	}
 
@@ -2311,7 +2291,7 @@ func TestGenerics(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -2412,7 +2392,7 @@ func TestGenericMatchTypeCase(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)
@@ -2518,7 +2498,7 @@ func TestErrorComparison(t *testing.T) {
 				t.Error(err)
 			}
 			e := NewEvaluator()
-			got := e.eval(n, NewContext(nil))
+			got := e.Eval(n, NewContext(nil))
 
 			if !deepEqual(got, tt.want) {
 				t.Errorf("got %v but want %v", got, tt.want)

@@ -114,11 +114,12 @@ pub enum tag {
     IDENT
 }
 
-pub fn get_literal(l *lexer, tkn token) string {
+pub fn get_literal(l *lexer, tkn token)! string {
     if len(l.buf) == 0 { 
         return "" 
     }
-    return string(l.buf[tkn.start:tkn.end+1])
+    let buf = try slice(l.buf, tkn.start, tkn.end+1)
+    return string(buf)
 }
 
 let keywords = [
@@ -172,8 +173,9 @@ let keywords = [
 
 pub fn get_tag_by_keyword(k string) tag {
     for i = 0; i < len(keywords); i++ {
-        if keywords[i].0 == k {
-            return keywords[i].1
+        let kw = try get(keywords, i)
+        if kw.0 == k {
+            return kw.1
         }
     }
     return tag.IDENT

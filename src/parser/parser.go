@@ -174,7 +174,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.PIPE, p.parseInfixExpression)
 	p.registerInfix(token.COLON, p.parseInfixExpression)
 	p.registerInfix(token.DOT, p.parseDotExpression) // could be replace with parse infix
-	p.registerInfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerInfix(token.ASSIGN, p.parseInfixExpression)
 	p.registerInfix(token.NULL_COALESCE, p.parseInfixExpression)
 	p.registerInfix(token.LSHIFT, p.parseInfixExpression)
@@ -186,7 +185,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.CATCH, p.parseCatchExpression)
 
 	p.postfixParseFns = make(map[token.Type]postfixParseFn)
-	p.registerPostfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerPostfix(token.INCR, p.parsePostfixExpression)
 	p.registerPostfix(token.DECR, p.parsePostfixExpression)
 
@@ -1569,31 +1567,6 @@ func (p *Parser) parseGroupedExpression() ast.Expression {
 	// }
 	p.nextToken()
 	return exp
-}
-
-func (p *Parser) parseIndexOrSliceExpression(left ast.Expression) ast.Expression {
-	tkn := p.curToken
-	exps := []ast.Expression{}
-
-	for p.curTokenIs(token.LBRACK) {
-		p.nextToken()
-		exp := p.parseExpression(LOWEST)
-		exps = append(exps, exp)
-
-		if !p.curTokenIs(token.RBRACK) {
-			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-			return nil
-		}
-		p.nextToken()
-	}
-
-	if infixExp, ok := exps[0].(*ast.InfixExpression); ok && infixExp.Token.Type == token.COLON {
-		// has to be slice expression
-		return &ast.SliceExpression{Token: tkn, Left: left, Indices: exps}
-	}
-
-	return &ast.IndexExpression{Token: tkn, Left: left, Indices: exps}
-
 }
 
 // Handles parsing:

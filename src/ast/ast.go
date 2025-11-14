@@ -386,10 +386,6 @@ func (s *AssignmentStatement) VarNameAt(i int) string {
 		return decl.TokenLiteral()
 	case *DeclarationStatement:
 		return decl.Assignee.TokenLiteral()
-	case *IndexExpression:
-		return decl.TokenLiteral()
-	case *SliceExpression:
-		return decl.TokenLiteral()
 	case *DotExpression:
 		return decl.TokenLiteral()
 	}
@@ -1118,67 +1114,6 @@ func (s *CatchExpression) String() string {
 	return out.String()
 }
 
-// Example tree: v = a[0][0]
-//
-//	  Index
-//	 /     \
-//	a     [0,0]
-type IndexExpression struct {
-	Token   token.Token // [
-	Left    Expression
-	Indices []Expression
-
-	T types.Type
-}
-
-func (e *IndexExpression) expressionNode() {}
-func (e *IndexExpression) SetType(t types.Type) {
-	e.T = t
-}
-
-// Returns type that a variable would have when index expression executed
-// v [][]i64 = a[0][0]
-// Type() == i64
-func (e *IndexExpression) Type() types.Type {
-	return e.T
-}
-func (e *IndexExpression) TokenLiteral() string { return e.Token.Literal }
-func (e *IndexExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Left.String())
-	for _, idx := range e.Indices {
-		out.WriteString("[" + idx.String() + "]")
-	}
-
-	return out.String()
-}
-
-// arr[1:3][0:1]
-type SliceExpression struct {
-	Token   token.Token
-	Left    Expression
-	Indices []Expression
-
-	// Set by semantical analysis
-	// Ts []types.Type
-}
-
-func (e *SliceExpression) expressionNode()      {}
-func (e *SliceExpression) Type() types.Type     { return e.Left.Type() }
-func (e *SliceExpression) SetType(t types.Type) {}
-func (e *SliceExpression) TokenLiteral() string { return e.Token.Literal }
-func (e *SliceExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Left.String())
-	for _, idx := range e.Indices {
-		out.WriteString("[" + idx.String() + "]")
-	}
-
-	return out.String()
-}
-
 type TypeLiteral struct {
 	Token token.Token
 	T     types.Type
@@ -1664,14 +1599,6 @@ func (e *TryExpression) Pos() token.Pos {
 }
 
 func (e *CatchExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *IndexExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *SliceExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 
