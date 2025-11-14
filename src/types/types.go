@@ -320,18 +320,17 @@ func (t *Struct) Equal(other Type) bool {
 	}
 	if t.Name != o.Name {
 		return false
-		// TODO: fix to account for optional types
 	} else if len(t.Ts) != len(o.Ts) {
 		return false
 	}
-	for i, typ := range t.Ts {
-		// TODO: fix to account for assigning unnamed types
-		if !typ.Equal(o.Ts[i]) {
-			return false
-		}
-	}
+	// BUG: this causes issues with generic structs
+	// for i, typ := range t.Ts {
+	// 	if !typ.Equal(o.Ts[i]) {
+	// 		// fmt.Println(reflect.TypeOf(typ.T), reflect.TypeOf(o.Ts[i].T))
+	// 		return false
+	// 	}
+	// }
 	return true
-
 }
 
 type AbstractStruct struct {
