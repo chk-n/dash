@@ -1955,6 +1955,13 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 		return validateOperator(t.Underlying, tkn)
 	case *types.ImportedNamed:
 		return validateOperator(t.Typ, tkn)
+	case *types.Generic:
+		switch tkn {
+		case token.EQ, token.NEQ:
+			return true
+		default:
+			return false
+		}
 	case *types.Array:
 		return false
 	case *types.Struct:
