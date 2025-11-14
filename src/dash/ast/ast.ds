@@ -466,16 +466,16 @@ pub fn to_string(a ast, idx index, buf []byte)! []byte {
         buf = append(buf, ' ')
         let n = data.y - data.x
         for i = data.x; i+1 < data.y; i = i+2 {
+            if i != data.x && n > 2 {
+                 buf = append(buf, []byte(" else if "))
+            }
             let idx = try get(a.extras, i)
             buf = try to_string(a, idx, buf)
             buf = append(buf, ' ')
             let idx = try get(a.extras, i+1)
             buf = try to_string(a, idx, buf)
-            if n > 1 && i%2 != 0 {
-                buf = append(buf, []byte(" else if "))
-            }
-        }
-        if n%2 != 0 {
+       }
+       if n%2 != 0 {
             buf = append(buf, []byte(" else "))
             let idx = try get(a.extras, data.y-1)
             buf = try to_string(a, idx, buf)
