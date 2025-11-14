@@ -15,7 +15,7 @@ test:
 	go test -v $(TEST_PACKAGE)
 	@echo Running self-hosted compiler tests
 	go build -o bin/$(BINARY_NAME) cmd/main.go
-	./$(BINARY_NAME) test -r src/dash
+	./bin/$(BINARY_NAME) test -r src/dash
 
 # release-darwin-aarch64:
 # 	$(MAKE) build-darwin-aarch64
