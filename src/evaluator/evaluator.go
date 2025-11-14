@@ -2179,8 +2179,11 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	case []any:
 		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
+		// Create a copy first to ensure immutability
+		arrCopy := make([]any, len(arr))
+		copy(arrCopy, arr)
 		if anyArr, ok := val.([]any); ok {
-			newArr = append(arr, anyArr...)
+			newArr = append(arrCopy, anyArr...)
 		} else if byteArr, ok := val.([]uint8); ok {
 			nArr := make([]uint8, len(arr))
 			for i, el := range arr {
@@ -2193,20 +2196,23 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 			}
 			newArr = append(nArr, byteArr...)
 		} else {
-			newArr = append(arr, val)
+			newArr = append(arrCopy, val)
 		}
 	case []uint8:
 		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
+		// Create a copy first to ensure immutability
+		arrCopy := make([]uint8, len(arr))
+		copy(arrCopy, arr)
 		// Handle case where we're appending []uint8 to []uint8
 		if byteArr, ok := val.([]uint8); ok {
-			newArr = append(arr, byteArr...)
+			newArr = append(arrCopy, byteArr...)
 		} else {
 			switch val := val.(type) {
 			case int32:
-				newArr = append(arr, uint8(val))
+				newArr = append(arrCopy, uint8(val))
 			case uint8:
-				newArr = append(arr, val)
+				newArr = append(arrCopy, val)
 			}
 		}
 	default:
