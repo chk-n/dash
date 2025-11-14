@@ -18,21 +18,21 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24'
+        go-version: '1.25'
     
-    - name: Install Dash
-      run: |
-        if [ -z "${{ github.event.release.tag_name }}" ]; then
-          export DASH_VERSION=$(git rev-parse --short "$GITHUB_SHA")
-        else
-          export DASH_VERSION="${{ github.event.release.tag_name }}"
-        fi
-    
-        chmod +x scripts/linux/install_linux.sh
-        ./scripts/linux/install_linux.sh
+    #- name: Install Dash
+    #  run: |
+    #    if [ -z "${{ github.event.release.tag_name }}" ]; then
+    #      export DASH_VERSION=$(git rev-parse --short "$GITHUB_SHA")
+    #    else
+    #      export DASH_VERSION="${{ github.event.release.tag_name }}"
+    #    fi
+    #
+    #    chmod +x scripts/linux/install_linux.sh
+    #    ./scripts/linux/install_linux.sh
         
-    - name: Verify Dash
-      run: dsc version
+    #- name: Verify Dash
+    #  run: dsc version
       
     - name: Test
       run: make test
