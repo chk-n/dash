@@ -20,7 +20,10 @@ const (
 	COLON         // :
 	ASSIGN        // =
 	OR            // ||
+	BITWISE_OR    // |
+	BITWISE_XOR   // ^
 	AND           // &&
+	BITWISE_AND   // &
 	EQUALS        // ==
 	LESSGREATER   // > or <
 	LESSGREATEREQ // >= or <=
@@ -28,8 +31,9 @@ const (
 	SUBTRACT      // -
 	PRODUCT       // *
 	DIVIDE        // /
+	SHIFT         // << >>
 	NULL_COALESCE // ??
-	PREFIX        // -5, !false, ?x
+	PREFIX        // -5, !false, ?x, ~x
 	POSTFIX       // x++
 	CALL          // myFunction(X)
 	SLICE         // a[0]
@@ -47,6 +51,11 @@ var precedences = map[token.Type]int{
 	token.LTE:           LESSGREATEREQ,
 	token.OR:            OR,
 	token.AND:           AND,
+	token.BAR:           BITWISE_OR,
+	token.CARET:         BITWISE_XOR,
+	token.AMPERSAND:     BITWISE_AND,
+	token.LSHIFT:        SHIFT,
+	token.RSHIFT:        SHIFT,
 	token.PLUS:          SUM,
 	token.MINUS:         SUM,
 	token.SLASH:         PRODUCT,
@@ -77,11 +86,10 @@ const (
 )
 
 type Parser struct {
+	tknIdx            int
+	tkns              []token.Token
 	l                 *lexer.Lexer
-	prevToken         token.Token
 	curToken          token.Token
-	peekToken         token.Token
-	warnings          []string
 	errors            []string
 	prefixParseFns    map[token.Type]prefixParseFn
 	infixParseFns     map[token.Type]infixParseFn
@@ -98,10 +106,6 @@ func New(l *lexer.Lexer) *Parser {
 		l: l,
 	}
 
-	// Read two tokens, so curToken and peekToken are both set
-	p.nextToken()
-	p.nextToken()
-
 	p.prefixParseFns = make(map[token.Type]prefixParseFn)
 	p.registerPrefix(token.COMMENT, p.parseComment)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
@@ -109,9 +113,11 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.AMPERSAND, p.parsePrefixExpression)
 	p.registerPrefix(token.ASTERISK, p.parsePrefixExpression)
 	p.registerPrefix(token.OPTIONAL, p.parsePrefixExpression)
+	p.registerPrefix(token.BNOT, p.parsePrefixExpression)
 	// Literal parse functions
 	p.registerPrefix(token.IDENT, p.parseIdentifierStructLiteralOrFunctionCall)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.HEX, p.parseHexLiteral)
 	p.registerPrefix(token.FLOAT, p.parseFloatLiteral)
 	p.registerPrefix(token.BOOL, p.parseBooleanLiteral)
 	p.registerPrefix(token.NULL, p.parseNullLiteral)
@@ -125,8 +131,6 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.IF, p.parseIfElseExpression)
 	p.registerPrefix(token.MATCH, p.parseMatchExpression)
 	p.registerPrefix(token.LBRACE, p.parseAnonymousStructLiteral)
-	// p.registerPrefix(token.TRY, p.parseTryExpression)
-	p.registerPrefix(token.USE, p.parseUseExpression)
 	p.registerPrefix(token.LBRACK, p.parseArrayLiteralTypeOrCast)
 	// Types
 	p.registerPrefix(token.STRINGTYPE, p.parseTypeLiteral)
@@ -148,6 +152,8 @@ func New(l *lexer.Lexer) *Parser {
 	// p.registerPrefix(token.FLOATTYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.ERROR, p.parseTypeLiteral)
+	p.registerPrefix(token.ANYTYPE, p.parseTypeLiteral)
 	//
 	p.registerPrefix(token.TRY, p.parseTryExpression)
 
@@ -168,28 +174,38 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.PIPE, p.parseInfixExpression)
 	p.registerInfix(token.COLON, p.parseInfixExpression)
 	p.registerInfix(token.DOT, p.parseDotExpression) // could be replace with parse infix
-	p.registerInfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerInfix(token.ASSIGN, p.parseInfixExpression)
 	p.registerInfix(token.NULL_COALESCE, p.parseInfixExpression)
-
-	// p.registerInfix(token.LSHIFT, p.parseInfixExpression)
-	// p.registerInfix(token.RSHIFT, p.parseInfixExpression)
-	// p.registerInfix(token.BAR, p.parseInfixExpression)
-	// p.registerInfix(token.CARET, p.parseInfixExpression)
-	// p.registerInfix(token.BNOT, p.parseInfixExpression) // TODO: maybe we change token
+	p.registerInfix(token.LSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.RSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.BAR, p.parseInfixExpression)
+	p.registerInfix(token.CARET, p.parseInfixExpression)
+	p.registerInfix(token.AMPERSAND, p.parseInfixExpression)
 	// p.registerInfix(token.BANDNOT, p.parseInfixExpression)
 	p.registerInfix(token.CATCH, p.parseCatchExpression)
 
 	p.postfixParseFns = make(map[token.Type]postfixParseFn)
-	p.registerPostfix(token.LBRACK, p.parseIndexOrSliceExpression)
 	p.registerPostfix(token.INCR, p.parsePostfixExpression)
 	p.registerPostfix(token.DECR, p.parsePostfixExpression)
-	p.registerPostfix(token.CARET, p.parseCopyExpression)
 
 	p.attributeParseFns = make(map[string]attributeParseFn)
 	p.registerAttribute("extern", p.parseExternAttribute)
 	p.registerAttribute("inline", p.parseInlineAttribute)
 	p.registerAttribute("test", p.parseBasicAttribute)
+
+	// scan all tokens
+	var tkns []token.Token
+	for {
+		tkn := l.NextToken()
+		tkns = append(tkns, tkn)
+		if tkn.Type == token.EOF {
+			break
+		}
+	}
+	p.tkns = tkns
+	// tkns will never be empty as there will
+	// be at least one EOF token
+	p.curToken = tkns[0]
 
 	return p
 }
@@ -199,9 +215,25 @@ func (p *Parser) Errors() []string {
 }
 
 func (p *Parser) nextToken() {
-	p.prevToken = p.curToken
-	p.curToken = p.peekToken
-	p.peekToken = p.l.NextToken()
+	if p.tknIdx+1 >= len(p.tkns) {
+		return
+	}
+	p.tknIdx++
+	p.curToken = p.tkns[p.tknIdx]
+}
+
+func (p *Parser) peekToken() token.Token {
+	if p.tknIdx+1 >= len(p.tkns) {
+		return p.tkns[len(p.tkns)-1]
+	}
+	return p.tkns[p.tknIdx+1]
+}
+
+func (p *Parser) peekNToken(n int) token.Token {
+	if p.tknIdx+n >= len(p.tkns) {
+		return p.tkns[len(p.tkns)-1]
+	}
+	return p.tkns[p.tknIdx+n]
 }
 
 func (p *Parser) ParseLibrary() *ast.Library {
@@ -221,6 +253,8 @@ func (p *Parser) ParseLibrary() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.PUBLIC:
+			p.nextToken()
 		case token.USE:
 			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
@@ -250,8 +284,6 @@ func (p *Parser) ParseLibrary() *ast.Library {
 		case token.FUNCTION:
 			exp := p.parseFunctionExpression().(*ast.FunctionExpression)
 			lib.Nodes = append(lib.Nodes, exp)
-		case token.PUBLIC:
-			p.nextToken()
 		default:
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 			return nil
@@ -278,10 +310,10 @@ func (p *Parser) ParseImports() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
-		case token.USE:
-			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.PUBLIC:
 			p.nextToken()
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		default:
 			p.nextToken()
 		}
@@ -309,12 +341,14 @@ func (p *Parser) ParseREPL() *ast.Library {
 
 	for !p.curTokenIs(token.EOF) {
 		switch p.curToken.Type {
+		case token.PUBLIC:
+			p.nextToken()
+		case token.USE:
+			lib.Nodes = append(lib.Nodes, p.parseUseStatement())
 		case token.TYPE:
 			lib.Nodes = append(lib.Nodes, p.parseTypeDefinitionStatement())
 		case token.ALIAS:
 			lib.Nodes = append(lib.Nodes, p.parseTypeAliasStatement())
-		case token.GENERIC:
-			lib.Nodes = append(lib.Nodes, p.parseGenericStructStatement())
 		case token.STRUCT:
 			lib.Nodes = append(lib.Nodes, p.parseStructStatement())
 		case token.ENUM:
@@ -322,7 +356,11 @@ func (p *Parser) ParseREPL() *ast.Library {
 		case token.UNION:
 			lib.Nodes = append(lib.Nodes, p.parseUnionStatement())
 		case token.ERROR:
-			lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
+			if p.peekTokenIs(token.LPAREN) {
+				mainFn.Body.Statements = append(mainFn.Body.Statements, p.parseExpression(LOWEST))
+			} else {
+				lib.Nodes = append(lib.Nodes, p.parseErrorStatement())
+			}
 		case token.AT:
 			attr := p.parseAttribute()
 			p.attributes.Push(attr)
@@ -438,28 +476,6 @@ func (p *Parser) parseTypeAliasStatement() *ast.TypeAliasStatement {
 	return stmt
 }
 
-func (p *Parser) parseGenericStructStatement() *ast.GenericStructStatement {
-	public := false
-	if p.prevTokenIs(token.PUBLIC) {
-		public = true
-	}
-	// eat "gen" token
-	p.nextToken()
-	if !p.curTokenIs(token.STRUCT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	stmt := p.parseStructStatement()
-	stmt.Public = public
-	gen := &ast.GenericStructStatement{
-		Public: stmt.Public,
-		Token:  stmt.Token,
-		Name:   stmt.Name,
-		Fields: stmt.Fields,
-	}
-	return gen
-}
-
 func (p *Parser) parseStructStatement() *ast.StructStatement {
 	stmt := &ast.StructStatement{Token: p.curToken}
 	if p.prevTokenIs(token.PUBLIC) {
@@ -472,6 +488,17 @@ func (p *Parser) parseStructStatement() *ast.StructStatement {
 	}
 	stmt.Name = p.parseIdentifier()
 
+	// handle optional parametrised type
+	if p.curTokenIs(token.LBRACK) {
+		p.nextToken()
+		stmt.GenericParameters = p.parseGenericParameters()
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
 	if !p.curTokenIs(token.LBRACE) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -481,19 +508,21 @@ func (p *Parser) parseStructStatement() *ast.StructStatement {
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 		field := &ast.StructFieldStatement{}
 
-		if p.curTokenIs(token.IDENT) {
-			field.Name = p.parseIdentifier()
+		// All struct fields must have names (can be keywords)
+		field.Name = p.parseIdentifierOrKeyword()
+		if field.Name == nil {
+			return nil
 		}
+
 		if p.curTokenIsType() {
 			field.Type = p.parseType()
 			stmt.Fields = append(stmt.Fields, field)
-		} else {
-			if !p.curTokenIs(token.IDENT) {
-				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-				return nil
-			}
+		} else if p.curTokenIsIdent() {
 			field.Type = p.parseUnknownNamedType()
 			stmt.Fields = append(stmt.Fields, field)
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
 		}
 
 		if p.curTokenIs(token.BAR) {
@@ -531,13 +560,21 @@ func (p *Parser) parseEnumStatement() *ast.EnumStatement {
 	p.nextToken()
 
 	for !p.curTokenIs(token.RBRACE) {
-		stmt.Fields = append(stmt.Fields, p.parseIdentifier())
+		if ident := p.parseIdentifierOrKeyword(); ident != nil {
+			stmt.Fields = append(stmt.Fields, ident)
+		} else {
+			return nil
+		}
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
 		}
 	}
 
-	stmt.T = &types.Enum{Name: stmt.Name.String(), Size: len(stmt.Fields)}
+	fieldNames := make([]string, len(stmt.Fields))
+	for i, field := range stmt.Fields {
+		fieldNames[i] = field.Value
+	}
+	stmt.T = &types.Enum{Name: stmt.Name.String(), Size: len(stmt.Fields), Fields: fieldNames}
 
 	p.nextToken()
 
@@ -589,13 +626,10 @@ func (p *Parser) parseUnionStatement() *ast.UnionStatement {
 // * x ...i64
 func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterStatement {
 	stmt := &ast.ParameterStatement{}
-	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-
-	if !p.curTokenIs(token.IDENT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+	stmt.Name = p.parseIdentifierOrKeyword()
+	if stmt.Name == nil {
 		return nil
 	}
-	p.nextToken()
 
 	// x,
 	if p.curTokenIs(token.COMMA) {
@@ -607,6 +641,12 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 	if p.curTokenIs(token.ELLIPSIS) {
 		p.nextToken()
 		stmt.Type = &types.Array{T: p.parseType()}
+		return stmt
+	}
+
+	// x)  - last parameter without type (like x, but with ) instead of ,)
+	if p.curTokenIs(token.RPAREN) {
+		p.addError(p.curToken, errMissingArgumentType(stmt.Name.Value))
 		return stmt
 	}
 
@@ -625,6 +665,10 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 	if p.curTokenIs(token.RPAREN) {
 		return stmt
 	}
+	// x int}
+	if p.curTokenIs(token.RBRACE) {
+		return stmt
+	}
 	// x int,
 	if p.curTokenIs(token.COMMA) {
 		p.nextToken()
@@ -640,6 +684,9 @@ func (p *Parser) parseParameterStatement(allowedOptional bool) *ast.ParameterSta
 // x, let y = 1, 2
 func (p *Parser) parseAssignmentStatement() ast.Statement {
 	stmt := &ast.AssignmentStatement{}
+	if p.prevTokenIs(token.PUBLIC) {
+		stmt.Public = true
+	}
 
 	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
 		var tkn token.Token // let or var
@@ -874,8 +921,7 @@ func (p *Parser) parseStatementInBlock() ast.Node {
 		// for dot, slice and index expression we need to partially parse
 		// tokens before we can derermine whther it is an assignment or not
 		if p.peekTokenIs(token.DOT) {
-			ident := p.parseIdentifier()
-			exp := p.parseDotExpression(ident)
+			exp := p.parseExpression(ASSIGN)
 			if p.curTokenIs(token.ASSIGN) || p.curTokenIs(token.COMMA) {
 				return p.parseAssignmentStatementPre(exp)
 			}
@@ -1038,9 +1084,17 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		mc := &ast.MatchCase{Token: p.curToken}
 		if p.curTokenIs(token.CASE) {
 			p.nextToken()
-			// only parse until ':'
-			mc.Predicate = p.parseExpression(COLON)
+			// parse comma-separated predicates until ':'
+			for {
+				pred := p.parseExpression(COLON)
+				mc.Predicates = append(mc.Predicates, pred)
 
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+					continue
+				}
+				break
+			}
 		} else {
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 			return nil
@@ -1059,7 +1113,7 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 		}
 
 		// ensure default case is saved to proper field
-		if mc.Predicate.TokenLiteral() == "_" {
+		if len(mc.Predicates) == 1 && mc.Predicates[0].TokenLiteral() == "_" {
 			es.Default = mc
 		} else {
 			es.Cases = append(es.Cases, mc)
@@ -1093,8 +1147,17 @@ func (p *Parser) parseMatchStatement() ast.Expression {
 		mc := &ast.MatchCase{Token: p.curToken}
 		if p.curTokenIs(token.CASE) {
 			p.nextToken()
-			// only parse until ':'
-			mc.Predicate = p.parseExpression(COLON)
+			// parse comma-separated predicates until ':'
+			for {
+				pred := p.parseExpression(COLON)
+				mc.Predicates = append(mc.Predicates, pred)
+
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+					continue
+				}
+				break
+			}
 
 		} else {
 			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
@@ -1114,7 +1177,7 @@ func (p *Parser) parseMatchStatement() ast.Expression {
 		}
 
 		// ensure default case is saved to proper field
-		if mc.Predicate.TokenLiteral() == "_" {
+		if len(mc.Predicates) == 1 && mc.Predicates[0].TokenLiteral() == "_" {
 			es.Default = mc
 		} else {
 			es.Cases = append(es.Cases, mc)
@@ -1147,26 +1210,36 @@ func (p *Parser) parseErrorStatement() *ast.ErrorStatement {
 	stmt.Name = p.parseIdentifier()
 
 	// Parse parameters if present
-	if p.curTokenIs(token.LPAREN) {
+	if p.curTokenIs(token.LBRACE) {
 		p.nextToken()
 
-		// Parse parameters until we hit ')'
-		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
-			param := p.parseParameterStatement(false)
-			if param == nil {
+		// Parse parameters until we hit '}'
+		for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+			field := &ast.ParameterStatement{}
+
+			// All struct fields must have names (can be keywords)
+			field.Name = p.parseIdentifierOrKeyword()
+			if field.Name == nil {
 				return nil
 			}
-			stmt.Params = append(stmt.Params, param)
 
-			if p.curTokenIs(token.COMMA) {
-				p.nextToken()
+			if p.curTokenIsType() {
+				field.Type = p.parseType()
+				stmt.Params = append(stmt.Params, field)
+			} else if p.curTokenIsIdent() {
+				field.Type = p.parseUnknownNamedType()
+				stmt.Params = append(stmt.Params, field)
+			} else {
+				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+				return nil
 			}
 		}
 
-		if !p.curTokenIs(token.RPAREN) {
-			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-			return nil
-		}
+		// if !p.curTokenIs(token.RBRACE) {
+		// p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		// return nil
+		// }
+
 		p.nextToken()
 	}
 
@@ -1186,27 +1259,137 @@ func (p *Parser) parseRaiseStatement() ast.Statement {
 // Expressions //
 // ----------- //
 
+// isGenericExpression checks if the current position indicates a generic type parameter
+// usage (e.g., vec[i64] or map[K, V]). Returns true if generic, false otherwise.
+// This function only peeks ahead and does not consume tokens.
+func (p *Parser) isGenericExpression() bool {
+	if !p.peekTokenIs(token.LBRACK) {
+		return false
+	}
+
+	if p.peekNTokenIsType(2) && !p.peekNTokenIs(2, token.IDENT) {
+		// Definitely generic: vec[int
+		// as types cant be used as identifiers
+		return true
+	}
+
+	if p.peekNTokenIs(2, token.IDENT) {
+		// Could be: 'map[K,' 'vec[T](' 'vec[T]{' 'a[b' 'if a[b] {' 'match a[b] {'
+		// Note: struct literals cant be defined within if and match cond
+		if p.peekNTokenIs(3, token.COMMA) ||
+			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LPAREN)) ||
+			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LBRACE) &&
+				p.context != IF_ELSE && p.context != MATCH) {
+			return true
+		}
+	}
+
+	if p.peekNTokenIs(2, token.RBRACK) {
+		// e.g. vec[] (missing type)
+		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
+		return false
+	}
+
+	if p.peekNTokenIs(2, token.COMMA) {
+		// e.g. vec[, (malformed but parameterized)
+		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
+		return false
+	}
+
+	return false
+}
+
 func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
-		return p.parseFunctionCallExpression()
+		tkn := p.curToken
+		p.nextToken()
+		return p.parseFunctionCallExpression(tkn, nil)
 	}
 
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	// in this edge case we need to check context
-	// to understand whether we are parsing struct
-	// literal
+	// We use a simple decision tree with peeking to
+	// disamiguate between:
+	// - Generic function call: identity[i32](...)
+	// - Generic struct literal: vec[i64]{...}
+	// - Array indexing/slicing: a[0], a[b:c]
+	// - Arrax indexing/slicing within if/else & match condition
+	if p.isGenericExpression() {
+		// Parse as generic function call or struct instantiation
+		p.nextToken() // consume ident
+		typeParams := p.parseTypeParameters()
+
+		if p.curTokenIs(token.LPAREN) {
+			return p.parseFunctionCallExpression(ident.Token, typeParams)
+		} else if p.curTokenIs(token.LBRACE) {
+			if p.context == IF_ELSE || p.context == MATCH {
+				p.nextToken()
+				return ident
+			}
+			return p.parseStructLiteral(ident, typeParams)
+		} else {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+	}
+
+	// Handle normal struct literal, dot expression, or plain identifier
 	if p.peekTokenIs(token.LBRACE) {
 		if p.context == IF_ELSE || p.context == MATCH {
 			p.nextToken()
 			return ident
 		}
 		p.nextToken()
-		return p.parseStructLiteral(ident)
+		return p.parseStructLiteral(ident, nil)
 
+	} else if p.peekTokenIs(token.DOT) {
+		p.nextToken()
+		exp := p.parseDotExpression(ident)
+		if p.context == IF_ELSE || p.context == MATCH {
+			return exp
+		}
+		if p.curTokenIs(token.LBRACE) {
+			return p.parseStructLiteral(exp, nil)
+		}
+		return exp
 	}
 
+	p.nextToken()
+	return ident
+}
+
+// curTokenIsIdent checks if a token can be treated as an identifier
+// in contexts where keywords should be allowed as identifiers
+func (p *Parser) curTokenIsIdent() bool {
+	typ := p.curToken.Type
+	switch typ {
+	case token.IDENT:
+		return true
+	// Type keywords that can be used as identifiers
+	case token.INTTYPE, token.FLOATTYPE, token.STRINGTYPE, token.BOOLTYPE,
+		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
+		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
+		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE,
+		token.ANYTYPE:
+		return true
+	case token.LIBRARY, token.PUBLIC,
+		token.NEXT, token.BREAK,
+		token.ENUM, token.TYPE:
+		return true
+	default:
+		return false
+	}
+}
+
+// parseIdentifierOrKeyword parses an identifier or a keyword that should be treated as an identifier
+func (p *Parser) parseIdentifierOrKeyword() *ast.Identifier {
+	if !p.curTokenIsIdent() {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		p.nextToken()
+		return nil
+	}
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 	p.nextToken()
 	return ident
 }
@@ -1300,13 +1483,11 @@ func (p *Parser) parseDeferExpression() ast.Expression {
 
 	if p.curTokenIs(token.LBRACE) {
 		exp.Node = p.parseBlockStatement()
-	} else if p.peekTokenIs(token.DOT) {
-		exp.Node = p.parseExpression(LOWEST)
-	} else if p.peekTokenIs(token.LPAREN) {
-		exp.Node = p.parseFunctionCallExpression()
 	} else {
-		return nil
+		exp.Node = p.parseExpression(LOWEST)
 	}
+
+	// TODO: validate exp.Node is valid e.g. function call
 
 	return exp
 }
@@ -1319,10 +1500,28 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	exp := &ast.DotExpression{Token: p.curToken, Left: left}
 	p.nextToken()
 
-	if p.peekTokenIs(token.LPAREN) {
-		exp.Right = p.parseFunctionCallExpression()
-	} else if p.curTokenIs(token.IDENT) {
-		exp.Right = p.parseIdentifier()
+	if p.curTokenIsIdent() {
+		// Use the helper to check for generic expressions
+		if p.isGenericExpression() {
+			ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+			p.nextToken() // consume ident
+			typeParams := p.parseTypeParameters()
+
+			if p.curTokenIs(token.LPAREN) {
+				exp.Right = p.parseFunctionCallExpression(ident.Token, typeParams)
+			} else if p.curTokenIs(token.LBRACE) {
+				exp.Right = p.parseStructLiteral(ident, typeParams)
+			} else {
+				p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+				return nil
+			}
+		} else if p.peekTokenIs(token.LPAREN) {
+			tkn := p.curToken
+			p.nextToken()
+			exp.Right = p.parseFunctionCallExpression(tkn, nil)
+		} else {
+			exp.Right = p.parseIdentifierOrKeyword()
+		}
 	} else if p.curTokenIs(token.INT) {
 		exp.Right = p.parseIntegerLiteral()
 	} else {
@@ -1332,19 +1531,14 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	return exp
 }
 
-// e.g. do_something("123")
-func (p *Parser) parseFunctionCallExpression() ast.Expression {
-	if !p.curTokenIs(token.IDENT) && !p.curTokenIs(token.FUNCTION) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
+// parseFunctionCallExpression parses a generic function call
+// Assumes current token is LPAREN (after type parameters have been parsed)
+func (p *Parser) parseFunctionCallExpression(tkn token.Token, typeParams []types.Type) ast.Expression {
+	exp := &ast.FunctionCallExpression{
+		Token:          tkn,
+		TypeParameters: typeParams,
 	}
-	exp := &ast.FunctionCallExpression{Token: p.curToken}
-	// |> do_smth |> ...
-	if p.prevTokenIs(token.PIPE) && !p.peekTokenIs(token.LPAREN) {
-		p.nextToken()
-		return exp
-	}
-	p.nextToken()
+
 	if !p.curTokenIs(token.LPAREN) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -1375,42 +1569,6 @@ func (p *Parser) parseGroupedExpression() ast.Expression {
 	return exp
 }
 
-func (p *Parser) parseIndexOrSliceExpression(left ast.Expression) ast.Expression {
-	tkn := p.curToken
-	exps := []ast.Expression{}
-
-	for p.curTokenIs(token.LBRACK) {
-		p.nextToken()
-		exp := p.parseExpression(LOWEST)
-		exps = append(exps, exp)
-
-		if !p.curTokenIs(token.RBRACK) {
-			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-			return nil
-		}
-		p.nextToken()
-	}
-
-	if infixExp, ok := exps[0].(*ast.InfixExpression); ok && infixExp.Token.Type == token.COLON {
-		// has to be slice expression
-		return &ast.SliceExpression{Token: tkn, Left: left, Indices: exps}
-	}
-
-	return &ast.IndexExpression{Token: tkn, Left: left, Indices: exps}
-
-}
-
-func (p *Parser) parseCopyExpression(left ast.Expression) ast.Expression {
-	carat := p.curToken
-	p.nextToken()
-
-	if p.curTokenIs(token.LBRACE) {
-		block := p.parseBlockStatement()
-		return &ast.CopyUpdateExpression{Token: carat, Ident: left, Block: block}
-	}
-	return &ast.CopyExpression{Token: carat, Ident: left}
-}
-
 // Handles parsing:
 // types as expressions (e.g. for 'make([]byte, 100)'),
 // or type conversions
@@ -1435,30 +1593,13 @@ func (p *Parser) parseTypeLiteral() ast.Expression {
 	}
 }
 
-func (p *Parser) parseUseExpression() ast.Expression {
-	exp := &ast.UseExpression{Token: p.curToken}
-	p.nextToken()
-	if !p.curTokenIs(token.IDENT) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	exp.Ident = p.parseIdentifier()
-
-	if !p.curTokenIs(token.LBRACE) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-
-	exp.Block = p.parseBlockStatement()
-
-	return exp
-}
-
 func (p *Parser) parseTryExpression() ast.Expression {
 	exp := &ast.TryExpression{Token: p.curToken}
 	p.nextToken()
 
-	exp.Right = p.parseExpression(CALL)
+	// Allow any expression after try (function calls, dot access, etc.)
+	// Use LOWEST precedence to capture the entire expression
+	exp.Right = p.parseExpression(LOWEST)
 	return exp
 }
 
@@ -1519,9 +1660,25 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	intValue, err := strconv.ParseInt(i, 10, 64)
 	if err != nil {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
+		p.nextToken()
+		return lit
 	}
 	lit.Value = intValue
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseHexLiteral() ast.Expression {
+	lit := &ast.HexLiteral{Token: p.curToken, T: &types.ConstI64}
+	// Remove "0x" prefix and underscores
+	hexStr := strings.ReplaceAll(p.curToken.Literal[2:], "_", "")
+	hexValue, err := strconv.ParseUint(hexStr, 16, 64)
+	if err != nil {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		p.nextToken()
+		return lit
+	}
+	lit.Value = hexValue
 	p.nextToken()
 	return lit
 }
@@ -1563,6 +1720,8 @@ func (p *Parser) parseCharacterLiteral() ast.Expression {
 				lit.Value = '\t'
 			case '\'':
 				lit.Value = '\''
+			case '\\':
+				lit.Value = '\\'
 			}
 		} else {
 			panic("\\u literals not supported yet")
@@ -1591,26 +1750,42 @@ func (p *Parser) parseNullLiteral() ast.Expression {
 }
 
 func (p *Parser) parseAnonymousStructLiteral() ast.Expression {
-	return p.parseStructLiteral(nil)
+	return p.parseStructLiteral(nil, nil)
 }
 
-func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
-	exp := &ast.StructLiteral{Token: p.curToken, Name: ident}
+// parseStructLiteral parses a struct literal with optional type parameters
+// Assumes current token is LBRACE
+func (p *Parser) parseStructLiteral(exp ast.Expression, typeParams []types.Type) ast.Expression {
+	lit := &ast.StructLiteral{
+		Token:          p.curToken,
+		Name:           exp,
+		TypeParameters: typeParams,
+	}
 	if !p.curTokenIs(token.LBRACE) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
 	p.nextToken()
 
+	if p.curTokenIs(token.RANGE) {
+		p.nextToken()
+		lit.Copy = p.parseExpression(LOWEST)
+
+		if !p.curTokenIs(token.COMMA) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		}
+		p.nextToken()
+	}
+
 	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
 		if p.peekTokenIs(token.COLON) {
 			// case 1: struct with named field
 			field := p.parseStructFieldLiteral()
-			exp.Fields = append(exp.Fields, field)
+			lit.Fields = append(lit.Fields, field)
 		} else {
 			// case 2: struct with unnamed field
 			field := p.parseUnnamedStructFieldLiteral()
-			exp.Fields = append(exp.Fields, field)
+			lit.Fields = append(lit.Fields, field)
 		}
 
 		if p.curTokenIs(token.COMMA) {
@@ -1620,7 +1795,7 @@ func (p *Parser) parseStructLiteral(ident *ast.Identifier) ast.Expression {
 
 	p.nextToken()
 
-	return exp
+	return lit
 }
 
 func (p *Parser) parseStructFieldLiteral() *ast.StructFieldLiteral {
@@ -1840,6 +2015,17 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 		lit.IsAnonymous = true
 	}
 
+	// Parse generic parameters if present
+	if p.curTokenIs(token.LBRACK) {
+		p.nextToken()
+		lit.GenericParameters = p.parseGenericParameters()
+		if !p.curTokenIs(token.RBRACK) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+		p.nextToken()
+	}
+
 	if !p.curTokenIs(token.LPAREN) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
@@ -1880,12 +2066,76 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	return lit
 }
 
+// parseGenericParameters parses generic parameter lists like:
+// T any
+// T, E any (creates T and E with 'any' constraint)
+// T any, E int
+func (p *Parser) parseGenericParameters() []*ast.GenericParameter {
+	var params []*ast.GenericParameter
+	var pendingNames []*ast.Identifier
+
+	for !p.curTokenIs(token.RBRACK) && !p.curTokenIs(token.EOF) {
+
+		if !p.curTokenIs(token.IDENT) {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		name := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+
+		// case 1: short hand (constraint defined later)
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+			pendingNames = append(pendingNames, name)
+			continue
+		}
+
+		// case 2: parse constraint if there is one
+		if !p.curTokenIsType() && !p.curTokenIsIdent() {
+			p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+			return nil
+		}
+
+		constraint := p.parseType()
+
+		// fist we set all pendingNames to same constraint
+		// as parsed now
+		for _, pendingName := range pendingNames {
+			param := &ast.GenericParameter{
+				Name:       pendingName,
+				Constraint: constraint,
+			}
+			params = append(params, param)
+		}
+		pendingNames = nil
+
+		param := &ast.GenericParameter{
+			Name:       name,
+			Constraint: constraint,
+		}
+		params = append(params, param)
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+			continue
+		}
+	}
+
+	if len(pendingNames) > 0 {
+		p.addError(p.curToken, errMissingGenericConstraint(pendingNames[0].Value))
+		return nil
+	}
+
+	return params
+}
+
 // ----- //
 // Types //
 // ----- //
 
-func (p *Parser) parseType() types.TypeSpec {
-	var typ types.TypeSpec
+func (p *Parser) parseType() types.Type {
+	var typ types.Type
 	switch p.curToken.Type {
 	case token.OPTIONAL:
 		p.nextToken()
@@ -1902,8 +2152,8 @@ func (p *Parser) parseType() types.TypeSpec {
 		}
 	case token.ASTERISK:
 		typ = p.parsePointerType()
-	case token.MEMORYTYPE:
-		typ = p.parseMemoryType()
+	case token.MUTABLETYPE:
+		typ = p.parseMutableType()
 	case token.DIRTYTYPE:
 		typ = p.parseDirtyType()
 	default:
@@ -1914,29 +2164,9 @@ func (p *Parser) parseType() types.TypeSpec {
 }
 
 // []int, [10]int
-func (p *Parser) parseArrayType() types.TypeSpec {
+func (p *Parser) parseArrayType() types.Type {
 	p.nextToken()
 
-	typ := &types.Array{}
-
-	if p.curTokenIs(token.INT) {
-		typ.Size = int(p.parseIntegerLiteral().(*ast.IntegerLiteral).Value)
-	}
-
-	if !p.curTokenIs(token.RBRACK) {
-		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
-		return nil
-	}
-	p.nextToken()
-
-	typ.T = p.parseType()
-
-	return typ
-}
-
-// ngl this feels like a really dirty fix to stay LL(1) and all because
-// we want array literals like this '[1,1,2]'
-func (p *Parser) parseArrayTypeSkipFirst() types.TypeSpec {
 	typ := &types.Array{}
 
 	if p.curTokenIs(token.INT) {
@@ -2003,17 +2233,17 @@ func (p *Parser) parseFunctionType() *types.Function {
 	panic("unreachable")
 }
 
-func (p *Parser) parsePrimitiveType() types.TypeSpec {
+func (p *Parser) parsePrimitiveType() types.Type {
 	if !p.curTokenIsType() {
 		return nil
 	}
 
-	defer p.nextToken()
-
-	return types.TokenToType(p.curToken)
+	tkn := types.TokenToType(p.curToken)
+	p.nextToken()
+	return tkn
 }
 
-func (p *Parser) parseImportedNamedType() types.TypeSpec {
+func (p *Parser) parseImportedNamedType() types.Type {
 	typ := &types.ImportedNamed{Lib: p.curToken.Literal}
 	p.nextToken()
 	// wat "." token
@@ -2023,10 +2253,24 @@ func (p *Parser) parseImportedNamedType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseUnknownNamedType() types.TypeSpec {
-	typ := &types.UnknownNamed{Name: p.curToken.Literal}
-
+func (p *Parser) parseUnknownNamedType() types.Type {
+	name := p.curToken.Literal
 	p.nextToken()
+
+	// Check for generic type parameters
+	if p.curTokenIs(token.LBRACK) {
+		params := p.parseTypeParameters()
+		// parseTypeParameters consumes the ']', so we're past it now
+
+		typ := &types.UnknownNamed{Name: name, TypeParameters: params}
+		if p.curTokenIs(token.OPTIONAL) {
+			p.nextToken()
+			return &types.Optional{T: typ}
+		}
+		return typ
+	}
+
+	typ := &types.UnknownNamed{Name: name}
 	if p.curTokenIs(token.OPTIONAL) {
 		p.nextToken()
 		return &types.Optional{T: typ}
@@ -2034,7 +2278,7 @@ func (p *Parser) parseUnknownNamedType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parsePointerType() types.TypeSpec {
+func (p *Parser) parsePointerType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Pointer)
 	p.nextToken()
 
@@ -2042,11 +2286,11 @@ func (p *Parser) parsePointerType() types.TypeSpec {
 	return typ
 }
 
-func (p *Parser) parseMemoryType() types.TypeSpec {
-	typ, _ := types.TokenToType(p.curToken).(*types.Memory)
+func (p *Parser) parseMutableType() types.Type {
+	typ, _ := types.TokenToType(p.curToken).(*types.Mutable)
 	p.nextToken()
 
-	if !p.curTokenIs(token.LT) {
+	if !p.curTokenIs(token.LBRACK) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
@@ -2054,14 +2298,14 @@ func (p *Parser) parseMemoryType() types.TypeSpec {
 
 	typ.T = p.parseType()
 
-	if !p.curTokenIs(token.GT) {
+	if !p.curTokenIs(token.RBRACK) {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		return nil
 	}
 	return typ
 }
 
-func (p *Parser) parseDirtyType() types.TypeSpec {
+func (p *Parser) parseDirtyType() types.Type {
 	typ, _ := types.TokenToType(p.curToken).(*types.Dirty)
 	p.nextToken()
 
@@ -2080,9 +2324,36 @@ func (p *Parser) parseDirtyType() types.TypeSpec {
 	return typ
 }
 
+// parseTypeParameters parses comma-separated types inside brackets
+func (p *Parser) parseTypeParameters() []types.Type {
+	if !p.curTokenIs(token.LBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken()
+
+	var params []types.Type
+	for !p.curTokenIs(token.RBRACK) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+		param := p.parseType()
+		params = append(params, param)
+	}
+
+	if !p.curTokenIs(token.RBRACK) {
+		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
+		return nil
+	}
+	p.nextToken() // consume ']'
+
+	return params
+}
+
 func (p *Parser) addError(tkn token.Token, err error) {
 	pos := tkn.Position
-	fmt.Printf("[ERROR] Parser failed in %s at %d:%d - %s\n", p.l.Filename(), pos.Line(), pos.Column(), err)
+	msg := fmt.Sprintf("[ERROR] Parser failed in %s at %d:%d - %s", p.l.Filename(), pos.Line(), pos.Column(), err)
+	p.errors = append(p.errors, msg)
 }
 
 // ------- //
@@ -2097,7 +2368,10 @@ func (p *Parser) curPrecedence() int {
 }
 
 func (p *Parser) prevTokenIs(t token.Type) bool {
-	return p.prevToken.Type == t
+	if p.tknIdx-1 < 0 {
+		return false
+	}
+	return p.tkns[p.tknIdx-1].Type == t
 }
 
 func (p *Parser) curTokenIs(t token.Type) bool {
@@ -2105,7 +2379,14 @@ func (p *Parser) curTokenIs(t token.Type) bool {
 }
 
 func (p *Parser) peekTokenIs(t token.Type) bool {
-	return p.peekToken.Type == t
+	return p.peekNTokenIs(1, t)
+}
+
+func (p *Parser) peekNTokenIs(n int, t token.Type) bool {
+	if p.tknIdx+n >= len(p.tkns) {
+		return false
+	}
+	return p.tkns[p.tknIdx+n].Type == t
 }
 
 func (p *Parser) curTokenIsOperator() bool {
@@ -2157,12 +2438,41 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.BYTETYPE ||
 		p.curToken.Type == token.CHARTYPE ||
 		p.curToken.Type == token.LBRACK ||
-		(p.curToken.Type == token.FUNCTION && p.peekToken.Type == token.LPAREN) ||
+		(p.curToken.Type == token.FUNCTION && p.peekToken().Type == token.LPAREN) ||
 		p.curToken.Type == token.ASTERISK ||
-		p.curToken.Type == token.MEMORYTYPE ||
+		p.curToken.Type == token.MUTABLETYPE ||
 		p.curToken.Type == token.IDENT ||
 		p.curToken.Type == token.OPTIONAL ||
-		p.curToken.Type == token.DIRTYTYPE
+		p.curToken.Type == token.DIRTYTYPE ||
+		p.curToken.Type == token.ERROR ||
+		p.curToken.Type == token.ANYTYPE
+}
+
+func (p *Parser) peekNTokenIsType(n int) bool {
+	peekTkn := p.peekNToken(n)
+	return peekTkn.Type == token.BOOLTYPE ||
+		peekTkn.Type == token.I8TYPE ||
+		peekTkn.Type == token.U8TYPE ||
+		peekTkn.Type == token.I16TYPE ||
+		peekTkn.Type == token.U16TYPE ||
+		peekTkn.Type == token.I32TYPE ||
+		peekTkn.Type == token.U32TYPE ||
+		peekTkn.Type == token.I64TYPE ||
+		peekTkn.Type == token.U64TYPE ||
+		peekTkn.Type == token.F32TYPE ||
+		peekTkn.Type == token.F64TYPE ||
+		peekTkn.Type == token.STRINGTYPE ||
+		peekTkn.Type == token.BYTETYPE ||
+		peekTkn.Type == token.CHARTYPE ||
+		peekTkn.Type == token.LBRACK ||
+		(peekTkn.Type == token.FUNCTION && p.peekNTokenIs(2, token.LPAREN)) ||
+		peekTkn.Type == token.ASTERISK ||
+		peekTkn.Type == token.MUTABLETYPE ||
+		peekTkn.Type == token.IDENT ||
+		peekTkn.Type == token.OPTIONAL ||
+		peekTkn.Type == token.DIRTYTYPE ||
+		peekTkn.Type == token.ERROR ||
+		peekTkn.Type == token.ANYTYPE
 }
 
 func (p *Parser) curTokenIsConditionalStatement() bool {

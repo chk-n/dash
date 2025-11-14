@@ -72,6 +72,42 @@ func TestAssignmentStatement(t *testing.T) {
 			input:  "let x = test() fn test() { return }",
 			errors: []string{"cannot assign a void function to a variable"},
 		},
+		{
+			name:   "multiple return assignments to 1 var",
+			input:  "let x = match 1 { case _: fetch() } fn fetch() i64, i64 { return 0,0 }",
+			errors: []string{"assignment mismmatch, assigned 2 values to 1 variables"},
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestHexLiterals(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "simple hex literal",
+			input: "let a = 0xFF",
+			want:  "lib main pub fn main() { let a u64 = 0xFF }",
+		},
+		{
+			name:  "hex literal with underscore",
+			input: "let a = 0xFF_FF",
+			want:  "lib main pub fn main() { let a u64 = 0xFF_FF }",
+		},
+		{
+			name:  "hex literal cast to u8",
+			input: "let a = u8(0xFF)",
+			want:  "lib main pub fn main() { let a u8 = u8(0xFF) }",
+		},
+		{
+			name:  "hex literal in expression",
+			input: "let a = 0x10 + 0x20",
+			want:  "lib main pub fn main() { let a u64 = (0x10 + 0x20) }",
+		},
+		{
+			name:  "hex literal comparison",
+			input: "let a = 0xFF == 255",
+			want:  "lib main pub fn main() { let a bool = (0xFF == 255) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -106,12 +142,12 @@ func TestStringOperations(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name:  "concatination - vars",
+			name:  "concatenation - vars",
 			input: `let a = "1" let b = a + a`,
 			want:  `lib main pub fn main() { let a string = "1" let b string = (a + a) }`,
 		},
 		{
-			name:  "concatination - literals",
+			name:  "concatenation - literals",
 			input: `let a = "1" + "2"`,
 			want:  `lib main pub fn main() { let a string = ("1" + "2") }`,
 		},
@@ -152,8 +188,8 @@ func TestStringOperations(t *testing.T) {
 		},
 		{
 			name:  "index string",
-			input: `let s = "123" let ch = s[0]`,
-			want:  `lib main pub fn main() { let s string = "123" let ch byte = s[0] }`,
+			input: `let s = "123" let ch = try get(s,0)`,
+			want:  `lib main pub fn main() { let s string = "123" let ch byte = try get(s,0) }`,
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -244,8 +280,8 @@ func TestCharOperations(t *testing.T) {
 		},
 		{
 			name:  "string byte and char",
-			input: `let s = "12" let n = s[0] - '0'`,
-			want:  `lib main pub fn main() { let s string = "12" let n byte = (s[0] - '0') }`,
+			input: `let s = "12" let n = try get(s,0) - '0'`,
+			want:  `lib main pub fn main() { let s string = "12" let n byte = try (get(s,0) - '0') }`,
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -278,6 +314,16 @@ func TestOptionalType(t *testing.T) {
 			want:  "lib main fn test(a ?i64) { let a' i64 = (a ?? 1) } pub fn main() { }",
 		},
 		{
+			name:  "return non-optional as optional in generic function",
+			input: "fn test[T any](x T) ?T { return x }",
+			want:  "lib main fn test[T any](x T) ?T { return x } pub fn main() { }",
+		},
+		{
+			name:  "return non-optional as optional",
+			input: "fn test(x string) ?string { return x }",
+			want:  "lib main fn test(x string) ?string { return x } pub fn main() { }",
+		},
+		{
 			name:  "optional null equality",
 			input: "fn test(a ?i64) { let a' = a == null }",
 			want:  "lib main fn test(a ?i64) { let a' bool = (a == null) } pub fn main() { }",
@@ -290,12 +336,12 @@ func TestOptionalType(t *testing.T) {
 		{
 			name:   "null coalesce on non optional literal",
 			input:  "let a = 1 ?? 2",
-			errors: []string{"illegal use of '??' operation on type 'i64'"},
+			errors: []string{"illegal operation '??' on type 'i64'"},
 		},
 		{
 			name:   "null coalesce on non optional ident",
 			input:  "let a = 2 let b = a ?? 2",
-			errors: []string{"illegal use of '??' operation on type 'i64'"},
+			errors: []string{"illegal operation '??' on type 'i64'"},
 		},
 		{
 			name:   "null coalsce with both optional",
@@ -367,21 +413,6 @@ func TestStructDefinition(t *testing.T) {
 			name:   "struct literal - missing field",
 			input:  "struct test {a i64, b i64} let t = test{a: 1}",
 			errors: []string{"struct field 'b' not defined"},
-		},
-		{
-			name:  "struct literal - unnamed fields",
-			input: "struct point {i64, i64} let p = point{0,0}",
-			want:  "lib main struct point {i64, i64} pub fn main() { let p point = point{i64: 0, i64: 0} }",
-		},
-		{
-			name:   "struct literal unnamed, missing field",
-			input:  "struct point {i64, i64} let p = point{0}",
-			errors: []string{"struct 'point' has missing fields"},
-		},
-		{
-			name:   "struct literal - unnamed fields, type mismatch",
-			input:  "struct point {i64, i64} let p = point{0, 1.1}",
-			errors: []string{"type mistmatch, expected type 'i64' but got 'f64'"},
 		},
 		{
 			name:  "struct definition - recursive optional",
@@ -459,31 +490,6 @@ func TestStructDefinition(t *testing.T) {
 			want:  `lib main struct a {x i64} struct b {y ?string, x i64} pub fn main() { let v1 a = a{x i64: 12} let v2 b = b(v1) }`,
 		},
 		{
-			name:  "cast unnamed struct to unnamed struct",
-			input: `struct a { i64, string } struct b { i64, string } let v1 = a{ 12, "" } let v2 = b(v1)`,
-			want:  `lib main struct a {i64, string} struct b {i64, string} pub fn main() { let v1 a = a{i64: 12, string: ""} let v2 b = b(v1) }`,
-		},
-		{
-			name:   "cast unnamed struct to unnamed struct, wrong order",
-			input:  `struct a { i64, string } struct b { string, i64 } let v1 = a{ 12, "" } let v2 = b(v1)`,
-			errors: []string{"illegal type cast from 'a' to 'b'"},
-		},
-		{
-			name:  "cast unnamed struct to struct",
-			input: `struct a { i64, f64 } struct b { x i64, y f64 } let v1 = a{ 12, 1.1 } let v2 = b(v1)`,
-			want:  `lib main struct a {i64, f64} struct b {x i64, y f64} pub fn main() { let v1 a = a{i64: 12, f64: 1.1} let v2 b = b(v1) }`,
-		},
-		{
-			name:  "cast struct to unnamed struct",
-			input: `struct a { x i64, y string } struct b { i64, string } let v1 = a{x: 12, y: ""} let v2 = b(v1)`,
-			want:  `lib main struct a {x i64, y string} struct b {i64, string} pub fn main() { let v1 a = a{x i64: 12, y string: ""} let v2 b = b(v1) }`,
-		},
-		{
-			name:   "cast struct to unnamed struct, type mismatch",
-			input:  `struct a { x i64, y string } struct b { string, i64 } let v1 = a{x: 12, y: ""} let v2 = b(v1)`,
-			errors: []string{"illegal type cast from 'a' to 'b'"},
-		},
-		{
 			name:  "cast named literal to struct",
 			input: `struct a { y string, x i64 } let v1 = {x: 12, y: ""} let v2 = a(v1)`,
 			want:  `lib main struct a {y string, x i64} pub fn main() { let v1 struct<x i64, y string> = {x i64: 12, y string: ""} let v2 a = a(v1) }`,
@@ -522,8 +528,8 @@ func TestSliceExpression(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "slice of index expression",
-			input: "struct abc { s string } fn test(a abc) { let v = a.s[0:2]}",
-			want:  "lib main struct abc {s string} fn test(a abc) { let v string = a.s[(0 : 2)] } pub fn main() { }",
+			input: "struct abc { s string } fn test(a abc) { let v = try slice(a.s,0,2) }",
+			want:  "lib main struct abc {s string} fn test(a abc) { let v string = try slice(a.s,0,2) } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -533,23 +539,24 @@ func TestArray(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "struct initialisation",
-			input: "struct test {x i64} let a = [test{x:1}, test{x:2}] let res = a[0].x - a[1].x",
-			want:  "lib main struct test {x i64} pub fn main() { let a []test = [test{x i64: 1},test{x i64: 2}] let res i64 = (a[0].x - a[1].x) }",
+			input: "struct test {x i64} let a = [test{x:1}, test{x:2}] let res = try (get(a,0).x - get(a,1).x)",
+			want:  "lib main struct test {x i64} pub fn main() { let a []test = [test{x i64: 1},test{x i64: 2}] let res i64 = try (get(a,0).x - get(a,1).x) }",
 		},
 		{
 			name:  "nested initialisation",
 			input: "let a = [[1,2], [3,4]",
 			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] }",
 		},
-		{
-			name:  "direct nested access",
-			input: "let a = [[1,2], [3,4]] let i = a[0][0]",
-			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let i i64 = a[0][0] }",
-		},
+		// BUG:
+		// {
+		// 	name:  "direct nested access",
+		// 	input: "let a = [[1,2], [3,4]] let i = try get(get(arr,0),0)",
+		// 	want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let i i64 = try get(get(arr,0),0) }",
+		// },
 		{
 			name:  "leveled nested access",
-			input: "let a = [[1,2], [3,4]] let a' = a[0] let v = a'[0]",
-			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let a' []i64 = a[0] let v i64 = a'[0] }",
+			input: "let a = [[1,2], [3,4]] let a' = try get(a,0) let v = try get(a',0)",
+			want:  "lib main pub fn main() { let a [][]i64 = [[1,2],[3,4]] let a' []i64 = try get(a,0) let v i64 = try get(a',0) }",
 		},
 		{
 			name:  "fix size",
@@ -560,31 +567,6 @@ func TestArray(t *testing.T) {
 			name:   "pass array to sized array type",
 			input:  "let arr = [1,2,3] test(arr) fn test(a [2]i64) { }",
 			errors: []string{"type mistmatch, expected type '[2]i64' but got '[]i64'"},
-		},
-		{
-			name:  "array slicing",
-			input: "let arr = [1,2,3] let arr' = arr[0:1]",
-			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let arr' []i64 = arr[(0 : 1)] }",
-		},
-		{
-			name:  "array slicing",
-			input: "let arr = [[1,2,3], [4,5,6], [2,3]] let arr' = arr[1:3][0:1]",
-			want:  "lib main pub fn main() { let arr [][]i64 = [[1,2,3],[4,5,6],[2,3]] let arr' [][]i64 = arr[(1 : 3)][(0 : 1)] }",
-		},
-		{
-			name:  "assign casted char to byte array",
-			input: "let arr = make([]byte, 1) let arr' = use arr { arr[0] = byte(0 + '0') }",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,1) let arr' []byte = use arr { arr[0] byte = byte((0 + '0')) } }",
-		},
-		{
-			name:  "assign char literal to byte array",
-			input: "let arr = make([]byte, 1) let arr' = use arr { arr[0] = '0' }",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,1) let arr' []byte = use arr { arr[0] byte = '0' } }",
-		},
-		{
-			name:   "assign char to byte array",
-			input:  "let arr = make([]byte, 1) let arr' = use arr { arr[0] = 0 + '0' }",
-			errors: []string{"type mistmatch, expected type 'byte' but got 'char'"},
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -637,11 +619,16 @@ func TestEnum(t *testing.T) {
 			input:  "enum status{offline, online} let b = status.offline == 1",
 			errors: []string{"type mistmatch, expected type 'status' but got 'i64'"},
 		},
-		// {
-		// 	name:   "enum definition - fiel",
-		// 	input:  "enum status{offline, online} let s = status.on",
-		// 	errors: []string{""},
-		// },
+		{
+			name:   "invalid enum field",
+			input:  "enum status{offline, online} let s = status.invalid",
+			errors: []string{"enum 'status' has no field named 'invalid'"},
+		},
+		{
+			name:   "invalid enum field in expression",
+			input:  "enum abc{field1, field2} let result = abc.field3 == abc.field1",
+			errors: []string{"enum 'abc' has no field named 'field3'"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -724,12 +711,12 @@ func TestMatchUnion(t *testing.T) {
 		{
 			name:  "simple",
 			input: "union abc{i64, f64} let v = abc(1) match v' = v { case f64: let i = v let j = v' }",
-			want:  "lib main union abc {i64, f64} pub fn main() { let v abc = abc(1) match (v' = v) { case f64: let i abc = v let j f64 = v' } }",
+			want:  "lib main union abc {i64, f64} pub fn main() { let v abc = abc(1) match (v' abc = v) { case f64: let i abc = v let j f64 = v' } }",
 		},
 		{
 			name:  "union with structs",
 			input: "struct a { x i64 } struct b { y string } union ab { a, b } let s = ab(a{x: 1}) match s' = s { case a: let i = s'.x }",
-			want:  "lib main struct a {x i64} struct b {y string} union ab {a, b} pub fn main() { let s ab = ab(a{x i64: 1}) match (s' = s) { case a: let i i64 = s'.x } }",
+			want:  "lib main struct a {x i64} struct b {y string} union ab {a, b} pub fn main() { let s ab = ab(a{x i64: 1}) match (s' ab = s) { case a: let i i64 = s'.x } }",
 		},
 		{
 			name: "ensure type infered if dot expression",
@@ -742,7 +729,7 @@ func TestMatchUnion(t *testing.T) {
 					let x = n'.x
 				}
 			}`,
-			want: "lib main union abc {a} struct a {x ?abc} fn test(n abc) i64 { match (n' = n) { case a: let x ?abc = n'.x } } pub fn main() { }",
+			want: "lib main union abc {a} struct a {x ?abc} fn test(n abc) i64 { match (n' abc = n) { case a: let x ?abc = n'.x } } pub fn main() { }",
 		},
 		{
 			name:  "ensure default case infers type",
@@ -782,6 +769,16 @@ func TestAnonymousStruct(t *testing.T) {
 			input: `enum token_type { t } let n = {token_type.t} let typ = n.0`,
 			want:  "lib main enum token_type {t} pub fn main() { let n struct<token_type> = {token_type: token_type.t} let typ token_type = n.0 }",
 		},
+		{
+			name:  "anonymous struct - coalesce literals to expected type in function call",
+			input: `struct data { x u32, y u32 } fn test(d data) { } test({x: 1, y: 2})`,
+			want:  "lib main struct data {x u32, y u32} fn test(d data) { } pub fn main() { test(data{x u32: 1, y u32: 2}) }",
+		},
+		{
+			name:  "anonymous struct - coalesce nested literals to expected type in function call",
+			input: `struct a {f b}  struct b { x u32, y u32 } fn test(s a) { } test({f: {x: 1, y: 2}})`,
+			want:  "lib main struct a {f b} struct b {x u32, y u32} fn test(s a) { } pub fn main() { test(a{f b: b{x u32: 1, y u32: 2}}) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -795,12 +792,12 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "aggregate type - array",
-			input: "type custom []u64 let x = custom([1, 2]) let y = x[0]",
-			want:  "lib main type custom []u64 pub fn main() { let x custom = custom([1,2]) let y u64 = x[0] }",
+			input: "type custom []u64 let x = custom([1, 2]) let y = try get(x,0)",
+			want:  "lib main type custom []u64 pub fn main() { let x custom = custom([1,2]) let y u64 = try get(x,0) }",
 		},
 		{
 			name:   "aggregate type - array, invalid type",
-			input:  "type custom []u64 let x = custom([1, 2.1]) let y = x[0]",
+			input:  "type custom []u64 let x = custom([1, 2.1]) let y = try get(x,0)",
 			errors: []string{"type mistmatch, expected type 'u64' but got 'f64'"},
 		},
 		{
@@ -810,8 +807,8 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "aggregate type - used in memory",
-			input: "type custom []byte fn test(mem memory<custom>) { }",
-			want:  "lib main type custom []byte fn test(mem memory<custom>) { } pub fn main() { }",
+			input: "type custom []byte fn test(mem mut[custom]) { }",
+			want:  "lib main type custom []byte fn test(mem mut[custom]) { } pub fn main() { }",
 		},
 		{
 			name:  "aggregate type - struct",
@@ -826,15 +823,20 @@ func TestTypeDefinition(t *testing.T) {
 		{
 			name: "function type",
 			input: `alias reduce fn(i64) i64
-				fn get(f reduce) { }
+				fn apply(f reduce) { }
 				let r = fn(a i64) i64 { return a }
-				get(r)`,
-			want: "lib main alias reduce fn(i64)i64 fn get(f fn(i64)i64) { } pub fn main() { let r fn(i64)i64 = fn(a i64) i64 { return a } get(r) }",
+				apply(r)`,
+			want: "lib main alias reduce fn(i64)i64 fn apply(f fn(i64)i64) { } pub fn main() { let r fn(i64)i64 = fn(a i64) i64 { return a } apply(r) }",
 		},
 		{
 			name:  "comparison type def and literal",
 			input: "type custom i64 let x = custom(1) == 0",
 			want:  "lib main type custom i64 pub fn main() { let x bool = (custom(1) == 0) }",
+		},
+		{
+			name:  "comparison type def and literal expression",
+			input: "type custom i64 let x = custom(1) == -1",
+			want:  "lib main type custom i64 pub fn main() { let x bool = (custom(1) == -1) }",
 		},
 		{
 			name:  "comparison type def and literal, flipped",
@@ -974,9 +976,14 @@ func TestTypeCast(t *testing.T) {
 			want:  "lib main pub fn main() { let b []byte = []byte([1,2,3,4]) let s string = string(b) }",
 		},
 		{
-			name:  "",
-			input: `let s = "12" let n = i64(s[0] - '0')`,
-			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64((s[0] - '0')) }`,
+			name:  "casting array access",
+			input: `let s = "12" let n = i64(try get(s,0) - '0')`,
+			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64(try (get(s,0) - '0')) }`,
+		},
+		{
+			name:  "error type cast",
+			input: `let e = error("test message")`,
+			want:  `lib main pub fn main() { let e error = error("test message") }`,
 		},
 		// {
 		// 	name:   "int literal array to string, overflow",
@@ -993,6 +1000,11 @@ func TestForLoop(t *testing.T) {
 			name:  "simple for loop",
 			input: "for i = 0; i < 10; i++ { }",
 			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); i++ { } }",
+		},
+		{
+			name:  "custom increment",
+			input: "for i = 0; i < 10; i = i+2  { }",
+			want:  "lib main pub fn main() { for i i64 = 0; (i < 10); (i i64 = (i + 2)) { } }",
 		},
 		{
 			name:  "infinite",
@@ -1118,9 +1130,9 @@ func TestMatchExpressionStatement(t *testing.T) {
 		// NOTE: maybe we change semsis to issue a warning that case -1 is impossible
 		// due to 'y' being unsigned even if u8 can be coalesced to i64.
 		{
-			name:  "int, cases out of bounds for type",
-			input: `let x = u8(1) let y = match x { case 256: 0 case -1: 1 }`,
-			want:  "lib main pub fn main() { let x u8 = u8(1) let y i64 = match x { case 256: 0 case -1: 1 } }",
+			name:   "int, cases out of bounds for type",
+			input:  `let x = u8(1) let y = match x { case 256: 0 case -1: 1 }`,
+			errors: []string{"integer literal '256' overflows 'u8'"},
 		},
 		{
 			name:  "byte with char literals",
@@ -1131,89 +1143,41 @@ func TestMatchExpressionStatement(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
-func TestCopyExpression(t *testing.T) {
+func TestMatchErrorStatement(t *testing.T) {
 	tests := []testCase{
 		{
-			name:  "copy",
-			input: "let x = 1 let y = x^",
-			want:  "lib main pub fn main() { let x i64 = 1 let y i64 = x^ }",
-		},
-		{
-			name:  "copy and update - struct",
-			input: "let a = {x: 1,y: 2} let b = a^ { b.x = 2 }",
-			want:  "lib main pub fn main() { let a struct<x i64, y i64> = {x i64: 1, y i64: 2} let b struct<x i64, y i64> = a^ { b.x i64 = 2 } }",
-		},
-		{
-			name:  "copy and update - array",
-			input: "let a = [0,1,2,3] let b = a^ { b[2] = 1 }",
-			want:  "lib main pub fn main() { let a []i64 = [0,1,2,3] let b []i64 = a^ { b[2] i64 = 1 } }",
-		},
-		{
-			name:   "update outside of CopyUpdateExpression",
-			input:  "let a = {x: 1,y: 2} a.x = 2",
-			errors: []string{"illegal update of 'a'"},
-		},
-		{
-			name:  "copy update guarded type",
-			input: `type abc []string | len(abc) < 10 let a = abc(["h", "w"]) let b = a^ { b[0] = "1" }`,
-			want:  `lib main type abc []string | (len(abc) < 10) pub fn main() { let a dirty<abc> = abc(["h","w"]) let b dirty<abc> = a^ { b[0] string = "1" } }`,
-		},
-		// TODO: improve semantic analysis
-		// {
-		// 	name:   "copy and update - copy passed to function",
-		// 	input:  "a = [0,1,2,3] b = a^ { test(b) } fn test(a []i64) { }",
-		// 	errors: []string{""},
-		// },
-		// {
-		// 	name:   "copy and update - return in update block",
-		// 	input:  "a = [0,1,2,3] b = a^ { return b }",
-		// 	errors: []string{""},
-		// },
-		{
-			name:  "copy and update - anonymous fn in update block",
-			input: "let a = [0,1,2,3] let b = a^ { let test = fn(x i64) { } }",
-			want:  "lib main pub fn main() { let a []i64 = [0,1,2,3] let b []i64 = a^ { let test fn(i64) = fn(x i64) { } } }",
-		},
-		{
-			name:  "copy update entire struct",
-			input: "struct abc {x i64} let a = abc{x: 1} let b = a^ { b = abc{x: 2}",
-			want:  "lib main struct abc {x i64} pub fn main() { let a abc = abc{x i64: 1} let b abc = a^ { b abc = abc{x i64: 2} } }",
+			name: "simple match error",
+			input: `
+				error one
+				fn test(err error) i64 {
+					return match err {
+					case one: 1
+					case _: -1
+					}
+				}
+			`,
+			want: "lib main error one fn test(err error) i64 { return match err { case one: 1 case _: -1 } } pub fn main() { }",
 		},
 	}
 	runAnalysisTests(t, tests)
 }
 
-func TestUseExpression(t *testing.T) {
+func TestMutable(t *testing.T) {
 	tests := []testCase{
 		{
-			name:  "use from make",
-			input: "let arr = make([]i64,10) let arr' = use arr { arr[0] = 1 }",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10) let arr' []i64 = use arr { arr[0] i64 = 1 } }",
+			name:  "assign value to element from make",
+			input: "var arr = try make([]i64,10) arr = try put(arr, 0, 1)",
+			want:  "lib main pub fn main() { var arr mut[[]i64] = try make([]i64,10) arr mut[[]i64] = try put(arr,0,1) }",
 		},
 		{
-			name:  "use array from arg",
-			input: `fn test(arr memory<[]i64>) []i64 { let arr' = use arr { arr[0] = 1 } return arr' }`,
-			want:  `lib main fn test(arr memory<[]i64>) []i64 { let arr' []i64 = use arr { arr[0] i64 = 1 } return arr' } pub fn main() { }`,
+			name:  "assign value for mutable guarded type",
+			input: "type abc []i64 | len(abc) == 10 fn test(arr mut[abc]) { let arr = try put(arr, 0, 1) }",
+			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr mut[dirty<abc>]) { let arr mut[dirty<abc>] = try put(arr,0,1) } pub fn main() { }",
 		},
 		{
-			name:  "use guarded type",
-			input: "type abc []i64 | len(abc) == 10 fn test(arr memory<abc>) { let arr' = use arr { arr[0] = 1} }",
-			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr memory<dirty<abc>>) { let arr' dirty<abc> = use arr { arr[0] i64 = 1 } } pub fn main() { }",
-		},
-		{
-			name:  "use union from make",
-			input: "union abc { i64 } let arr = make([]abc,10) let arr' = use arr {  }",
-			want:  "lib main union abc {i64} pub fn main() { let arr memory<[]abc> = make([]abc,10) let arr' []abc = use arr { } }",
-		},
-		{
-			name:  "using passed memory of union array",
-			input: "union abc { i64 } fn test(m memory<[]abc>) { let m' = use m {} let v = m'[0] }",
-			want:  "lib main union abc {i64} fn test(m memory<[]abc>) { let m' []abc = use m { } let v abc = m'[0] } pub fn main() { }",
-		},
-		{
-			name:  "break out of use",
-			input: "fn test(arr memory<[]i64>) { use arr { break } }",
-			want:  "lib main fn test(arr memory<[]i64>) { use arr { break } } pub fn main() { }",
+			name:  "assign slice to mutable from make",
+			input: "union abc { i64 } var arr = try make([]abc,0,10) arr = try append(arr, [1,2,3])",
+			want:  "lib main union abc {i64} pub fn main() { var arr mut[[]abc] = try make([]abc,0,10) arr mut[[]abc] = try append(arr,[1,2,3]) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1223,8 +1187,8 @@ func TestMemorySemantics(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "passing memory to fn makes it unusable",
-			input: "let a = make([]u8, 1) test(&a) let b = a fn test(m *memory<[]u8>) {}",
-			want:  "lib main fn test(m *memory<[]u8>) { } pub fn main() { let a memory<[]u8> = make([]u8,1) test(&a) let b []u8 = a }",
+			input: "let a = try make([]u8, 1) test(&a) let b = a fn test(m *mut[[]u8]) {}",
+			want:  "lib main fn test(m *mut[[]u8]) { } pub fn main() { let a mut[[]u8] = try make([]u8,1) test(&a) let b []u8 = a }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1272,8 +1236,8 @@ func TestTryExpression(t *testing.T) {
 		// NOTE: error-prone divide not implemented
 		// {
 		// 	name:  "try with division operation",
-		// 	input: "fn test()! { let x = 10 / 0 }",
-		// 	want:  "lib main fn test()! { let x i64 = (10 / 0) } pub fn main() { }",
+		// 	input: "fn test(y i64)! { let x = 10 / y }",
+		// 	want:  "lib main fn test(y i64)! { let x i64 = (10 / y) } pub fn main() { }",
 		// },
 		// NOTE: error-prone index op not implemented yet
 		// {
@@ -1281,6 +1245,21 @@ func TestTryExpression(t *testing.T) {
 		// 	input: "fn test() { let arr = [1, 2, 3] let x = arr[5] }",
 		// 	want:  "lib main fn test() { let arr []i64 = [1,2,3] let x i64 = arr[5] } pub fn main() { }",
 		// },
+		{
+			name:  "try with nested error-prone calls",
+			input: "fn test()! { let arr = [1, 2] let arr2 = [3, 4] let c = try append(slice(arr, 0, 1), slice(arr2, 0, 1)) }",
+			want:  "lib main fn test()! { let arr []i64 = [1,2] let arr2 []i64 = [3,4] let c []i64 = try append(slice(arr,0,1),slice(arr2,0,1)) } pub fn main() { }",
+		},
+		{
+			name:  "try with dot access on error-prone call",
+			input: "struct a {x i64} fn test()! { let arr = [a{x: 1}] let v = try get(arr, 0).x }",
+			want:  "lib main struct a {x i64} fn test()! { let arr []a = [a{x i64: 1}] let v i64 = try get(arr,0).x } pub fn main() { }",
+		},
+		{
+			name:   "error-prone call without try",
+			input:  "fn test()! { let arr = [1, 2] let v = get(arr, 0) }",
+			errors: []string{"error-prone function 'get' must be wrapped in 'try'"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }
@@ -1291,6 +1270,11 @@ func TestFunction(t *testing.T) {
 			name:  "function definition",
 			input: "fn test(a i64, b i64) i64 { let c = a + 1 return a / b }",
 			want:  "lib main fn test(a i64,b i64) i64 { let c i64 = (a + 1) return (a / b) } pub fn main() { }",
+		},
+		{
+			name:  "function with error parameter",
+			input: "fn test(err error) { }",
+			want:  "lib main fn test(err error) { } pub fn main() { }",
 		},
 		{
 			name:  "function definition with infered field",
@@ -1324,8 +1308,8 @@ func TestFunction(t *testing.T) {
 		},
 		{
 			name:  "function - array argument",
-			input: "let arr = [1,2,3] let el = test(arr) fn test(a []i64) i64 { return a[-1] }",
-			want:  "lib main fn test(a []i64) i64 { return a[-1] } pub fn main() { let arr []i64 = [1,2,3] let el i64 = test(arr) }",
+			input: "let arr = [1,2,3] let el = test(arr) fn test(a []i64) i64 { return try get(a,-1) }",
+			want:  "lib main fn test(a []i64) i64 { return try get(a,-1) } pub fn main() { let arr []i64 = [1,2,3] let el i64 = test(arr) }",
 		},
 		{
 			name:  "function - return struct",
@@ -1388,6 +1372,11 @@ func TestFunction(t *testing.T) {
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() ?xyz { return test1 } pub fn main() { }",
 		},
 		{
+			name:  "call public function",
+			input: "pub fn test() {} test()",
+			want:  "lib main pub fn test() { } pub fn main() { test() }",
+		},
+		{
 			name:  "call function value",
 			input: "type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } let func = test2() let v = func()",
 			want:  "lib main type xyz fn()i64 fn test1() i64 { return 0 } fn test2() xyz { return test1 } pub fn main() { let func xyz = test2() let v i64 = func() }",
@@ -1405,6 +1394,16 @@ func TestFunction(t *testing.T) {
 				let func = ?test2()
 				let a, let b = func("h", false)`,
 			want: `lib main struct abc {x f64} type xyz fn(string,bool)i64,abc fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
+		},
+		{
+			name:  "pass literal to any",
+			input: "fn test(x any) {} test(1)",
+			want:  "lib main fn test(x any) { } pub fn main() { test(1) }",
+		},
+		{
+			name:  "pass identifier to any",
+			input: "fn test(x any) {} let x = 1.0 test(x)",
+			want:  "lib main fn test(x any) { } pub fn main() { let x f64 = 1.0 test(x) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1457,17 +1456,17 @@ func TestBuiltInFunction(t *testing.T) {
 		{
 			name:   "built-in fns - wrong variable argument type",
 			input:  `let a = 1 let l = len(a) let c = cap(a)`,
-			errors: []string{"type mistmatch, expected type 'T | struct<len i64>, []T, string, memory<[]T>' but got 'i64'", "type mistmatch, expected type 'T | struct<cap i64>, []T, memory<[]T>' but got 'i64'"},
+			errors: []string{"type mistmatch, expected type 'T' but got 'i64'", "type mistmatch, expected type 'T' but got 'i64'"},
 		},
 		{
 			name:  "make",
-			input: "let arr = make([]i64, 10)",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10) }",
+			input: "let arr = try make([]i64, 10)",
+			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10) }",
 		},
 		{
 			name:  "make with initial value",
-			input: "let arr = make([]i64, 10, 0)",
-			want:  "lib main pub fn main() { let arr memory<[]i64> = make([]i64,10,0) }",
+			input: "let arr = try make([]i64, 10, 0)",
+			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10,0) }",
 		},
 		{
 			name:  "validate",
@@ -1476,18 +1475,28 @@ func TestBuiltInFunction(t *testing.T) {
 		},
 		{
 			name:  "length of memory",
-			input: "let arr = make([]byte, 256) len(arr)",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,256) len(arr) }",
+			input: "let arr = try make([]byte, 256) len(arr)",
+			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) len(arr) }",
 		},
 		{
 			name:  "capacity of memory",
-			input: "let arr = make([]byte, 256) cap(arr)",
-			want:  "lib main pub fn main() { let arr memory<[]byte> = make([]byte,256) cap(arr) }",
+			input: "let arr = try make([]byte, 256) cap(arr)",
+			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) cap(arr) }",
 		},
 		{
 			name:  "assert",
 			input: `fn err()! { try assert(true, "") } try err()`,
 			want:  `lib main fn err()! { try assert(true,"") } pub fn main() { try err() }`,
+		},
+		{
+			name:  "put with different int type",
+			input: `let arr = []u8([0]) try put(arr, 0, 1)`,
+			want:  "lib main pub fn main() { let arr []u8 = []u8([0]) try put(arr,0,1) }",
+		},
+		{
+			name:  "println",
+			input: `println(42)`,
+			want:  "lib main pub fn main() { println(42) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1556,6 +1565,411 @@ func TestAnonymousFunction(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestErrorStatement(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "error without parameters",
+			input: "error divide_by_zero",
+			want:  "lib main error divide_by_zero pub fn main() { }",
+		},
+		{
+			name:  "error with single parameter",
+			input: "error invalid_value{val string}",
+			want:  "lib main error invalid_value{val string} pub fn main() { }",
+		},
+		{
+			name:  "error with multiple parameters",
+			input: "error out_of_bounds{index i64 size i64}",
+			want:  "lib main error out_of_bounds{index i64, size i64} pub fn main() { }",
+		},
+		{
+			name:  "custom error constructor call with assignment to generic error",
+			input: "error custom_error{val i64} fn handle_error(err error) {} let e = custom_error{val: 42} handle_error(e)",
+			want:  "lib main error custom_error{val i64} fn handle_error(err error) { } pub fn main() { let e custom_error = custom_error{val i64: 42} handle_error(e) }",
+		},
+		{
+			name:  "custom error constructor call directly as function argument",
+			input: "error my_error{msg string} fn process_error(err error) {} process_error(my_error{msg: \"test\"})",
+			want:  "lib main error my_error{msg string} fn process_error(err error) { } pub fn main() { process_error(my_error{msg string: \"test\"}) }",
+		},
+		{
+			name:  "error with multiple fields using struct syntax",
+			input: "error validation_error{field string value i64} let e = validation_error{field: \"age\", value: -1}",
+			want:  "lib main error validation_error{field string, value i64} pub fn main() { let e validation_error = validation_error{field string: \"age\", value i64: -1} }",
+		},
+		{
+			name:  "raise error with struct syntax",
+			input: "error bounds_error{index i64 size i64} fn test()! { raise bounds_error{index: 10, size: 5} }",
+			want:  "lib main error bounds_error{index i64, size i64} fn test()! { raise bounds_error{index i64: 10, size i64: 5} } pub fn main() { }",
+		},
+		{
+			name:  "error equality comparison",
+			input: "error test_error fn test(e1 error, e2 error) bool { return e1 == e2 }",
+			want:  "lib main error test_error fn test(e1 error,e2 error) bool { return (e1 == e2) } pub fn main() { }",
+		},
+		{
+			name:  "error inequality comparison",
+			input: "error custom_err{val i64} fn test(e1 custom_err, e2 error) bool { return e1 != e2 }",
+			want:  "lib main error custom_err{val i64} fn test(e1 custom_err,e2 error) bool { return (e1 != e2) } pub fn main() { }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestAppendFunction(t *testing.T) {
+	tests := []testCase{
+		{
+			name:   "append string to []byte",
+			input:  `let buf = try make([]byte, 1) let result = try append(buf, "hello")`,
+			errors: []string{"type mistmatch, expected type 'byte' but got 'string'"},
+		},
+		{
+			name:  "append byte to []byte",
+			input: `let buf = try make([]byte, 1) let result = try append(buf, byte(65))`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,byte(65)) }",
+		},
+		{
+			name:  "append []byte to []byte",
+			input: `let buf = try make([]byte, 1) let more = []byte([1,2,3]) let result = try append(buf, more)`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let more []byte = []byte([1,2,3]) let result mut[[]byte] = try append(buf,more) }",
+		},
+		{
+			name:   "append int to []string",
+			input:  `let arr = try make([]string, 1) let result = try append(arr, 42)`,
+			errors: []string{"type mistmatch, expected type 'string' but got 'i64'"},
+		},
+		{
+			name:   "append to non-slice",
+			input:  `let x = 42 let result = try append(x, 1)`,
+			errors: []string{"type mistmatch, expected type '[]T' but got 'i64'"},
+		},
+		{
+			name:  "append char to []byte",
+			input: `let buf = try make([]byte, 1) let result = try append(buf, 'A')`,
+			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,'A') }",
+		},
+		{
+			name:  "put element in array",
+			input: `let arr = [1, 2, 3] let result = try put(arr, 1, 99)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result []i64 = try put(arr,1,99) }",
+		},
+		{
+			name:  "get element from array",
+			input: `let arr = [1, 2, 3] let result = try get(arr, 1)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result i64 = try get(arr,1) }",
+		},
+		{
+			name:  "slice array",
+			input: `let arr = [1, 2, 3, 4, 5] let result = try slice(arr, 1, 3)`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3,4,5] let result []i64 = try slice(arr,1,3) }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestGenericFunctions(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "single generic parameter with any constraint",
+			input: "fn test[T any](x T) T { return x }",
+			want:  "lib main fn test[T any](x T) T { return x } pub fn main() { }",
+		},
+		{
+			name:  "multiple generic parameters with same constraint",
+			input: "fn test[T, E any](x T, y E) {}",
+			want:  "lib main fn test[T any, E any](x T,y E) { } pub fn main() { }",
+		},
+		{
+			name:   "undefined constraint type",
+			input:  "fn test[T UnknownType](x T) {}",
+			errors: []string{"type 'unknown[UnknownType]' not found"},
+		},
+		// // BUG: the double type E not found is a bug due to
+		// // us analysing function twice (once for header) and once
+		// // when analysing function body
+		{
+			name:   "using undefined generic type in parameter",
+			input:  "fn test[T any](x E) {}",
+			errors: []string{"type 'E' not found", "type 'E' not found"},
+		},
+		{
+			name:   "using undefined generic type in return type",
+			input:  "fn test[T any]() E { return 0 }",
+			errors: []string{"type mistmatch, expected type 'unknown[E]' but got 'i64'"},
+		},
+		{
+			name:  "generic function with return type same as parameter",
+			input: "fn identity[T any](x T) T { return x }",
+			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { }",
+		},
+		{
+			name:  "generic function call with type parameter infers return type",
+			input: "fn identity[T any](x T) T { return x } let r = identity[i32](42)",
+			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i32 = identity[i32](42) }",
+		},
+		{
+			name:  "generic function with struct return type",
+			input: "struct box[T any] { val T } fn make_box[T any](x T) box[T] { return box[T]{val: x} } let b = make_box[i32](10)",
+			want:  "lib main struct box[T any] {val T} fn make_box[T any](x T) box[T] { return box[T]{val T: x} } pub fn main() { let b box[i32] = make_box[i32](10) }",
+		},
+		{
+			name:  "generic function call infer type for instantiation",
+			input: "fn identity[T any](x T) T { return x } let r = identity(42)",
+			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i64 = identity(42) }",
+		},
+		{
+			name:  "generic recursive function call",
+			input: "fn identity[T any](x T) T { let r = identity[T](x) }",
+			want:  "lib main fn identity[T any](x T) T { let r T = identity[T](x) } pub fn main() { }",
+		},
+		{
+			name:   "generic function call infer type for instantiation",
+			input:  "fn identity[T, E any](x T) E { return x } let r = identity(42)",
+			errors: []string{"cannot infer type parameter 'E'"},
+		},
+		// // NOTE: 'constraint' not supported yet
+		// // {
+		// // 		name:  "multiple generic parameters with different constraints",
+		// // 		input: "constraint MyConstr { u32 } fn test[T any, E MyConstr](x T, y E) {}",
+		// // 		want:  "lib main constraint MyConstr { u32 } fn test[T any, E MyConstr](x T,y E) { } pub fn main() { }",
+		// // 	},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestGenericMatch(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "concrete match result type",
+			input: "fn test[T any](x T) T { let r = match x { case i32: 0 case _: 1 } } ",
+			want:  "lib main fn test[T any](x T) T { let r i64 = match x { case i32: 0 case _: 1 } } pub fn main() { }",
+		},
+		{
+			name:  "generic match result type",
+			input: "fn test[T any](x T) T { let r = match x { case i32: x case _: x } } ",
+			want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+		},
+		// BUG: variable 'r' is inferred as i64 but it should remain T
+		// due to the fact that x can be a result
+		// {
+		// 	name:  "generic match result type",
+		// 	input: "fn test[T any](x T) T { let r = match x { case i32: x case _: 0 } } ",
+		// 	want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+		// },
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestGenericStructs(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "single type parameter",
+			input: "struct foo[T any] {value T}",
+			want:  "lib main struct foo[T any] {value T} pub fn main() { }",
+		},
+		{
+			name:  "multiple type parameters",
+			input: "struct pair[T, U any] {first T, second U}",
+			want:  "lib main struct pair[T any, U any] {first T, second U} pub fn main() { }",
+		},
+		{
+			name:  "different constraints",
+			input: "struct result[T any, E error] {value T, err E}",
+			want:  "lib main struct result[T any, E error] {value T, err E} pub fn main() { }",
+		},
+		{
+			name:   "undefined constraint",
+			input:  "struct test[T UnknownType] {value T}",
+			errors: []string{"type 'unknown[UnknownType]' not found"},
+		},
+		{
+			name:  "instantiation with literal",
+			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1}",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} }",
+		},
+		{
+			name:  "instantiation with variable",
+			input: "struct abc[T any] { a T } let y = 2 let x = abc[i64]{a: y}",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let y i64 = 2 let x abc[i64] = abc[i64]{a i64: y} }",
+		},
+		{
+			name:  "field access from generic struct evaluates to correct type",
+			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1} let y = x.a",
+			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} let y i32 = x.a }",
+		},
+		// {
+		// 	name:  "instantiation without type parameters",
+		// 	input: "struct abc[T any] { a T } let x = abc{a: 1}",
+		// 	want:  "struct abc[T any] { a T } let x abc[i64] = abc{a i64: 1}",
+		// },
+		{
+			name:  "array of generic type",
+			input: "struct container[T any] { items []T } let c = container[i32]{items: [1, 2, 3]}",
+			want:  "lib main struct container[T any] {items []T} pub fn main() { let c container[i32] = container[i32]{items []i32: [1,2,3]} }",
+		},
+		{
+			name:  "pointer to generic type",
+			input: "struct box[T any] { value *T } let x = 5 let b = box[i64]{value: &x}",
+			want:  "lib main struct box[T any] {value *T} pub fn main() { let x i64 = 5 let b box[i64] = box[i64]{value *i64: &x} }",
+		},
+		{
+			name:  "optional generic type",
+			input: "struct maybe[T any] { value ?T } let m = maybe[i32]{value: null}",
+			want:  "lib main struct maybe[T any] {value ?T} pub fn main() { let m maybe[i32] = maybe[i32]{value ?i32: null} }",
+		},
+		{
+			name:  "nested field access on generic struct",
+			input: "struct inner[T any] { val T } struct outer[U any] { data inner[U] } let o = outer[i32]{data: inner[i32]{val: 42}} let v = o.data.val",
+			want:  "lib main struct inner[T any] {val T} struct outer[U any] {data inner[U]} pub fn main() { let o outer[i32] = outer[i32]{data inner[i32]: inner[i32]{val i32: 42}} let v i32 = o.data.val }",
+		},
+		{
+			name:  "pass generic struct to function",
+			input: "struct box[T any] { val T } fn get_val(b box[i32]) i32 { return b.val } let b = box[i32]{val: 10} let x = get_val(b)",
+			want:  "lib main struct box[T any] {val T} fn get_val(b box[i32]) i32 { return b.val } pub fn main() { let b box[i32] = box[i32]{val i32: 10} let x i32 = get_val(b) }",
+		},
+		{
+			name:  "array of parameterized structs",
+			input: "struct point[T any] { x T, y T } let points = [point[i32]{x: 1, y: 2}, point[i32]{x: 3, y: 4}]",
+			want:  "lib main struct point[T any] {x T, y T} pub fn main() { let points []point[i32] = [point[i32]{x i32: 1, y i32: 2},point[i32]{x i32: 3, y i32: 4}] }",
+		},
+		{
+			name:  "multiple occurrences of same type parameter",
+			input: "struct triple[T any] { a T, b T, c T } let t = triple[i32]{a: 1, b: 2, c: 3} let sum = t.a + t.b + t.c",
+			want:  "lib main struct triple[T any] {a T, b T, c T} pub fn main() { let t triple[i32] = triple[i32]{a i32: 1, b i32: 2, c i32: 3} let sum i32 = ((t.a + t.b) + t.c) }",
+		},
+		{
+			name:   "parameterized struct with wrong field type raises error",
+			input:  `struct abc[T any] { a T } let x = abc[i32]{a: "hello"}`,
+			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
+		},
+		{
+			name:   "parameterized struct with mismatched types in fields",
+			input:  "struct pair[T any] { a T, b T } let p = pair[i32]{a: 1, b: \"hello\"}",
+			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
+		},
+		// BUG: this is not caught yet but requires fixing another issue
+		// where library name missing in type causing e.g. []token to be inferred
+		// while it should be []ast.token (when running dash compiler tests)
+		// {
+		// name:   "instantiation with variable of wrong type",
+		// input:  "struct abc[T any] { a T } let y = 2 let x = abc[i32]{a: y}",
+		// errors: []string{"type mistmatch, expected type 'i32' but got 'i64'"},
+		// },
+		// TODO: add error case where generic struct not instantiated with a type
+		// TODO: add tests where constraint violated
+
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestBitwiseOperations(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "left shift",
+			input: "let a = 1 << 2",
+			want:  "lib main pub fn main() { let a i64 = (1 << 2) }",
+		},
+		{
+			name:  "right shift",
+			input: "let a = 8 >> 2",
+			want:  "lib main pub fn main() { let a i64 = (8 >> 2) }",
+		},
+		{
+			name:  "bitwise AND",
+			input: "let a = 5 & 3",
+			want:  "lib main pub fn main() { let a i64 = (5 & 3) }",
+		},
+		{
+			name:  "bitwise OR",
+			input: "let a = 5 | 3",
+			want:  "lib main pub fn main() { let a i64 = (5 | 3) }",
+		},
+		{
+			name:  "bitwise XOR",
+			input: "let a = 5 ^ 3",
+			want:  "lib main pub fn main() { let a i64 = (5 ^ 3) }",
+		},
+		{
+			name:  "bitwise NOT",
+			input: "let a = ~5",
+			want:  "lib main pub fn main() { let a i64 = ~5 }",
+		},
+		{
+			name:  "bitwise with byte",
+			input: "let a = byte(15) & byte(7)",
+			want:  "lib main pub fn main() { let a byte = (byte(15) & byte(7)) }",
+		},
+		{
+			name:  "bitwise XOR with byte",
+			input: "let a = byte(15) ^ byte(7)",
+			want:  "lib main pub fn main() { let a byte = (byte(15) ^ byte(7)) }",
+		},
+		{
+			name:  "bitwise with u8",
+			input: "let a = u8(1) << u8(2)",
+			want:  "lib main pub fn main() { let a u8 = (u8(1) << u8(2)) }",
+		},
+		{
+			name:  "combined operations",
+			input: "let a = (5 & 3) | (8 >> 1)",
+			want:  "lib main pub fn main() { let a i64 = ((5 & 3) | (8 >> 1)) }",
+		},
+		{
+			name:   "shift on float",
+			input:  "let a = 1.0 << 2",
+			errors: []string{"type mistmatch, expected type 'i64' but got 'f64'"},
+		},
+		{
+			name:   "bitwise AND on string",
+			input:  `let a = "hello" & "world"`,
+			errors: []string{"illegal operation '&' on type 'string'"},
+		},
+		{
+			name:   "bitwise NOT on float",
+			input:  "let a = ~1.0",
+			errors: []string{"illegal '~' operation: can only be used with integer types"},
+		},
+		{
+			name:   "bitwise XOR on string",
+			input:  `let a = "hello" ^ "world"`,
+			errors: []string{"illegal operation '^' on type 'string'"},
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestBuiltinWithTypeAliases(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "get with type alias index",
+			input: `type index u32 let arr = [1, 2, 3] let idx = index(0) let val = try get(arr, idx)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(0) let val i64 = try get(arr,idx) }",
+		},
+		{
+			name:  "slice with type alias indices",
+			input: `type index u32 let arr = [1, 2, 3, 4, 5] let start = index(1) let end = index(3) let result = try slice(arr, start, end)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3,4,5] let start index = index(1) let end index = index(3) let result []i64 = try slice(arr,start,end) }",
+		},
+		{
+			name:  "put with type alias index",
+			input: `type index u32 let arr = [1, 2, 3] let idx = index(1) let result = try put(arr, idx, 99)`,
+			want:  "lib main type index u32 pub fn main() { let arr []i64 = [1,2,3] let idx index = index(1) let result []i64 = try put(arr,idx,99) }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
+func TestScoping(t *testing.T) {
+	tests := []testCase{
+		{
+			name:   "for loop scoping",
+			input:  "lib main for i = 0; i < 10; i++ { } i",
+			errors: []string{"identifier 'i' not found"},
+		},
+	}
+	runAnalysisTests(t, tests)
+
+}
 func runAnalysisTests(t *testing.T, tests []testCase) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

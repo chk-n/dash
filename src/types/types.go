@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-
 	"strings"
 
+	"dash-lang.io/src/internal"
 	"dash-lang.io/src/token"
 )
 
@@ -15,7 +15,7 @@ var (
 	errUnknownStructField = errors.New("unknown struct field")
 )
 
-type TypeSpec interface {
+type Type interface {
 	String() string
 	// returns name of type. Similar to String() except doesnt
 	// return "?", "named_type<T>"
@@ -26,7 +26,7 @@ type TypeSpec interface {
 	// []T == []i64 => TRUE
 	// []i64 == []T => FALSE
 	// i64 == i32   => FALSE
-	Equal(other TypeSpec) bool
+	Equal(other Type) bool
 }
 
 // --------- //
@@ -42,15 +42,15 @@ var (
 	ConstU256 = Int{Width: 256, Signed: 0}
 	// ConstUint = Int{Width: 1, Signed: 0}
 
+	// ConstInt  = Int{Width: 0, Signed: 1}
 	ConstI8   = Int{Width: 8, Signed: 1}
 	ConstI16  = Int{Width: 16, Signed: 1}
 	ConstI32  = Int{Width: 32, Signed: 1}
 	ConstI64  = Int{Width: 64, Signed: 1}
 	ConstI128 = Int{Width: 128, Signed: 1}
 	ConstI256 = Int{Width: 256, Signed: 1}
-	// ConstInt  = Int{Width: 1, Signed: 1}
 
-	// ConstFloat  = Basic{t: Float}
+	// ConstFloat   = Float{Width: 0}
 	ConstF32    = Float{Width: 32}
 	ConstF64    = Float{Width: 64}
 	ConstBool   = Bool{}
@@ -58,6 +58,8 @@ var (
 	ConstChar   = Char{}
 	ConstString = String{}
 	ConstNull   = Null{}
+	ConstError  = Error{Name: "error"}
+	ConstAny    = Any{}
 )
 
 // ------------ //
@@ -86,14 +88,14 @@ type Int struct {
 }
 
 func (t *Int) Ident() string { return t.String() }
-func (t *Int) Equal(other TypeSpec) bool {
+func (t *Int) Equal(other Type) bool {
 	o, ok := other.(*Int)
 	if !ok {
 		return false
 	}
 	return t.Width == o.Width && t.Signed == o.Signed
 }
-func (t *Int) Type() TypeSpec {
+func (t *Int) Type() Type {
 	return t
 }
 
@@ -112,14 +114,14 @@ type Float struct {
 }
 
 func (t *Float) Ident() string { return t.String() }
-func (t *Float) Equal(other TypeSpec) bool {
+func (t *Float) Equal(other Type) bool {
 	o, ok := other.(*Float)
 	if !ok {
 		return false
 	}
 	return t.Width == o.Width
 }
-func (t *Float) Type() TypeSpec {
+func (t *Float) Type() Type {
 	return t
 }
 
@@ -130,11 +132,11 @@ func (t *Float) String() string {
 type Bool struct{}
 
 func (t *Bool) Ident() string { return t.String() }
-func (t *Bool) Equal(other TypeSpec) bool {
+func (t *Bool) Equal(other Type) bool {
 	_, ok := other.(*Bool)
 	return ok
 }
-func (t *Bool) Type() TypeSpec {
+func (t *Bool) Type() Type {
 	return t
 }
 
@@ -145,11 +147,11 @@ func (t *Bool) String() string {
 type Byte struct{}
 
 func (t *Byte) Ident() string { return t.String() }
-func (t *Byte) Equal(other TypeSpec) bool {
+func (t *Byte) Equal(other Type) bool {
 	_, ok := other.(*Byte)
 	return ok
 }
-func (t *Byte) Type() TypeSpec {
+func (t *Byte) Type() Type {
 	return t
 }
 func (t *Byte) String() string {
@@ -159,11 +161,11 @@ func (t *Byte) String() string {
 type Char struct{}
 
 func (t *Char) Ident() string { return t.String() }
-func (t *Char) Equal(other TypeSpec) bool {
+func (t *Char) Equal(other Type) bool {
 	_, ok := other.(*Char)
 	return ok
 }
-func (t *Char) Type() TypeSpec {
+func (t *Char) Type() Type {
 	return t
 }
 func (t *Char) String() string {
@@ -174,11 +176,11 @@ func (t *Char) String() string {
 type String struct{}
 
 func (t *String) Ident() string { return t.String() }
-func (t *String) Equal(other TypeSpec) bool {
+func (t *String) Equal(other Type) bool {
 	_, ok := other.(*String)
 	return ok
 }
-func (t *String) Type() TypeSpec {
+func (t *String) Type() Type {
 	return t
 }
 
@@ -189,11 +191,11 @@ func (t *String) String() string {
 type Null struct{}
 
 func (t *Null) Ident() string { return t.String() }
-func (t *Null) Equal(other TypeSpec) bool {
+func (t *Null) Equal(other Type) bool {
 	_, ok := other.(*Null)
 	return ok
 }
-func (t *Null) Type() TypeSpec {
+func (t *Null) Type() Type {
 	return t
 }
 
@@ -206,16 +208,16 @@ func (t *Null) String() string {
 // --------------- //
 
 type Array struct {
-	T TypeSpec
+	T Type
 	// if set then array is fixed-size
 	Size int
 }
 
-func (t *Array) Type() TypeSpec         { return t }
-func (t *Array) InternalType() TypeSpec { return t.T }
+func (t *Array) Type() Type         { return t }
+func (t *Array) InternalType() Type { return t.T }
 
 // Returns underlying type in nested array
-func (t *Array) ValueType() TypeSpec {
+func (t *Array) ValueType() Type {
 	vTyp, ok := t.T.(*Array)
 	if !ok {
 		return t.T
@@ -233,7 +235,7 @@ func (t *Array) String() string {
 	out.WriteString("]" + t.T.String())
 	return out.String()
 }
-func (t *Array) Equal(other TypeSpec) bool {
+func (t *Array) Equal(other Type) bool {
 	otherArr, ok := other.(*Array)
 	if !ok {
 		return false
@@ -245,21 +247,22 @@ func (t *Array) Equal(other TypeSpec) bool {
 }
 
 type Struct struct {
-	Name string
-	Ts   []StructField
+	Name       string
+	TypeParams []Type
+	Ts         []StructField
 }
 
-func (t *Struct) Type() TypeSpec { return t }
-func (t *Struct) GetType(i int) TypeSpec {
+func (t *Struct) Type() Type { return t }
+func (t *Struct) GetType(i int) Type {
 	return t.Ts[i].T
 }
-func (t *Struct) GetTypeByIndex(idx int) (TypeSpec, error) {
+func (t *Struct) GetTypeByIndex(idx int) (Type, error) {
 	if idx >= 0 && idx <= len(t.Ts) {
 		return t.Ts[idx].T, nil
 	}
 	return nil, errors.Join(errUnknownStructField, fmt.Errorf("%d", idx))
 }
-func (t *Struct) GetTypeByField(f string) (TypeSpec, int, error) {
+func (t *Struct) GetTypeByField(f string) (Type, int, error) {
 	for i, nt := range t.Ts {
 		if nt.Name == f {
 			return nt.T, i, nil
@@ -267,7 +270,7 @@ func (t *Struct) GetTypeByField(f string) (TypeSpec, int, error) {
 	}
 	return nil, 0, errors.Join(errUnknownStructField, fmt.Errorf("%s", f))
 }
-func (t *Struct) SetTypeByField(f string, typ TypeSpec) error {
+func (t *Struct) SetTypeByField(f string, typ Type) error {
 	for _, nt := range t.Ts {
 		if nt.Name == f {
 			nt.T = typ
@@ -294,29 +297,40 @@ func (t *Struct) String() string {
 		}
 		out.WriteString(">")
 		return out.String()
+	} else if len(t.TypeParams) == 0 {
+		return t.Name
 	}
+	var out bytes.Buffer
+	out.WriteString(t.Name)
+	out.WriteString("[")
+	for i, tp := range t.TypeParams {
+		out.WriteString(tp.String())
+		if i != len(t.TypeParams)-1 {
+			out.WriteString(",")
+		}
+	}
+	out.WriteString("]")
 
-	return t.Name
+	return out.String()
 }
-func (t *Struct) Equal(other TypeSpec) bool {
+func (t *Struct) Equal(other Type) bool {
 	o, ok := other.(*Struct)
 	if !ok {
 		return false
 	}
 	if t.Name != o.Name {
 		return false
-		// TODO: fix to account for optional types
 	} else if len(t.Ts) != len(o.Ts) {
 		return false
 	}
-	for i, typ := range t.Ts {
-		// TODO: fix to account for assigning unnamed types
-		if !typ.Equal(o.Ts[i]) {
-			return false
-		}
-	}
+	// BUG: this causes issues with generic structs
+	// for i, typ := range t.Ts {
+	// 	if !typ.Equal(o.Ts[i]) {
+	// 		// fmt.Println(reflect.TypeOf(typ.T), reflect.TypeOf(o.Ts[i].T))
+	// 		return false
+	// 	}
+	// }
 	return true
-
 }
 
 type AbstractStruct struct {
@@ -328,7 +342,7 @@ func (t *AbstractStruct) Ident() string { return t.String() }
 func (t *AbstractStruct) String() string {
 	return t.Name
 }
-func (t *AbstractStruct) GetTypeByField(f string) (TypeSpec, int, error) {
+func (t *AbstractStruct) GetTypeByField(f string) (Type, int, error) {
 	for i, nt := range t.Ts {
 		if nt.Name == f {
 			return nt.T, i, nil
@@ -336,7 +350,7 @@ func (t *AbstractStruct) GetTypeByField(f string) (TypeSpec, int, error) {
 	}
 	return nil, 0, errors.Join(errUnknownStructField, fmt.Errorf("%s", f))
 }
-func (t *AbstractStruct) Equal(other TypeSpec) bool {
+func (t *AbstractStruct) Equal(other Type) bool {
 	switch o := other.(type) {
 	case *Struct:
 		// For a struct to match abstract struct it needs to
@@ -366,7 +380,7 @@ func (t *AbstractStruct) Equal(other TypeSpec) bool {
 
 type StructField struct {
 	Name string
-	T    TypeSpec
+	T    Type
 }
 
 func (sf *StructField) Equal(other StructField) bool {
@@ -384,16 +398,17 @@ func (sf *StructField) Equal(other StructField) bool {
 // ----- //
 
 type Enum struct {
-	Name string
-	Size int
+	Name   string
+	Size   int
+	Fields []string
 }
 
-func (t *Enum) Type() TypeSpec { return t }
-func (t *Enum) Ident() string  { return t.Name }
+func (t *Enum) Type() Type    { return t }
+func (t *Enum) Ident() string { return t.Name }
 func (t *Enum) String() string {
 	return t.Name
 }
-func (t *Enum) Equal(other TypeSpec) bool {
+func (t *Enum) Equal(other Type) bool {
 	otherEnum, ok := other.(*Enum)
 	if !ok {
 		return false
@@ -403,17 +418,27 @@ func (t *Enum) Equal(other TypeSpec) bool {
 	return t.Name == otherEnum.Name
 }
 
-type Union struct {
-	Name string
-	Ts   []TypeSpec
+// HasField checks if the given field name exists in the enum
+func (t *Enum) HasField(fieldName string) bool {
+	for _, field := range t.Fields {
+		if field == fieldName {
+			return true
+		}
+	}
+	return false
 }
 
-func (t *Union) Type() TypeSpec { return t }
-func (t *Union) Ident() string  { return t.Name }
+type Union struct {
+	Name string
+	Ts   []Type
+}
+
+func (t *Union) Type() Type    { return t }
+func (t *Union) Ident() string { return t.Name }
 func (t *Union) String() string {
 	return t.Name
 }
-func (t *Union) Equal(other TypeSpec) bool {
+func (t *Union) Equal(other Type) bool {
 	o, ok := other.(*Union)
 	if !ok {
 		return false
@@ -422,27 +447,27 @@ func (t *Union) Equal(other TypeSpec) bool {
 }
 
 type Function struct {
-	Arg          []TypeSpec
-	Ret          []TypeSpec
+	Arg          []Type
+	Ret          []Type
 	IsErrorProne bool
 	IsVariadic   bool
 }
 
-func (t *Function) Type() TypeSpec { return t }
-func (t *Function) GetArgumentTypeAt(i int) TypeSpec {
+func (t *Function) Type() Type { return t }
+func (t *Function) GetArgumentTypeAt(i int) Type {
 	if i < len(t.Arg) {
 		return t.Arg[i]
 	}
 	panic("GetArgumentTypeAt out of bounds for function")
 }
-func (t *Function) GetReturnTypeAt(i int) TypeSpec {
+func (t *Function) GetReturnTypeAt(i int) Type {
 	if i < len(t.Ret) {
 		return t.Ret[i]
 	}
 	panic("GetReturnTypeAt out of bounds for function")
 }
-func (t *Function) ArgumentTypes() []TypeSpec { return t.Arg }
-func (t *Function) ReturnTypes() []TypeSpec   { return t.Ret }
+func (t *Function) ArgumentTypes() []Type { return t.Arg }
+func (t *Function) ReturnTypes() []Type   { return t.Ret }
 func (t *Function) ReturnTypesString() []string {
 	typs := make([]string, len(t.Ret))
 	for i, typ := range t.Ret {
@@ -474,7 +499,7 @@ func (t *Function) String() string {
 	}
 	return out.String()
 }
-func (t *Function) Equal(other TypeSpec) bool {
+func (t *Function) Equal(other Type) bool {
 	otherFn, ok := other.(*Function)
 	if !ok {
 		return false
@@ -501,13 +526,13 @@ func (t *Function) Equal(other TypeSpec) bool {
 }
 
 type Pointer struct {
-	T TypeSpec
+	T Type
 }
 
-func (t *Pointer) Type() TypeSpec { return t }
+func (t *Pointer) Type() Type     { return t }
 func (t *Pointer) Ident() string  { return t.T.String() }
 func (t *Pointer) String() string { return "*" + t.T.String() }
-func (t *Pointer) Equal(other TypeSpec) bool {
+func (t *Pointer) Equal(other Type) bool {
 	otherPtr, ok := other.(*Pointer)
 	if !ok {
 		return false
@@ -515,19 +540,30 @@ func (t *Pointer) Equal(other TypeSpec) bool {
 	return t.T.Equal(otherPtr.T)
 }
 
-type Error struct {
+type ErrorField struct {
 	Name string
+	T    Type
 }
 
-func (t *Error) Type() TypeSpec { return t }
-func (t *Error) Ident() string  { return t.Name }
+type Error struct {
+	Name   string
+	Fields []ErrorField
+}
+
+func (t *Error) Type() Type    { return t }
+func (t *Error) Ident() string { return t.Name }
 func (t *Error) String() string {
 	return t.Name
 }
-func (t *Error) Equal(other TypeSpec) bool {
+func (t *Error) Equal(other Type) bool {
 	otherErr, ok := other.(*Error)
 	if !ok {
 		return false
+	}
+	if t.Name == "error" {
+		return true
+	} else if otherErr.Name == "error" {
+		return true
 	}
 	return t.Name == otherErr.Name
 }
@@ -535,27 +571,23 @@ func (t *Error) Equal(other TypeSpec) bool {
 type Generic struct {
 	Name string // e.g. T
 	// TODO: add contraint
-	Constraints []TypeSpec
+	Constraints []Type
 }
 
-func (t *Generic) Type() TypeSpec { return t }
-func (t *Generic) Ident() string  { return t.Name }
+func (t *Generic) Type() Type    { return t }
+func (t *Generic) Ident() string { return t.Name }
 func (t *Generic) String() string {
 	var out bytes.Buffer
-
 	out.WriteString(t.Name)
-	if len(t.Constraints) != 0 {
-		out.WriteString(" | ")
-	}
-	for i, cnstr := range t.Constraints {
-		out.WriteString(cnstr.String())
-		if i != len(t.Constraints)-1 {
-			out.WriteString(", ")
-		}
-	}
 	return out.String()
 }
-func (t *Generic) Equal(other TypeSpec) bool {
+func (t *Generic) Equal(other Type) bool {
+	// If comparing with another Generic type, check if names match
+	if otherGeneric, ok := other.(*Generic); ok {
+		return t.Name == otherGeneric.Name
+	}
+
+	// If no constraints, any concrete type is acceptable
 	if len(t.Constraints) == 0 {
 		return true
 	}
@@ -569,17 +601,17 @@ func (t *Generic) Equal(other TypeSpec) bool {
 }
 
 type Optional struct {
-	T TypeSpec
+	T Type
 }
 
-func (t *Optional) Type() TypeSpec { return t }
+func (t *Optional) Type() Type { return t }
 func (t *Optional) Ident() string {
 	return t.T.Ident()
 }
 func (t *Optional) String() string {
 	return "?" + t.T.String()
 }
-func (t *Optional) Equal(other TypeSpec) bool {
+func (t *Optional) Equal(other Type) bool {
 	// null can always be assigned to optional
 	if _, ok := other.(*Null); ok {
 		return true
@@ -591,70 +623,47 @@ func (t *Optional) Equal(other TypeSpec) bool {
 	return t.T.Equal(other)
 }
 
-type Memory struct {
-	T TypeSpec
+type Mutable struct {
+	T Type
 }
 
-func (t *Memory) Type() TypeSpec { return t.T }
-func (t *Memory) Ident() string {
+func (t *Mutable) Type() Type { return t.T }
+func (t *Mutable) Ident() string {
 	return t.String()
 }
-func (t *Memory) String() string {
-	return "memory<" + t.T.String() + ">"
+func (t *Mutable) String() string {
+	return "mut[" + t.T.String() + "]"
 }
-func (t *Memory) Equal(other TypeSpec) bool {
-	otherMem, ok := other.(*Memory)
+func (t *Mutable) Equal(other Type) bool {
+	otherMem, ok := other.(*Mutable)
 	if !ok {
-		return ok
+		// mutable type comparison falls through
+		// to underlying type if comparison cant
+		// be made
+		return t.T.Equal(other)
 	}
 
 	return t.T.Equal(otherMem.Type())
 }
 
-// type Any struct{}
+type Any struct{}
 
-// func (t *Any) Ident() string {
-// 	return t.String()
-// }
-// func (t *Any) String() string {
-// 	return "any"
-// }
-// func (t *Any) Equal(other TypeSpec) bool {
-// 	return true
-// }
-// func (t *Any) Type() TypeSpec {
-// 	return t
-// }
-
-// T can be left nil, meaning it accepts any type
-type Type struct {
-	T TypeSpec
-}
-
-func (t *Type) Ident() string {
+func (t *Any) Ident() string {
 	return t.String()
 }
-func (t *Type) String() string {
-	if t.T == nil {
-		return "type"
-	}
-	return "type<" + t.T.String() + ">"
+func (t *Any) String() string {
+	return "any"
 }
-
-// 'other' should never be of type 'Type'
-func (t *Type) Equal(other TypeSpec) bool {
-	if t.T == nil {
-		return true
-	}
-
-	return t.T.Equal(other)
+func (t *Any) Equal(other Type) bool {
+	return true
 }
-
-func (t *Type) Type() TypeSpec { return t.T }
+func (t *Any) Type() Type {
+	return t
+}
 
 type Definition struct {
 	Name       string
-	Underlying TypeSpec
+	Underlying Type
 }
 
 func (t *Definition) Ident() string {
@@ -665,15 +674,15 @@ func (t *Definition) String() string {
 }
 
 // 'other' should never be of type 'Type'
-func (t *Definition) Equal(other TypeSpec) bool {
+func (t *Definition) Equal(other Type) bool {
 	return t.Name == other.Ident()
 }
 
-func (t *Definition) Type() TypeSpec { return t }
+func (t *Definition) Type() Type { return t }
 
 type Alias struct {
 	Name       string
-	Underlying TypeSpec
+	Underlying Type
 }
 
 func (t *Alias) Ident() string {
@@ -683,20 +692,20 @@ func (t *Alias) String() string {
 	return t.Name
 }
 
-func (t *Alias) Equal(other TypeSpec) bool {
+func (t *Alias) Equal(other Type) bool {
 	if otherAlias, ok := other.(*Alias); ok {
 		return t.Underlying.Equal(otherAlias.Underlying)
 	}
 	return t.Underlying.Equal(other)
 }
 
-func (t *Alias) Type() TypeSpec { return t.Underlying }
+func (t *Alias) Type() Type { return t.Underlying }
 
 type Dirty struct {
-	T TypeSpec
+	T Type
 }
 
-func (t *Dirty) Type() TypeSpec { return t }
+func (t *Dirty) Type() Type { return t }
 
 // returns type name without 'dirty<>'
 func (t *Dirty) Ident() string {
@@ -705,7 +714,7 @@ func (t *Dirty) Ident() string {
 func (t *Dirty) String() string {
 	return "dirty<" + t.T.String() + ">"
 }
-func (t *Dirty) Equal(other TypeSpec) bool {
+func (t *Dirty) Equal(other Type) bool {
 	otherD, ok := other.(*Dirty)
 	if !ok {
 		return false
@@ -715,17 +724,20 @@ func (t *Dirty) Equal(other TypeSpec) bool {
 
 type ImportedNamed struct {
 	Lib string
-	Typ TypeSpec
+	Typ Type
 }
 
-func (t *ImportedNamed) Type() TypeSpec { return t }
+func (t *ImportedNamed) Type() Type { return t }
 func (t *ImportedNamed) Ident() string {
 	return t.Lib + "." + t.Typ.Ident()
 }
 func (t *ImportedNamed) String() string {
+	if t.Typ == nil {
+		return t.Lib + ".<nil>"
+	}
 	return t.Lib + "." + t.Typ.String()
 }
-func (t *ImportedNamed) Equal(other TypeSpec) bool {
+func (t *ImportedNamed) Equal(other Type) bool {
 	otherUn, ok := other.(*ImportedNamed)
 	return ok && t.Ident() == otherUn.Ident()
 }
@@ -739,28 +751,56 @@ func (t *ImportedNamed) Equal(other TypeSpec) bool {
 // when parsing or analysing.
 
 type UnknownNamed struct {
-	Name string
+	Name           string
+	TypeParameters []Type // Type parameters for generic types like vec[i64]
 }
 
-func (t *UnknownNamed) Type() TypeSpec { return t }
+func (t *UnknownNamed) Type() Type { return t }
 func (t *UnknownNamed) Ident() string {
 	return t.Name
 }
 func (t *UnknownNamed) String() string {
-	return "unknown<" + t.Name + ">"
+	var out bytes.Buffer
+	out.WriteString("unknown[")
+	out.WriteString(t.Name)
+	if len(t.TypeParameters) > 0 {
+		out.WriteString("[")
+		paramStrs := make([]string, len(t.TypeParameters))
+		for i, param := range t.TypeParameters {
+			paramStrs[i] = param.String()
+			out.WriteString(param.String())
+			if i != len(t.TypeParameters)-1 {
+				out.WriteString(",")
+			}
+		}
+		out.WriteString("]")
+	}
+	out.WriteString("]")
+	return out.String()
 }
-func (t *UnknownNamed) Equal(other TypeSpec) bool {
+func (t *UnknownNamed) Equal(other Type) bool {
 	otherUn, ok := other.(*UnknownNamed)
-	return ok && t.Name == otherUn.Name
+	if !ok || t.Name != otherUn.Name {
+		return false
+	}
+	if len(t.TypeParameters) != len(otherUn.TypeParameters) {
+		return false
+	}
+	for i, param := range t.TypeParameters {
+		if !param.Equal(otherUn.TypeParameters[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 type Multi struct {
-	Ts []TypeSpec
+	Ts []Type
 }
 
-func (t *Multi) Type() TypeSpec { return t }
-func (t *Multi) Ident() string  { return t.String() }
-func (t *Multi) GetType(i int) TypeSpec {
+func (t *Multi) Type() Type    { return t }
+func (t *Multi) Ident() string { return t.String() }
+func (t *Multi) GetType(i int) Type {
 	return t.Ts[i]
 }
 func (t *Multi) String() string {
@@ -773,7 +813,7 @@ func (t *Multi) String() string {
 	}
 	return "(" + strings.Join(ts, ",") + ")"
 }
-func (t *Multi) Equal(other TypeSpec) bool {
+func (t *Multi) Equal(other Type) bool {
 	otherMulti, ok := other.(*Multi)
 	if !ok {
 		return false
@@ -807,6 +847,7 @@ func IsTypeIdent(ident string) bool {
 		"string",
 		"bool",
 		"byte",
+		"error",
 		"array":
 		return true
 	default:
@@ -814,27 +855,47 @@ func IsTypeIdent(ident string) bool {
 	}
 }
 
-func GetUnderlyingMemory(t TypeSpec) *Memory {
+func IsBuiltinType(t Type) bool {
 	switch t := t.(type) {
-	case *Memory:
+	case *Dirty:
+		return IsBuiltinType(t.T)
+	case *Optional:
+		return IsBuiltinType(t.T)
+	case *Pointer:
+		return IsBuiltinType(t.T)
+	case *Mutable:
+		return IsBuiltinType(t.T)
+	case *ImportedNamed:
+		return IsBuiltinType(t.Typ)
+	case *Struct, *Definition, *Alias,
+		*Union, *Enum:
+		return false
+	default:
+		return true
+	}
+}
+
+func GetUnderlyingMutable(t Type) *Mutable {
+	switch t := t.(type) {
+	case *Mutable:
 		return t
 	case *Definition:
-		return GetUnderlyingMemory(t.Underlying)
+		return GetUnderlyingMutable(t.Underlying)
 	case *Dirty:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Pointer:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Optional:
-		return GetUnderlyingMemory(t.T)
+		return GetUnderlyingMutable(t.T)
 	case *Alias:
-		return GetUnderlyingMemory(t.Underlying)
+		return GetUnderlyingMutable(t.Underlying)
 	}
 	return nil
 }
 
 // Recursively strips Definition and Dirty away
 // exposing the underlying primitive type
-func GetUnderlyingType(t TypeSpec) TypeSpec {
+func GetUnderlyingType(t Type) Type {
 	switch t := t.(type) {
 	case *Definition:
 		return GetUnderlyingType(t.Underlying)
@@ -844,10 +905,30 @@ func GetUnderlyingType(t TypeSpec) TypeSpec {
 	return t
 }
 
+// Recursively strips parent types away to
+// get to underlying array type
+func GetUnderlyingTypeArray(t Type) *Array {
+	switch t := t.(type) {
+	case *Array:
+		return t
+	case *Definition:
+		return GetUnderlyingTypeArray(t.Underlying)
+	case *Dirty:
+		return GetUnderlyingTypeArray(t.T)
+	case *Pointer:
+		return GetUnderlyingTypeArray(t.T)
+	case *Alias:
+		return GetUnderlyingTypeArray(t.Underlying)
+	case *Mutable:
+		return GetUnderlyingTypeArray(t.T)
+	}
+	return nil
+}
+
 // Recursively strips 'Definition', 'Dirty' and 'Optional'
 // away exposing a type ripe to be checked against if
 // we know we are working with a literal
-func GetUnderlyingTypeIfLiteral(t TypeSpec) TypeSpec {
+func GetUnderlyingTypeIfLiteral(t Type) Type {
 	switch t := t.(type) {
 	case *Definition:
 		return GetUnderlyingTypeIfLiteral(t.Underlying)
@@ -855,14 +936,38 @@ func GetUnderlyingTypeIfLiteral(t TypeSpec) TypeSpec {
 		return GetUnderlyingTypeIfLiteral(t.T)
 	case *Optional:
 		return GetUnderlyingTypeIfLiteral(t.T)
+	case *ImportedNamed:
+		return GetUnderlyingTypeIfLiteral(t.Typ)
 	}
 	return t
 }
 
+func GetUnderlyingStructType(t Type) (*Struct, bool) {
+	switch t := t.(type) {
+	case *Struct:
+		return t, true
+	case *Definition:
+		return GetUnderlyingStructType(t.Underlying)
+	case *Dirty:
+		return GetUnderlyingStructType(t.T)
+	case *Optional:
+		return GetUnderlyingStructType(t.T)
+	case *Mutable:
+		return GetUnderlyingStructType(t.T)
+	case *Pointer:
+		return GetUnderlyingStructType(t.T)
+	case *ImportedNamed:
+		return GetUnderlyingStructType(t.Typ)
+	}
+	return nil, false
+}
+
 // Checks whether 'from' type can be coalsced to 'to'
 // type. For example if 'from' is type of a literal
-func CanCoalesce(from, to TypeSpec) bool {
+func CanCoalesce(from, to Type) bool {
 	switch from := from.(type) {
+	case *Any:
+		return true
 	case *Int:
 		switch to := to.(type) {
 		case *Dirty:
@@ -883,6 +988,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -902,6 +1009,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -921,6 +1030,18 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *Array:
+			switch to.T.(type) {
+			case *Byte:
+				return true
+				// case *Int:
+				// inner.Width
+
+			}
+		case *Error:
+			return true
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -940,6 +1061,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -963,6 +1086,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -984,6 +1109,8 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -1003,6 +1130,10 @@ func CanCoalesce(from, to TypeSpec) bool {
 					return true
 				}
 			}
+		case *Mutable:
+			return CanCoalesce(from, to.T)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		default:
 			return false
 		}
@@ -1029,17 +1160,23 @@ func CanCoalesce(from, to TypeSpec) bool {
 			return CanCoalesce(from, to.T)
 		case *Definition:
 			return CanCoalesce(from, to.Underlying)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 	case *Dirty:
 		switch to := to.(type) {
 		case *Dirty:
 			return CanCoalesce(from.T, to.T)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return CanCoalesce(from.T, to)
 	case *Definition:
 		switch to := to.(type) {
 		case *Definition:
 			return CanCoalesce(from.Underlying, to.Underlying)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return CanCoalesce(from.Underlying, to)
 	case *Struct:
@@ -1056,7 +1193,7 @@ func CanCoalesce(from, to TypeSpec) bool {
 			}
 			isFromUnnamed := from.Ts[0].Name == ""
 			for i, field := range to.Ts {
-				var fromFieldType TypeSpec
+				var fromFieldType Type
 				var err error
 				if isFromUnnamed || field.Name == "" {
 					fromFieldType, err = from.GetTypeByIndex(i)
@@ -1079,17 +1216,57 @@ func CanCoalesce(from, to TypeSpec) bool {
 			return true
 		case *Definition:
 			return CanCoalesce(from, to.Underlying)
+		case *Optional:
+			return CanCoalesce(from, to.T)
 		case *Union:
 			for _, t := range to.Ts {
 				if CanCoalesce(from, t) {
 					return true
 				}
 			}
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
+	case *Mutable:
+		return CanCoalesce(from.T, to)
+	case *ImportedNamed:
+		return CanCoalesce(from.Typ, to)
+	case *Pointer:
+		if to, ok := to.(*Pointer); ok {
+			return CanCoalesce(from.T, to.T)
+		}
+		return false
+	case *Error:
+		_, ok := to.(*Error)
+		return ok
+	case *Union:
+		for _, t := range from.Ts {
+			if CanCoalesce(t, to) {
+				return true
+			}
+		}
+		return false
+	case *Enum:
+		switch to := to.(type) {
+		case *Enum:
+			return from.Name == to.Name
+		}
+		return false
+
+	case *Optional:
+		switch to := to.(type) {
+		case *Optional:
+			return CanCoalesce(from.T, to.T)
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
+		}
+		return false
 	case *Null:
-		switch to.(type) {
+		switch to := to.(type) {
 		case *Optional:
 			return true
+		case *ImportedNamed:
+			return CanCoalesce(from, to.Typ)
 		}
 		return false
 	}
@@ -1099,7 +1276,7 @@ func CanCoalesce(from, to TypeSpec) bool {
 // 1 == signed
 // 0 == unsigned
 // rest == error not int
-func GetSign(t TypeSpec) int {
+func GetSign(t Type) int {
 	if _, ok := t.(*Char); ok {
 		return 0
 	}
@@ -1146,7 +1323,7 @@ func LowestFittingFloat(v float64) *Float {
 	return &ConstF64
 }
 
-func TokenToType(tk token.Token) TypeSpec {
+func TokenToType(tk token.Token) Type {
 	switch tk.Type {
 	case token.I8TYPE:
 		return &ConstI8
@@ -1186,10 +1363,14 @@ func TokenToType(tk token.Token) TypeSpec {
 		return &ConstChar
 	case token.ASTERISK:
 		return &Pointer{}
-	case token.MEMORYTYPE:
-		return &Memory{}
+	case token.MUTABLETYPE:
+		return &Mutable{}
 	case token.DIRTYTYPE:
 		return &Dirty{}
+	case token.ERROR:
+		return &ConstError
+	case token.ANYTYPE:
+		return &ConstAny
 	}
 	panic("invalid token " + tk.Literal)
 }
@@ -1276,6 +1457,81 @@ func IntValueFitsIn(v int64, t2 *Int) bool {
 	return true
 }
 
+func UintValueFitsIn(v uint64, t2 *Int) bool {
+	if t2.Signed == -1 {
+		// For signed integers, check if the uint64 value fits within the signed range
+		switch t2.Width {
+		case 8:
+			if v > math.MaxInt8 {
+				return false
+			}
+		case 16:
+			if v > math.MaxInt16 {
+				return false
+			}
+		case 32:
+			if v > math.MaxInt32 {
+				return false
+			}
+		case 64:
+			if v > math.MaxInt64 {
+				return false
+			}
+		case 128, 256:
+			return true
+		}
+	} else {
+		// Unsigned integers
+		switch t2.Width {
+		case 8:
+			if v > math.MaxUint8 {
+				return false
+			}
+		case 16:
+			if v > math.MaxUint16 {
+				return false
+			}
+		case 32:
+			if v > math.MaxUint32 {
+				return false
+			}
+		case 64:
+			// All uint64 values fit in uint64
+			return true
+		case 128, 256:
+			return true
+		}
+	}
+	return true
+}
+
+func LowestFittingUint(v uint64, signed bool) *Int {
+	if signed {
+		if v <= math.MaxInt8 {
+			return &ConstI8
+		} else if v <= math.MaxInt16 {
+			return &ConstI16
+		} else if v <= math.MaxInt32 {
+			return &ConstI32
+		} else if v <= math.MaxInt64 {
+			return &ConstI64
+		} else {
+			// Value too large for signed int64, use uint64
+			return &ConstU64
+		}
+	} else {
+		if v <= math.MaxUint8 {
+			return &ConstU8
+		} else if v <= math.MaxUint16 {
+			return &ConstU16
+		} else if v <= math.MaxUint32 {
+			return &ConstU32
+		} else {
+			return &ConstU64
+		}
+	}
+}
+
 func IsFloatRepresentableAs(v float64, t *Float) bool {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return false
@@ -1286,4 +1542,45 @@ func IsFloatRepresentableAs(v float64, t *Float) bool {
 		return float64(f32) == v
 	}
 	return true
+}
+
+// GetUnderlyingIndexable returns the underlying type
+// that is indexable e.g. string or array
+func GetUnderlyingIndexable(t Type) Type {
+	switch t := t.(type) {
+	case *Dirty:
+		return GetUnderlyingIndexable(t.T)
+	case *Optional:
+		return GetUnderlyingIndexable(t.T)
+	case *Mutable:
+		return GetUnderlyingIndexable(t.T)
+	case *Definition:
+		return GetUnderlyingIndexable(t.Underlying)
+	case *Pointer:
+		return GetUnderlyingIndexable(t.T)
+	case *String:
+		return t
+	case *Array:
+		return t
+	default:
+		panic("this is a compiler error. please report")
+	}
+}
+
+func ArrayTypeAt(t Type, pos int) Type {
+	if pos == 0 {
+		return t
+	}
+
+	typ := t
+	for i := range pos {
+		switch t := typ.(type) {
+		case *String:
+			internal.AssertTrue(i == 0, "")
+			return &ConstByte
+		case *Array:
+			typ = t.T
+		}
+	}
+	return typ
 }

@@ -345,7 +345,20 @@ func (l *Lexer) readNumber() token.Token {
 	var tok token.Token
 	tok.Type = token.INT
 
-	// TODO: support numbers in hex & octal notation
+	// Check for hex literal (0x)
+	if l.ch == '0' && l.peekChar() == 'x' {
+		tok.Type = token.HEX
+		l.next() // skip '0'
+		l.next() // skip 'x'
+		// Read hex digits
+		for isHexDigit(l.ch) {
+			l.next()
+		}
+		tok.Literal = l.input[prevPos:l.prevPos]
+		return tok
+	}
+
+	// TODO: support numbers in octal notation
 	for {
 		if l.ch == '.' && l.peekChar() == '.' {
 			break
@@ -381,17 +394,13 @@ func (l *Lexer) readNumber() token.Token {
 func (l *Lexer) readChar() string {
 	pos := l.prevPos + 1
 
-	n := 0
-	for {
+	// read '
+	l.next()
+	if l.ch == '\\' {
 		l.next()
-		if l.ch == '\'' || l.ch == 0 {
-			break
-		}
-		n++
 	}
-	if n != 1 {
-		l.addError(pos, "invalid char literal")
-	}
+	// read char
+	l.next()
 
 	return l.input[pos:l.prevPos]
 }
@@ -408,5 +417,12 @@ func isLetter(ch byte) bool {
 
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9' ||
+		ch == '_'
+}
+
+func isHexDigit(ch byte) bool {
+	return '0' <= ch && ch <= '9' ||
+		'a' <= ch && ch <= 'f' ||
+		'A' <= ch && ch <= 'F' ||
 		ch == '_'
 }

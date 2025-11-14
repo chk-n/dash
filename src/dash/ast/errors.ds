@@ -1,0 +1,5 @@
+lib ast
+
+// unknown_tag signifies AST functions
+// encountered an unexpected lexer tag
+error unexpected_tag

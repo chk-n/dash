@@ -23,7 +23,7 @@ var (
 		return fmt.Errorf("expression is not used")
 	}
 	errIllegalOperationOnType = func(op, typ string) error {
-		return fmt.Errorf("illegal use of '%s' operation on type '%s'", op, typ)
+		return fmt.Errorf("illegal operation '%s' on type '%s'", op, typ)
 	}
 	errIllegalTypeCast = func(fromType, toType string) error {
 		return fmt.Errorf("illegal type cast from '%s' to '%s'", fromType, toType)
@@ -66,6 +66,15 @@ var (
 	errInvalidTry = func() error {
 		return fmt.Errorf("invalid use of 'try' with a non error-prone function")
 	}
+	errErrorProneNeedsTry = func(name string) error {
+		return fmt.Errorf("error-prone function '%s' must be wrapped in 'try'", name)
+	}
+	errCannotInferTypeParameter = func(name string) error {
+		return fmt.Errorf("cannot infer type parameter '%s'", name)
+	}
+	errTypeParameterCountMismatch = func(want, got int) error {
+		return fmt.Errorf("expected %d type parameters, got %d", want, got)
+	}
 )
 
 // ---------------- //
@@ -96,6 +105,26 @@ var (
 	}
 	errDuplicateUnionField = func(field, union string) error {
 		return fmt.Errorf("duplicate field '%s' in union '%s'", field, union)
+	}
+)
+
+// Enum related semantical errors
+var (
+	errEnumUnknownField = func(name, field string) error {
+		return fmt.Errorf("enum '%s' has no field named '%s'", name, field)
+	}
+)
+
+// Error related
+var (
+	errErrorFieldNotDefined = func(fieldName string) error {
+		return fmt.Errorf("error field '%s' not defined", fieldName)
+	}
+	errErrorUnknownField = func(name, field string) error {
+		return fmt.Errorf("error '%s' has no field named '%s'", name, field)
+	}
+	errErrorMissingFields = func(structName string) error {
+		return fmt.Errorf("error '%s' has missing fields", structName)
 	}
 )
 
@@ -191,11 +220,24 @@ var (
 	}
 )
 
+// -------------- //
+// Bitwise ops    //
+// -------------- //
+
+var (
+	errIllegalBinaryOpOnNonInteger = func(op string) error {
+		return fmt.Errorf("illegal '%s' operation: can only be used with integer types", op)
+	}
+)
+
 // -------- //
 // Literals //
 // -------- //
 
 var (
+	errUintLiteralOverflows = func(val uint64, t string) error {
+		return fmt.Errorf("unisgned integer literal '%d' overflows '%s'", val, t)
+	}
 	errIntLiteralOverflows = func(val int64, t string) error {
 		return fmt.Errorf("integer literal '%d' overflows '%s'", val, t)
 	}

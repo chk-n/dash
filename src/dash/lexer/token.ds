@@ -9,24 +9,14 @@ pub struct token {
 pub enum tag {
     ILLEGAL
     EOF
-    COMMENT
-
-    // Literal types
-    INT        // 123
-    FLOAT      // 0.314
-    
-    // Operators
-    PLUS       // +
-    MINUS      // -
-    ASTERISK   // *
-    SLASH      // /
-    PERCENT    // %
-    
-    // Single character tokens
+    COMMENT    
+       
+    // single character tokens
     COLON      // :
     SEMICOLON  // ;
     XOR        // ^
     NOT        // ~
+    LNOT       // !
     LBRACE     // {
     RBRACE     // }
     LPAREN     // (
@@ -37,11 +27,8 @@ pub enum tag {
     AT         // @
     DOT        // .
     
-    // String literals
-    STRING       // "..."
-    MULTI_STRING // `...`
     
-    // Compound operators
+    // compound operators
     ADD        // + 
     SUB        // - 
     MUL        // * 
@@ -54,10 +41,10 @@ pub enum tag {
     EQ         // ==
     ASSGN      // =
     RSH        // >>
-    GEQ        // >=
+    GTE        // >=
     GT         // >
     LSH        // <<
-    LEQ        // <=
+    LTE        // <=
     LT         // <
     LAND       // &&
     AND        // &
@@ -65,6 +52,35 @@ pub enum tag {
     DIV        // /
     QMARK      // ?
     QQMARK     // ??
+    ADDADD     // ++
+    SUBSUB     // --
+    
+    // literals
+    INT        // 123
+    FLOAT      // 0.314
+    STRING       // "abc"
+    MULTI_STRING // `xyz`
+    BOOL
+    CHAR
+
+    // type literals
+    U8_TYPE
+    U16_TYPE
+    U32_TYPE
+    U64_TYPE
+    I8_TYPE
+    I16_TYPE
+    I32_TYPE
+    I64_TYPE
+    INT_TYPE
+    F32_TYPE
+    F64_TYPE
+    FLOAT_TYPE
+    CHAR_TYPE
+    STRING_TYPE
+    BOOL_TYPE
+    MUT_TYPE
+    ANY_TYPE
     
     // keywords
     PUB
@@ -90,6 +106,7 @@ pub enum tag {
     CASE
     TRY
     CATCH
+    RAISE
     DEFER
     RETURN
     BREAK
@@ -97,11 +114,12 @@ pub enum tag {
     IDENT
 }
 
-pub fn get_literal(l *lexer, tkn token) string {
+pub fn get_literal(l *lexer, tkn token)! string {
     if len(l.buf) == 0 { 
         return "" 
     }
-    return string(l.buf[tkn.start:tkn.end+1])
+    let buf = try slice(l.buf, tkn.start, tkn.end+1)
+    return string(buf)
 }
 
 let keywords = [
@@ -130,13 +148,34 @@ let keywords = [
     {"catch", tag.CATCH},
     {"defer", tag.DEFER},
     {"return", tag.RETURN},
-    {"raise", tag.RAISE}
+    {"raise", tag.RAISE},
+    {"u8", tag.U8_TYPE},
+    {"u16", tag.U16_TYPE},
+    {"u32", tag.U32_TYPE},
+    {"u64", tag.U64_TYPE},
+    {"i8", tag.I8_TYPE},
+    {"i16", tag.I16_TYPE},
+    {"i32", tag.I32_TYPE},
+    {"i64", tag.I64_TYPE},
+    {"int", tag.INT_TYPE},
+    {"f32", tag.F32_TYPE},
+    {"f64", tag.F64_TYPE},
+    {"float", tag.FLOAT_TYPE},
+    {"char", tag.CHAR_TYPE},
+    {"string", tag.STRING_TYPE},
+    {"bool", tag.BOOL_TYPE},
+    {"mut", tag.MUT_TYPE},
+    {"any", tag.ANY_TYPE},
+    {"error", tag.ERROR},
+    {"true", tag.BOOL},
+    {"false", tag.BOOL}
 ]
 
 pub fn get_tag_by_keyword(k string) tag {
     for i = 0; i < len(keywords); i++ {
-        if keywords[i].0 == k {
-            return keywords[i].1
+        let kw = try get(keywords, i)
+        if kw.0 == k {
+            return kw.1
         }
     }
     return tag.IDENT

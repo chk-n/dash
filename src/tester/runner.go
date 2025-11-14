@@ -1,8 +1,10 @@
 package tester
 
 import (
-	"errors"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"dash-lang.io/src/ast"
@@ -13,7 +15,7 @@ import (
 type TestResult struct {
 	Name     string
 	Duration time.Duration
-	Error    error
+	Error    string
 	Passed   bool
 }
 
@@ -34,30 +36,52 @@ func NewTestRunner(dir string) *TestRunner {
 
 // Run executes all tests in the current directory
 func (tr *TestRunner) RunAll() error {
-	// Build entire project from directory
 	cfg := &builder.Config{
 		SrcDir: tr.testDir,
 	}
 	b := builder.New(cfg)
 	libs, err := b.BuildProject()
 	if err != nil {
-		return fmt.Errorf("error building project: %v", err)
+		return err
 	}
 
-	// Create evaluator with all libraries
+	absTestDir, err := filepath.Abs(tr.testDir)
+	if err != nil {
+		return fmt.Errorf("unable to get absolute path of test dir: %w", err)
+	}
+
 	eval := evaluator.New(libs)
 
-	// run all tests for all libraries
-	for _, lib := range libs {
-		// Create new context for test
+	libNames := make([]string, 0, len(libs))
+	for libName := range libs {
+		libNames = append(libNames, libName)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(libNames)))
+
+	for _, libName := range libNames {
+		lib := libs[libName]
+
+		if !shouldTestLibrary(libName, absTestDir, b.ProjectRoot(), b.ProjectName()) {
+			continue
+		}
+
 		ctx := evaluator.NewContext(nil)
 		eval.InitialiseLib(lib, ctx)
+
+		printedHeader := false
+
 		for _, n := range lib.Nodes {
 			switch fn := n.(type) {
 			case *ast.FunctionExpression:
 				if !isTestFunction(fn) {
 					continue
 				}
+
+				if !printedHeader {
+					fmt.Printf("\n\x1b[1m%s\x1b[0m\n", libName)
+					printedHeader = true
+				}
+
 				result := tr.runTest(fn, eval, ctx)
 				tr.results = append(tr.results, result)
 				if result.Passed {
@@ -72,6 +96,17 @@ func (tr *TestRunner) RunAll() error {
 
 	tr.printSummary()
 	return nil
+}
+
+// shouldTestLibrary determines if a library's tests should be run based on location
+func shouldTestLibrary(libName, absTestDir, projectRoot, projectName string) bool {
+	parts := strings.SplitN(libName, "/", 2)
+	if len(parts) != 2 {
+		return true
+	}
+
+	libDir := filepath.Join(projectRoot, parts[1])
+	return libDir == absTestDir || strings.HasPrefix(libDir, absTestDir+string(filepath.Separator))
 }
 
 func isTestFunction(fn *ast.FunctionExpression) bool {
@@ -94,19 +129,11 @@ func (tr *TestRunner) runTest(fn *ast.FunctionExpression, eval *evaluator.Evalua
 	res := eval.Eval(fn.Body, ctx)
 
 	// Check for errors
-	ret, ok := res.(*evaluator.Return)
-	if !ok {
-		result.Passed = true
+	if err, ok := res.(*evaluator.Error); ok {
+		result.Passed = false
+		result.Error = err.String()
 	} else {
-		err, ok := ret.Values[len(ret.Values)-1].(*evaluator.Error)
-		if !ok {
-			// this is an implementation error
-			panic("incorrect return type when running test")
-		}
-		if err != nil {
-			result.Error = errors.New(err.Err)
-			result.Passed = false
-		}
+		result.Passed = true
 	}
 
 	result.Duration = time.Since(start)

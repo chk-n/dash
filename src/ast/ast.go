@@ -35,8 +35,8 @@ type Literal interface {
 type Expression interface {
 	Node
 	expressionNode()
-	Type() types.TypeSpec
-	SetType(t types.TypeSpec)
+	Type() types.Type
+	SetType(t types.Type)
 }
 
 type Library struct {
@@ -64,8 +64,8 @@ func (l *Library) String() string {
 	return out.String()
 }
 
-func (l *Library) Exports() map[string]types.TypeSpec {
-	export := make(map[string]types.TypeSpec)
+func (l *Library) Exports() map[string]types.Type {
+	export := make(map[string]types.Type)
 	for _, n := range l.Nodes {
 		switch n := n.(type) {
 		case *StructStatement:
@@ -93,7 +93,21 @@ func (l *Library) Exports() map[string]types.TypeSpec {
 				export[n.Name.Value] = n.T
 			}
 		case *ErrorStatement:
-			// name = n.Name.Value
+			if n.Public {
+				export[n.Name.Value] = n.T
+			}
+		case *AssignmentStatement:
+			if n.Public {
+				// for now only assignments in the form
+				// pub let x, let y = 1, 2
+				// allowed meaning no function calls
+				for i, v := range n.Declerations {
+					switch v := v.(type) {
+					case *DeclarationStatement:
+						export[v.Assignee.String()] = n.Values[i].Type()
+					}
+				}
+			}
 
 		}
 	}
@@ -125,16 +139,16 @@ type TypeDefinitionStatement struct {
 	Public         bool
 	Token          token.Token
 	Name           *Identifier
-	UnderlyingType types.TypeSpec
+	UnderlyingType types.Type
 	Guard          Expression
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
 func (s *TypeDefinitionStatement) statementNode()       {}
 func (s *TypeDefinitionStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *TypeDefinitionStatement) Type() types.TypeSpec { return s.T }
+func (s *TypeDefinitionStatement) Type() types.Type     { return s.T }
 func (s *TypeDefinitionStatement) String() string {
 	var out bytes.Buffer
 	if s.Public {
@@ -154,15 +168,15 @@ type TypeAliasStatement struct {
 	Public         bool
 	Token          token.Token
 	Name           *Identifier
-	UnderlyingType types.TypeSpec
+	UnderlyingType types.Type
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
 func (s *TypeAliasStatement) statementNode()       {}
 func (s *TypeAliasStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *TypeAliasStatement) Type() types.TypeSpec {
+func (s *TypeAliasStatement) Type() types.Type {
 	return s.T
 }
 func (s *TypeAliasStatement) String() string {
@@ -176,48 +190,19 @@ func (s *TypeAliasStatement) String() string {
 	return out.String()
 }
 
-type GenericStructStatement struct {
-	Public bool
-	Token  token.Token
-	Name   *Identifier
-	Fields []*StructFieldStatement
-	T      *types.AbstractStruct
-}
-
-func (s *GenericStructStatement) statementNode()       {}
-func (s *GenericStructStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *GenericStructStatement) Type() types.TypeSpec {
-	return s.T
-}
-func (s *GenericStructStatement) String() string {
-	var out bytes.Buffer
-	if s.Public {
-		out.WriteString("pub ")
-	}
-	out.WriteString("gen " + s.TokenLiteral() + " ")
-	out.WriteString(s.Name.TokenLiteral() + " {")
-	for i, field := range s.Fields {
-		out.WriteString(field.String())
-		if i != len(s.Fields)-1 {
-			out.WriteString(", ")
-		}
-	}
-	out.WriteString("}")
-	return out.String()
-}
-
-// struct <name> { }
+// struct[name] { }
 type StructStatement struct {
-	Public bool
-	Token  token.Token
-	Name   *Identifier
-	Fields []*StructFieldStatement
-	T      *types.Struct
+	Public            bool
+	Token             token.Token
+	Name              *Identifier
+	GenericParameters []*GenericParameter
+	Fields            []*StructFieldStatement
+	T                 *types.Struct
 }
 
 func (s *StructStatement) statementNode()       {}
 func (s *StructStatement) TokenLiteral() string { return s.Token.Literal }
-func (s *StructStatement) Type() types.TypeSpec {
+func (s *StructStatement) Type() types.Type {
 	return s.T
 }
 func (s *StructStatement) String() string {
@@ -226,7 +211,19 @@ func (s *StructStatement) String() string {
 		out.WriteString("pub ")
 	}
 	out.WriteString(s.TokenLiteral() + " ")
-	out.WriteString(s.Name.TokenLiteral() + " {")
+	out.WriteString(s.Name.TokenLiteral())
+	// print generic parameters
+	if len(s.GenericParameters) > 0 {
+		out.WriteString("[")
+		for i, gp := range s.GenericParameters {
+			out.WriteString(gp.String())
+			if i != len(s.GenericParameters)-1 {
+				out.WriteString(", ")
+			}
+		}
+		out.WriteString("]")
+	}
+	out.WriteString(" {")
 	for i, field := range s.Fields {
 		out.WriteString(field.String())
 		if i != len(s.Fields)-1 {
@@ -297,7 +294,7 @@ func (s *UnionStatement) String() string {
 
 type ParameterStatement struct {
 	Name *Identifier
-	Type types.TypeSpec // types e.g. int, float
+	Type types.Type // types e.g. int, float
 }
 
 func (s *ParameterStatement) statementNode()       {}
@@ -354,6 +351,7 @@ func (s *DeclarationStatement) String() string {
 
 // let x, v, var z = 1, 2, 3
 type AssignmentStatement struct {
+	Public bool
 	// can only be:
 	// *DeclarationStatement, *Identifier,
 	// *IndexExpression, *SliceExpression, or
@@ -364,6 +362,21 @@ type AssignmentStatement struct {
 
 func (s *AssignmentStatement) statementNode()       {}
 func (s *AssignmentStatement) TokenLiteral() string { return "" }
+func (s *AssignmentStatement) TypeAt(i int) types.Type {
+	var typ types.Type
+	for j := 0; j < i; j++ {
+		switch t := s.Values[j].Type().(type) {
+		case *types.Multi:
+			for _, t := range t.Ts {
+				typ = t
+				j++
+			}
+		default:
+			typ = t
+		}
+	}
+	return typ
+}
 func (s *AssignmentStatement) VarNameAt(i int) string {
 	if i > len(s.Declerations)-1 {
 		panic("this is a compiler error. please report")
@@ -373,10 +386,6 @@ func (s *AssignmentStatement) VarNameAt(i int) string {
 		return decl.TokenLiteral()
 	case *DeclarationStatement:
 		return decl.Assignee.TokenLiteral()
-	case *IndexExpression:
-		return decl.TokenLiteral()
-	case *SliceExpression:
-		return decl.TokenLiteral()
 	case *DotExpression:
 		return decl.TokenLiteral()
 	}
@@ -394,7 +403,7 @@ func (s *AssignmentStatement) IsVarAt(i int) bool {
 	return decl.Token.Type == token.VAR
 }
 
-func (s *AssignmentStatement) SetTypeAt(i int, t types.TypeSpec) {
+func (s *AssignmentStatement) SetTypeAt(i int, t types.Type) {
 	switch decl := s.Declerations[i].(type) {
 	case Expression:
 		decl.SetType(t)
@@ -407,6 +416,9 @@ func (s *AssignmentStatement) SetTypeAt(i int, t types.TypeSpec) {
 func (s *AssignmentStatement) String() string {
 	var out bytes.Buffer
 
+	if s.Public {
+		out.WriteString("pub ")
+	}
 	for i, decl := range s.Declerations {
 		switch decl := decl.(type) {
 		case Expression:
@@ -434,12 +446,12 @@ func (s *AssignmentStatement) String() string {
 type Identifier struct {
 	Token token.Token // the token.IDENT token
 	Value string
-	T     types.TypeSpec
+	T     types.Type
 }
 
-func (i *Identifier) expressionNode()      {}
-func (i *Identifier) Type() types.TypeSpec { return i.T }
-func (i *Identifier) SetType(t types.TypeSpec) {
+func (i *Identifier) expressionNode()  {}
+func (i *Identifier) Type() types.Type { return i.T }
+func (i *Identifier) SetType(t types.Type) {
 	i.T = t
 }
 func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
@@ -456,8 +468,8 @@ type ReturnStatement struct {
 }
 
 func (s *ReturnStatement) statementNode() {}
-func (s *ReturnStatement) ReturnTypes() []types.TypeSpec {
-	var typs []types.TypeSpec
+func (s *ReturnStatement) ReturnTypes() []types.Type {
+	var typs []types.Type
 
 	for _, val := range s.Values {
 		switch mt := val.Type().(type) {
@@ -579,7 +591,7 @@ func (s *KeywordStatement) String() string       { return s.Token.Literal }
 type StructFieldStatement struct {
 	// Can be nil if unnamed struct definition
 	Name *Identifier
-	Type types.TypeSpec
+	Type types.Type
 	// Needs to evaluate to boolean expression
 	Guard Expression
 }
@@ -604,10 +616,10 @@ type DeferStatement struct {
 	Node Node
 }
 
-func (e *DeferStatement) expressionNode()          {}
-func (e *DeferStatement) Type() types.TypeSpec     { return nil }
-func (e *DeferStatement) SetType(t types.TypeSpec) {}
-func (e *DeferStatement) TokenLiteral() string     { return e.Token.Literal }
+func (e *DeferStatement) expressionNode()      {}
+func (e *DeferStatement) Type() types.Type     { return nil }
+func (e *DeferStatement) SetType(t types.Type) {}
+func (e *DeferStatement) TokenLiteral() string { return e.Token.Literal }
 func (e *DeferStatement) String() string {
 	var out bytes.Buffer
 
@@ -625,14 +637,14 @@ type MatchExpressionStatement struct {
 	IsStatement bool
 	// Set by semsis. If nil it means match
 	// functions as a statement.
-	T types.TypeSpec
+	T types.Type
 }
 
-func (s *MatchExpressionStatement) expressionNode()          {}
-func (s *MatchExpressionStatement) statementNode()           {}
-func (s *MatchExpressionStatement) Type() types.TypeSpec     { return s.T }
-func (s *MatchExpressionStatement) SetType(t types.TypeSpec) { s.T = t }
-func (s *MatchExpressionStatement) TokenLiteral() string     { return s.Token.Literal }
+func (s *MatchExpressionStatement) expressionNode()      {}
+func (s *MatchExpressionStatement) statementNode()       {}
+func (s *MatchExpressionStatement) Type() types.Type     { return s.T }
+func (s *MatchExpressionStatement) SetType(t types.Type) { s.T = t }
+func (s *MatchExpressionStatement) TokenLiteral() string { return s.Token.Literal }
 func (s *MatchExpressionStatement) String() string {
 	var out bytes.Buffer
 
@@ -651,25 +663,31 @@ func (s *MatchExpressionStatement) String() string {
 }
 
 type MatchCase struct {
-	Token     token.Token // case or else token
-	Predicate Expression
-	Body      []Node
+	Token      token.Token // case or else token
+	Predicates []Expression
+	Body       []Node
 
 	// Set by semsis only if used as
 	// expression.
-	T types.TypeSpec
+	T types.Type
 }
 
-func (mc *MatchCase) expressionNode()          {}
-func (mc *MatchCase) Type() types.TypeSpec     { return mc.T }
-func (mc *MatchCase) SetType(t types.TypeSpec) {}
-func (mc *MatchCase) TokenLiteral() string     { return mc.Token.Literal }
+func (mc *MatchCase) expressionNode()      {}
+func (mc *MatchCase) Type() types.Type     { return mc.T }
+func (mc *MatchCase) SetType(t types.Type) {}
+func (mc *MatchCase) TokenLiteral() string { return mc.Token.Literal }
 func (mc *MatchCase) String() string {
 	var out bytes.Buffer
 
 	out.WriteString(mc.Token.Literal)
-	if mc.Predicate != nil {
-		out.WriteString(" " + mc.Predicate.String())
+	if len(mc.Predicates) > 0 {
+		out.WriteString(" ")
+		for i, pred := range mc.Predicates {
+			out.WriteString(pred.String())
+			if i != len(mc.Predicates)-1 {
+				out.WriteString(", ")
+			}
+		}
 	}
 	out.WriteString(": ")
 	for i, r := range mc.Body {
@@ -687,9 +705,14 @@ type ErrorStatement struct {
 	Name   *Identifier
 	Params []*ParameterStatement
 	Public bool
+
+	T *types.Error
 }
 
-func (es *ErrorStatement) statementNode()       {}
+func (es *ErrorStatement) statementNode() {}
+func (es *ErrorStatement) Type() types.Type {
+	return es.T
+}
 func (es *ErrorStatement) TokenLiteral() string { return es.Token.Literal }
 func (es *ErrorStatement) String() string {
 	var out bytes.Buffer
@@ -702,13 +725,13 @@ func (es *ErrorStatement) String() string {
 
 	// Add parameters if they exist
 	if len(es.Params) > 0 {
-		out.WriteString("(")
+		out.WriteString("{")
 		params := []string{}
 		for _, p := range es.Params {
 			params = append(params, p.String())
 		}
 		out.WriteString(strings.Join(params, ", "))
-		out.WriteString(")")
+		out.WriteString("}")
 	}
 
 	return out.String()
@@ -719,10 +742,10 @@ type RaiseStatement struct {
 	Error Expression
 }
 
-func (s *RaiseStatement) statementNode()           {}
-func (s *RaiseStatement) Type() types.TypeSpec     { return &types.Error{} }
-func (s *RaiseStatement) SetType(t types.TypeSpec) {}
-func (s *RaiseStatement) TokenLiteral() string     { return s.Token.Literal }
+func (s *RaiseStatement) statementNode()       {}
+func (s *RaiseStatement) Type() types.Type     { return &types.Error{} }
+func (s *RaiseStatement) SetType(t types.Type) {}
+func (s *RaiseStatement) TokenLiteral() string { return s.Token.Literal }
 func (s *RaiseStatement) String() string {
 	var out bytes.Buffer
 	out.WriteString(s.Token.Literal)
@@ -730,6 +753,23 @@ func (s *RaiseStatement) String() string {
 	if s.Error != nil {
 		out.WriteString(s.Error.String())
 	}
+	return out.String()
+}
+
+type GenericParameter struct {
+	Name       *Identifier
+	Constraint types.Type
+}
+
+func (g *GenericParameter) String() string {
+	var out bytes.Buffer
+
+	out.WriteString(g.Name.String())
+	if g.Constraint != nil {
+		out.WriteString(" ")
+		out.WriteString(g.Constraint.String())
+	}
+
 	return out.String()
 }
 
@@ -741,24 +781,25 @@ func (s *RaiseStatement) String() string {
 //		return a + b
 //	}
 type FunctionExpression struct {
-	Attributes   []Attribute
-	Public       bool        // pub fn
-	Token        token.Token // The 'fn' token
-	Name         *Identifier
-	Arguments    []*ParameterStatement
-	ErrorProne   bool
-	ReturnValues []*TypeLiteral
+	Attributes        []Attribute
+	Public            bool        // pub fn
+	Token             token.Token // The 'fn' token
+	Name              *Identifier
+	GenericParameters []*GenericParameter
+	Arguments         []*ParameterStatement
+	ErrorProne        bool
+	ReturnValues      []*TypeLiteral
 
 	Body *BlockStatement
 
 	// Set by semantic analysis based on arguments
-	T           types.TypeSpec
+	T           types.Type
 	IsVariadic  bool
 	IsAnonymous bool
 }
 
-func (fl *FunctionExpression) expressionNode()          {}
-func (fl *FunctionExpression) SetType(t types.TypeSpec) {}
+func (fl *FunctionExpression) expressionNode()      {}
+func (fl *FunctionExpression) SetType(t types.Type) {}
 func (fl *FunctionExpression) HasAttribute(attrT AttributeType) bool {
 	for _, attr := range fl.Attributes {
 		if attr.Equal(attrT) {
@@ -767,7 +808,7 @@ func (fl *FunctionExpression) HasAttribute(attrT AttributeType) bool {
 	}
 	return false
 }
-func (fl *FunctionExpression) Type() types.TypeSpec { return fl.T }
+func (fl *FunctionExpression) Type() types.Type     { return fl.T }
 func (fl *FunctionExpression) TokenLiteral() string { return fl.Token.Literal }
 func (fl *FunctionExpression) String() string {
 	var out bytes.Buffer
@@ -785,6 +826,19 @@ func (fl *FunctionExpression) String() string {
 	if !fl.IsAnonymous {
 		out.WriteString(" " + fl.Name.TokenLiteral())
 	}
+
+	// print generic parameters
+	if len(fl.GenericParameters) > 0 {
+		out.WriteString("[")
+		for i, gp := range fl.GenericParameters {
+			out.WriteString(gp.String())
+			if i != len(fl.GenericParameters)-1 {
+				out.WriteString(", ")
+			}
+		}
+		out.WriteString("]")
+	}
+
 	// print arguments
 	args := make([]string, 0, len(fl.Arguments))
 	out.WriteString("(")
@@ -821,13 +875,13 @@ type IfElseExpression struct {
 
 	// Set by semsis. If nil it
 	// means if else used as statement
-	T types.TypeSpec
+	T types.Type
 }
 
-func (s *IfElseExpression) expressionNode()          {}
-func (s *IfElseExpression) Type() types.TypeSpec     { return s.T }
-func (s *IfElseExpression) SetType(t types.TypeSpec) { s.T = t }
-func (s *IfElseExpression) TokenLiteral() string     { return s.Token.Literal }
+func (s *IfElseExpression) expressionNode()      {}
+func (s *IfElseExpression) Type() types.Type     { return s.T }
+func (s *IfElseExpression) SetType(t types.Type) { s.T = t }
+func (s *IfElseExpression) TokenLiteral() string { return s.Token.Literal }
 func (s *IfElseExpression) String() string {
 	var out bytes.Buffer
 
@@ -866,22 +920,36 @@ func (e *ConditionalExpression) String() string {
 }
 
 type FunctionCallExpression struct {
-	Token       token.Token // The function identifier
-	Arguments   []Expression
-	ReturnTypes []types.TypeSpec
+	Token          token.Token // The function identifier
+	TypeParameters []types.Type
+	Arguments      []Expression
+	ReturnTypes    []types.Type
 
 	// Set by semantic analysis
-	T             types.TypeSpec
+	T             types.Type
 	IsAnonymousFn bool
 }
 
-func (e *FunctionCallExpression) expressionNode()          {}
-func (e *FunctionCallExpression) SetType(t types.TypeSpec) {}
-func (e *FunctionCallExpression) Type() types.TypeSpec     { return e.T }
-func (e *FunctionCallExpression) TokenLiteral() string     { return e.Token.Literal }
+func (e *FunctionCallExpression) expressionNode() {}
+func (e *FunctionCallExpression) SetType(t types.Type) {
+	e.T = t
+}
+func (e *FunctionCallExpression) Type() types.Type     { return e.T }
+func (e *FunctionCallExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *FunctionCallExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(e.Token.Literal)
+
+	// Print type parameters if present
+	if len(e.TypeParameters) > 0 {
+		out.WriteString("[")
+		typeParams := make([]string, 0, len(e.TypeParameters))
+		for _, tp := range e.TypeParameters {
+			typeParams = append(typeParams, tp.String())
+		}
+		out.WriteString(strings.Join(typeParams, ", "))
+		out.WriteString("]")
+	}
 
 	args := make([]string, 0, len(e.Arguments))
 	for _, arg := range e.Arguments {
@@ -900,13 +968,13 @@ type PrefixExpression struct {
 	Right    Expression
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (e *PrefixExpression) expressionNode()          {}
-func (e *PrefixExpression) Type() types.TypeSpec     { return e.T }
-func (e *PrefixExpression) SetType(t types.TypeSpec) { e.T = t }
-func (e *PrefixExpression) TokenLiteral() string     { return e.Token.Literal }
+func (e *PrefixExpression) expressionNode()      {}
+func (e *PrefixExpression) Type() types.Type     { return e.T }
+func (e *PrefixExpression) SetType(t types.Type) { e.T = t }
+func (e *PrefixExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *PrefixExpression) String() string {
 	var out bytes.Buffer
 
@@ -923,19 +991,30 @@ type InfixExpression struct {
 	Right    Expression
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (e *InfixExpression) expressionNode()          {}
-func (e *InfixExpression) Type() types.TypeSpec     { return e.T }
-func (e *InfixExpression) SetType(t types.TypeSpec) { e.T = t }
-func (e *InfixExpression) TokenLiteral() string     { return e.Token.Literal }
+func (e *InfixExpression) expressionNode()      {}
+func (e *InfixExpression) Type() types.Type     { return e.T }
+func (e *InfixExpression) SetType(t types.Type) { e.T = t }
+func (e *InfixExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *InfixExpression) String() string {
 	var out bytes.Buffer
 
 	out.WriteString("(")
-	out.WriteString(e.Left.String())
-	out.WriteString(" " + e.Operator + " ")
+
+	// Special handling for assignment operations to include type annotations
+	if e.Operator == "=" {
+		out.WriteString(e.Left.String())
+		if e.Left.Type() != nil {
+			out.WriteString(" " + e.Left.Type().String())
+		}
+		out.WriteString(" " + e.Operator + " ")
+	} else {
+		out.WriteString(e.Left.String())
+		out.WriteString(" " + e.Operator + " ")
+	}
+
 	if e.Right != nil {
 		out.WriteString(e.Right.String())
 	}
@@ -948,12 +1027,12 @@ type PostfixExpression struct {
 	Token token.Token // The postfix token, e.g. ++
 	Left  Expression
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (e *PostfixExpression) expressionNode()      {}
-func (e *PostfixExpression) Type() types.TypeSpec { return e.T }
-func (e *PostfixExpression) SetType(t types.TypeSpec) {
+func (e *PostfixExpression) expressionNode()  {}
+func (e *PostfixExpression) Type() types.Type { return e.T }
+func (e *PostfixExpression) SetType(t types.Type) {
 	e.T = t
 }
 func (e *PostfixExpression) TokenLiteral() string { return e.Token.Literal }
@@ -972,12 +1051,12 @@ type DotExpression struct {
 	Right Expression
 
 	// set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (e *DotExpression) expressionNode()      {}
-func (e *DotExpression) Type() types.TypeSpec { return e.T }
-func (e *DotExpression) SetType(t types.TypeSpec) {
+func (e *DotExpression) expressionNode()  {}
+func (e *DotExpression) Type() types.Type { return e.T }
+func (e *DotExpression) SetType(t types.Type) {
 	e.T = t
 }
 func (e *DotExpression) TokenLiteral() string { return e.Token.Literal }
@@ -995,12 +1074,12 @@ type TryExpression struct {
 	Token token.Token
 	Right Expression
 
-	T types.TypeSpec
+	T types.Type
 }
 
-func (s *TryExpression) expressionNode()      {}
-func (s *TryExpression) Type() types.TypeSpec { return s.Right.Type() }
-func (s *TryExpression) SetType(t types.TypeSpec) {
+func (s *TryExpression) expressionNode()  {}
+func (s *TryExpression) Type() types.Type { return s.Right.Type() }
+func (s *TryExpression) SetType(t types.Type) {
 	s.T = t
 }
 func (s *TryExpression) TokenLiteral() string { return s.Token.Literal }
@@ -1019,10 +1098,10 @@ type CatchExpression struct {
 	Block *BlockStatement
 }
 
-func (s *CatchExpression) expressionNode()          {}
-func (s *CatchExpression) Type() types.TypeSpec     { return &types.Function{} } // NOTE: this might need to be changed
-func (s *CatchExpression) SetType(t types.TypeSpec) {}
-func (s *CatchExpression) TokenLiteral() string     { return s.Token.Literal }
+func (s *CatchExpression) expressionNode()      {}
+func (s *CatchExpression) Type() types.Type     { return &types.Function{} } // NOTE: this might need to be changed
+func (s *CatchExpression) SetType(t types.Type) {}
+func (s *CatchExpression) TokenLiteral() string { return s.Token.Literal }
 func (s *CatchExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(s.Left.String() + " ")
@@ -1035,145 +1114,15 @@ func (s *CatchExpression) String() string {
 	return out.String()
 }
 
-// Example tree: v = a[0][0]
-//
-//	  Index
-//	 /     \
-//	a     [0,0]
-type IndexExpression struct {
-	Token   token.Token // [
-	Left    Expression
-	Indices []Expression
-}
-
-func (e *IndexExpression) expressionNode() {}
-func (e *IndexExpression) SetType(t types.TypeSpec) {
-	panic("this method should not be used")
-}
-
-// Returns type that a variable would have when index expression executed
-// v [][]i64 = a[0][0]
-// Type() == i64
-func (e *IndexExpression) Type() types.TypeSpec {
-	depth := len(e.Indices)
-	return e.GetTypeAt(depth)
-}
-
-// a = [[1,2], [3,4]]
-// GetTypeAt(0) == [][]i64
-// GetTypeAt(1) == []i64
-// GetTypeAt(2) == i64
-// GetTypeAt(3) == panic!
-func (e *IndexExpression) GetTypeAt(depth int) types.TypeSpec {
-	typ := e.Left.Type()
-	if typ == nil {
-		return nil
-	}
-start:
-	if depth == 0 {
-		return typ
-	}
-	switch t := typ.(type) {
-	// array type definitions are indexable like arrays
-	case *types.Definition:
-		typ = t.Underlying
-		goto start
-	case *types.Dirty:
-		typ = t.T
-		goto start
-	// strings are also indexable like arrays
-	case *types.String:
-		depth--
-		typ = &types.ConstByte
-		goto start
-	case *types.Array:
-		typ = t.T
-		depth--
-		goto start
-	}
-	return nil
-}
-func (e *IndexExpression) TokenLiteral() string { return e.Token.Literal }
-func (e *IndexExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Left.String())
-	for _, idx := range e.Indices {
-		out.WriteString("[" + idx.String() + "]")
-	}
-
-	return out.String()
-}
-
-// arr[1:3][0:1]
-type SliceExpression struct {
-	Token   token.Token
-	Left    Expression
-	Indices []Expression
-
-	// Set by semantical analysis
-	// Ts []types.TypeSpec
-}
-
-func (e *SliceExpression) expressionNode()          {}
-func (e *SliceExpression) Type() types.TypeSpec     { return e.Left.Type() }
-func (e *SliceExpression) SetType(t types.TypeSpec) {}
-func (e *SliceExpression) TokenLiteral() string     { return e.Token.Literal }
-func (e *SliceExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Left.String())
-	for _, idx := range e.Indices {
-		out.WriteString("[" + idx.String() + "]")
-	}
-
-	return out.String()
-}
-
-// x^
-type CopyExpression struct {
-	Token token.Token
-	Ident Expression
-}
-
-func (e *CopyExpression) expressionNode()          {}
-func (e *CopyExpression) Type() types.TypeSpec     { return e.Ident.Type() }
-func (e *CopyExpression) SetType(t types.TypeSpec) {}
-func (e *CopyExpression) TokenLiteral() string     { return e.Token.Literal }
-func (e *CopyExpression) String() string {
-	return e.Ident.String() + e.TokenLiteral()
-}
-
-// x^ { x.field = 2 }
-type CopyUpdateExpression struct {
-	Token token.Token
-	Ident Expression
-	Block *BlockStatement
-}
-
-func (e *CopyUpdateExpression) expressionNode()          {}
-func (e *CopyUpdateExpression) Type() types.TypeSpec     { return e.Ident.Type() }
-func (e *CopyUpdateExpression) SetType(t types.TypeSpec) {}
-func (e *CopyUpdateExpression) TokenLiteral() string     { return e.Token.Literal }
-func (e *CopyUpdateExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.Ident.String())
-	out.WriteString(e.TokenLiteral())
-	out.WriteString(" " + e.Block.String())
-
-	return out.String()
-}
-
 type TypeLiteral struct {
 	Token token.Token
-	T     types.TypeSpec
+	T     types.Type
 }
 
-func (e *TypeLiteral) expressionNode()          {}
-func (e *TypeLiteral) Type() types.TypeSpec     { return e.T }
-func (e *TypeLiteral) SetType(t types.TypeSpec) { e.T = t }
-func (e *TypeLiteral) TokenLiteral() string     { return e.Token.Literal }
+func (e *TypeLiteral) expressionNode()      {}
+func (e *TypeLiteral) Type() types.Type     { return e.T }
+func (e *TypeLiteral) SetType(t types.Type) { e.T = t }
+func (e *TypeLiteral) TokenLiteral() string { return e.Token.Literal }
 func (e *TypeLiteral) String() string {
 	return e.T.String()
 }
@@ -1181,13 +1130,13 @@ func (e *TypeLiteral) String() string {
 type TypeCastExpression struct {
 	Token    token.Token
 	Argument Expression
-	Typ      types.TypeSpec
+	Typ      types.Type
 }
 
-func (e *TypeCastExpression) expressionNode()          {}
-func (e *TypeCastExpression) Type() types.TypeSpec     { return e.Typ }
-func (e *TypeCastExpression) SetType(t types.TypeSpec) { e.Typ = t }
-func (e *TypeCastExpression) TokenLiteral() string     { return e.Token.Literal }
+func (e *TypeCastExpression) expressionNode()      {}
+func (e *TypeCastExpression) Type() types.Type     { return e.Typ }
+func (e *TypeCastExpression) SetType(t types.Type) { e.Typ = t }
+func (e *TypeCastExpression) TokenLiteral() string { return e.Token.Literal }
 func (e *TypeCastExpression) String() string {
 	var out bytes.Buffer
 
@@ -1197,37 +1146,14 @@ func (e *TypeCastExpression) String() string {
 	return out.String()
 }
 
-type UseExpression struct {
-	Token token.Token
-	Ident *Identifier
-	Block *BlockStatement
-
-	// Set by semsis
-	T types.TypeSpec
-}
-
-func (e *UseExpression) expressionNode()          {}
-func (e *UseExpression) Type() types.TypeSpec     { return e.T }
-func (e *UseExpression) SetType(t types.TypeSpec) { e.T = t }
-func (e *UseExpression) TokenLiteral() string     { return e.Token.Literal }
-func (e *UseExpression) String() string {
-	var out bytes.Buffer
-
-	out.WriteString(e.TokenLiteral() + " ")
-	out.WriteString(e.Ident.TokenLiteral() + " ")
-	out.WriteString(e.Block.String())
-
-	return out.String()
-}
-
 type Comment struct {
 	Token token.Token
 }
 
-func (e *Comment) expressionNode()          {}
-func (e *Comment) Type() types.TypeSpec     { return nil }
-func (e *Comment) SetType(t types.TypeSpec) {}
-func (e *Comment) TokenLiteral() string     { return e.Token.Literal }
+func (e *Comment) expressionNode()      {}
+func (e *Comment) Type() types.Type     { return nil }
+func (e *Comment) SetType(t types.Type) {}
+func (e *Comment) TokenLiteral() string { return e.Token.Literal }
 func (e *Comment) String() string {
 	return e.TokenLiteral()
 }
@@ -1241,36 +1167,51 @@ type IntegerLiteral struct {
 	Value int64
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (l *IntegerLiteral) expressionNode()          {}
-func (l *IntegerLiteral) literalNode()             {}
-func (l *IntegerLiteral) Type() types.TypeSpec     { return l.T }
-func (l *IntegerLiteral) SetType(t types.TypeSpec) { l.T = t }
-func (l *IntegerLiteral) TokenLiteral() string     { return l.Token.Literal }
-func (l *IntegerLiteral) String() string           { return l.Token.Literal }
+func (l *IntegerLiteral) expressionNode()      {}
+func (l *IntegerLiteral) literalNode()         {}
+func (l *IntegerLiteral) Type() types.Type     { return l.T }
+func (l *IntegerLiteral) SetType(t types.Type) { l.T = t }
+func (l *IntegerLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *IntegerLiteral) String() string       { return l.Token.Literal }
+
+type HexLiteral struct {
+	Token token.Token
+	Value uint64
+
+	// Set by semsis
+	T types.Type
+}
+
+func (l *HexLiteral) expressionNode()      {}
+func (l *HexLiteral) literalNode()         {}
+func (l *HexLiteral) Type() types.Type     { return l.T }
+func (l *HexLiteral) SetType(t types.Type) { l.T = t }
+func (l *HexLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *HexLiteral) String() string       { return l.Token.Literal }
 
 type BooleanLiteral struct {
 	Token token.Token
 	Value bool
 }
 
-func (l *BooleanLiteral) expressionNode()          {}
-func (l *BooleanLiteral) Type() types.TypeSpec     { return &types.ConstBool }
-func (l *BooleanLiteral) SetType(t types.TypeSpec) {}
-func (l *BooleanLiteral) TokenLiteral() string     { return l.Token.Literal }
-func (l *BooleanLiteral) String() string           { return l.Token.Literal }
+func (l *BooleanLiteral) expressionNode()      {}
+func (l *BooleanLiteral) Type() types.Type     { return &types.ConstBool }
+func (l *BooleanLiteral) SetType(t types.Type) {}
+func (l *BooleanLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *BooleanLiteral) String() string       { return l.Token.Literal }
 
 type StringLiteral struct {
 	Token token.Token
 }
 
-func (l *StringLiteral) expressionNode()          {}
-func (l *StringLiteral) literalNode()             {}
-func (l *StringLiteral) Type() types.TypeSpec     { return &types.ConstString }
-func (l *StringLiteral) SetType(t types.TypeSpec) {}
-func (l *StringLiteral) TokenLiteral() string     { return l.Token.Literal }
+func (l *StringLiteral) expressionNode()      {}
+func (l *StringLiteral) literalNode()         {}
+func (l *StringLiteral) Type() types.Type     { return &types.ConstString }
+func (l *StringLiteral) SetType(t types.Type) {}
+func (l *StringLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *StringLiteral) String() string {
 	return `"` + l.Token.Literal + `"`
 }
@@ -1280,14 +1221,14 @@ type CharacterLiteral struct {
 	Value int32
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (l *CharacterLiteral) expressionNode()          {}
-func (l *CharacterLiteral) literalNode()             {}
-func (l *CharacterLiteral) Type() types.TypeSpec     { return l.T }
-func (l *CharacterLiteral) SetType(t types.TypeSpec) { l.T = t }
-func (l *CharacterLiteral) TokenLiteral() string     { return l.Token.Literal }
+func (l *CharacterLiteral) expressionNode()      {}
+func (l *CharacterLiteral) literalNode()         {}
+func (l *CharacterLiteral) Type() types.Type     { return l.T }
+func (l *CharacterLiteral) SetType(t types.Type) { l.T = t }
+func (l *CharacterLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *CharacterLiteral) String() string {
 	return `'` + l.Token.Literal + `'`
 }
@@ -1297,27 +1238,17 @@ type FloatLiteral struct {
 	Value float64
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (l *FloatLiteral) expressionNode()          {}
-func (l *FloatLiteral) literalNode()             {}
-func (l *FloatLiteral) Type() types.TypeSpec     { return l.T }
-func (l *FloatLiteral) SetType(t types.TypeSpec) {}
-func (l *FloatLiteral) TokenLiteral() string     { return l.Token.Literal }
-func (l *FloatLiteral) String() string           { return l.Token.Literal }
-
-type ByteLiteral struct {
-	Token token.Token
-	Value byte
+func (l *FloatLiteral) expressionNode()  {}
+func (l *FloatLiteral) literalNode()     {}
+func (l *FloatLiteral) Type() types.Type { return l.T }
+func (l *FloatLiteral) SetType(t types.Type) {
+	l.T = t
 }
-
-func (l *ByteLiteral) expressionNode()          {}
-func (l *ByteLiteral) literalNode()             {}
-func (l *ByteLiteral) Type() types.TypeSpec     { return &types.ConstByte }
-func (l *ByteLiteral) SetType(t types.TypeSpec) {}
-func (l *ByteLiteral) TokenLiteral() string     { return l.Token.Literal }
-func (l *ByteLiteral) String() string           { return l.Token.Literal }
+func (l *FloatLiteral) TokenLiteral() string { return l.Token.Literal }
+func (l *FloatLiteral) String() string       { return l.Token.Literal }
 
 // NullLiteral can be used in 3 places
 // as argument, as return value or within
@@ -1331,16 +1262,16 @@ type NullLiteral struct {
 	// type is set to the expected type of argument or
 	// return value. This is done to ensure the appropriate
 	// IR can be generated.
-	T types.TypeSpec
+	T types.Type
 }
 
 func (l *NullLiteral) expressionNode() {}
 func (l *NullLiteral) literalNode()    {}
 
 // null doesnt have a type
-func (l *NullLiteral) Type() types.TypeSpec     { return l.T }
-func (l *NullLiteral) SetType(t types.TypeSpec) { l.T = t }
-func (l *NullLiteral) TokenLiteral() string     { return l.Token.Literal }
+func (l *NullLiteral) Type() types.Type     { return l.T }
+func (l *NullLiteral) SetType(t types.Type) { l.T = t }
+func (l *NullLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *NullLiteral) String() string {
 	return l.Token.Literal
 }
@@ -1348,17 +1279,17 @@ func (l *NullLiteral) String() string {
 type ArrayLiteral struct {
 	Token  token.Token
 	Values []Expression
-	T      types.TypeSpec
+	T      types.Type
 
 	// Set by semantic analysis
 	Escapes VariableEscape
 }
 
-func (l *ArrayLiteral) expressionNode()          {}
-func (l *ArrayLiteral) literalNode()             {}
-func (l *ArrayLiteral) Type() types.TypeSpec     { return l.T }
-func (l *ArrayLiteral) SetType(t types.TypeSpec) { l.T = t }
-func (l *ArrayLiteral) TokenLiteral() string     { return l.Token.Literal }
+func (l *ArrayLiteral) expressionNode()      {}
+func (l *ArrayLiteral) literalNode()         {}
+func (l *ArrayLiteral) Type() types.Type     { return l.T }
+func (l *ArrayLiteral) SetType(t types.Type) { l.T = t }
+func (l *ArrayLiteral) TokenLiteral() string { return l.Token.Literal }
 func (l *ArrayLiteral) String() string {
 	var out bytes.Buffer
 
@@ -1377,26 +1308,47 @@ type StructLiteral struct {
 	Token token.Token
 	// Same name as in struct statement.
 	// Can be nil if anonymous struct.
-	Name   *Identifier
-	Fields []*StructFieldLiteral
+	Name           Expression // can be Identifier or DotExpression
+	TypeParameters []types.Type
+	Copy           Expression
+	Fields         []*StructFieldLiteral
 
 	// Set by semantic analysis
-	T       types.TypeSpec
+	T       types.Type
 	Escapes VariableEscape
 }
 
-func (s *StructLiteral) expressionNode()          {}
-func (l *StructLiteral) literalNode()             {}
-func (s *StructLiteral) Type() types.TypeSpec     { return s.T }
-func (s *StructLiteral) SetType(t types.TypeSpec) { s.T = t }
-func (s *StructLiteral) TokenLiteral() string     { return s.Token.Literal }
+func (s *StructLiteral) expressionNode()      {}
+func (l *StructLiteral) literalNode()         {}
+func (s *StructLiteral) Type() types.Type     { return s.T }
+func (s *StructLiteral) SetType(t types.Type) { s.T = t }
+func (s *StructLiteral) TokenLiteral() string { return s.Token.Literal }
 func (s *StructLiteral) String() string {
 	var out bytes.Buffer
 
 	if s.Name != nil {
-		out.WriteString(s.Name.TokenLiteral())
+		out.WriteString(s.Name.String())
 	}
+
+	// Print type parameters if present
+	if len(s.TypeParameters) > 0 {
+		out.WriteString("[")
+		typeParams := make([]string, 0, len(s.TypeParameters))
+		for _, tp := range s.TypeParameters {
+			typeParams = append(typeParams, tp.String())
+		}
+		out.WriteString(strings.Join(typeParams, ", "))
+		out.WriteString("]")
+	}
+
 	out.WriteString("{")
+	if s.Copy != nil {
+		out.WriteString("..")
+		out.WriteString(s.Copy.String())
+		if len(s.Fields) != 0 {
+			out.WriteString(", ")
+		}
+	}
 	for i, f := range s.Fields {
 		out.WriteString(f.String())
 		if i != len(s.Fields)-1 {
@@ -1414,14 +1366,14 @@ type StructFieldLiteral struct {
 	Value Expression
 
 	// Set by semsis
-	T types.TypeSpec
+	T types.Type
 }
 
-func (s *StructFieldLiteral) expressionNode()          {}
-func (l *StructFieldLiteral) literalNode()             {}
-func (s *StructFieldLiteral) Type() types.TypeSpec     { return s.T }
-func (s *StructFieldLiteral) SetType(t types.TypeSpec) { s.T = t }
-func (s *StructFieldLiteral) TokenLiteral() string     { return s.Token.Literal }
+func (s *StructFieldLiteral) expressionNode()      {}
+func (l *StructFieldLiteral) literalNode()         {}
+func (s *StructFieldLiteral) Type() types.Type     { return s.T }
+func (s *StructFieldLiteral) SetType(t types.Type) { s.T = t }
+func (s *StructFieldLiteral) TokenLiteral() string { return s.Token.Literal }
 func (s *StructFieldLiteral) String() string {
 	var out bytes.Buffer
 	if s.Name != nil {
@@ -1442,12 +1394,12 @@ type WildcardLiteral struct {
 	Token token.Token
 }
 
-func (s *WildcardLiteral) expressionNode()          {}
-func (l *WildcardLiteral) literalNode()             {}
-func (s *WildcardLiteral) Type() types.TypeSpec     { return nil }
-func (s *WildcardLiteral) SetType(t types.TypeSpec) {}
-func (s *WildcardLiteral) TokenLiteral() string     { return s.Token.Literal }
-func (s *WildcardLiteral) String() string           { return s.TokenLiteral() }
+func (s *WildcardLiteral) expressionNode()      {}
+func (l *WildcardLiteral) literalNode()         {}
+func (s *WildcardLiteral) Type() types.Type     { return nil }
+func (s *WildcardLiteral) SetType(t types.Type) {}
+func (s *WildcardLiteral) TokenLiteral() string { return s.Token.Literal }
+func (s *WildcardLiteral) String() string       { return s.TokenLiteral() }
 
 // ---------- //
 // Attributes //
@@ -1492,6 +1444,18 @@ func (a *BasicAttribute) String() string {
 	}
 }
 
+// IsLiteral recursively checks if a node is a literal
+func IsLiteral(n Node) bool {
+	switch n := n.(type) {
+	case Literal:
+		return true
+	case *PrefixExpression:
+		return IsLiteral(n.Right)
+	default:
+		return false
+	}
+}
+
 // ------- //
 // Sepcial //
 // ------- //
@@ -1514,10 +1478,6 @@ func (s *TypeDefinitionStatement) Pos() token.Pos {
 }
 
 func (s *TypeAliasStatement) Pos() token.Pos {
-	return s.Token.Position
-}
-
-func (s *GenericStructStatement) Pos() token.Pos {
 	return s.Token.Position
 }
 
@@ -1642,22 +1602,6 @@ func (e *CatchExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 
-func (e *IndexExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *SliceExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *CopyExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
-func (e *CopyUpdateExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
 func (e *TypeLiteral) Pos() token.Pos {
 	return e.Token.Position
 }
@@ -1666,15 +1610,15 @@ func (e *TypeCastExpression) Pos() token.Pos {
 	return e.Token.Position
 }
 
-func (e *UseExpression) Pos() token.Pos {
-	return e.Token.Position
-}
-
 func (e *Comment) Pos() token.Pos {
 	return e.Token.Position
 }
 
 func (l *IntegerLiteral) Pos() token.Pos {
+	return l.Token.Position
+}
+
+func (l *HexLiteral) Pos() token.Pos {
 	return l.Token.Position
 }
 
@@ -1691,10 +1635,6 @@ func (l *CharacterLiteral) Pos() token.Pos {
 }
 
 func (l *FloatLiteral) Pos() token.Pos {
-	return l.Token.Position
-}
-
-func (l *ByteLiteral) Pos() token.Pos {
 	return l.Token.Position
 }
 

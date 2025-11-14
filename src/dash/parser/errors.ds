@@ -1,0 +1,125 @@
+lib parser
+
+use "dash/ast"
+use "dash/lexer"
+// use "fmt"
+
+// unexpected_token error should be used
+// as the name implies; when unexpected
+// lexer tokens are encountered
+error unexpected_token {
+    i    ast.token_index
+    // want lexer.tag
+}
+
+error expected_brace {
+    i ast.token_index
+}
+
+error expected_bracket {
+    i ast.token_index
+}
+
+error expected_parenthesis {
+    i ast.token_index
+}
+
+error expected_identifier {
+    i ast.token_index
+}
+
+error expected_expression {
+    i ast.token_index
+}
+
+error expected_colon {
+    i ast.token_index
+}
+
+error expected_semicolon {
+    i ast.token_index
+}
+
+error expected_comma {
+    i ast.token_index
+}
+
+error expected_assign_or_comma {
+    i ast.token_index
+}
+
+error expected_type {
+    i ast.token_index
+}
+
+error expected_string_literal {
+    i ast.token_index
+}
+
+error expected_in {
+    i ast.token_index
+}
+
+error expected_case {
+    i ast.token_index
+}
+
+error expected_angle_bracket {
+    i ast.token_index
+}
+
+error invalid_library_name {
+    i ast.token_index
+}
+
+error invalid_statement {
+    i ast.token_index
+}
+
+error invalid_prefix_expression {
+    i ast.token_index
+}
+
+error invalid_negation {
+    i ast.index
+}
+
+error invalid_postfix_expression {
+    i ast.token_index
+}
+
+error invalid_public_decleration {
+    i ast.token_index
+}
+
+// unexpected_expression should be used
+// when a previously parsed node does
+// not match what is expected in the
+// current parsing context
+error unexpected_expression {
+    // the unexpected node
+    i ast.index
+    want string
+}
+
+error unexpected_statement {
+    i ast.index
+}
+
+error unexpected_eof {
+    i    ast.token_index
+    want lexer.tag
+}
+
+error unimplemented
+
+// fn error_to_string(err error) string {
+//     match err = err {
+//     case invalid_token:
+//         return fmt.stringf("unknown token: %d", err.i)
+//     case expected_expression:
+//         return fmt.stringf("expected expression: %d", err.i)
+//     case _:
+//         // return fmt.stringf("%s", err)
+//     }
+// }

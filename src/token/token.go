@@ -37,6 +37,7 @@ const (
 	// ------------------- //
 
 	INT
+	HEX
 	FLOAT
 	STRING
 	BOOL
@@ -47,7 +48,8 @@ const (
 	// ------------- //
 	// Type keywords //
 	// ------------- //
-
+	//any
+	ANYTYPE
 	// int
 	INTTYPE
 	// i8
@@ -85,7 +87,7 @@ const (
 	// // []T or [n]T
 	// ARRAYTYPE
 	// memory
-	MEMORYTYPE
+	MUTABLETYPE
 	// dirty
 	DIRTYTYPE
 
@@ -196,8 +198,6 @@ const (
 	PUBLIC
 	// struct
 	STRUCT
-	// gen
-	GENERIC
 	// enum
 	ENUM
 	// type
@@ -259,7 +259,6 @@ var keywords = map[string]Type{
 	"lib":    LIBRARY,
 	"main":   MAIN,
 	"struct": STRUCT,
-	"gen":    GENERIC,
 	"enum":   ENUM,
 	"type":   TYPE,
 	"alias":  ALIAS,
@@ -290,6 +289,7 @@ var keywords = map[string]Type{
 	"null":  NULL,
 
 	// Types
+	"any":    ANYTYPE,
 	"int":    INTTYPE,
 	"i8":     I8TYPE,
 	"i16":    I16TYPE,
@@ -306,7 +306,7 @@ var keywords = map[string]Type{
 	"byte":   BYTETYPE,
 	"char":   CHARTYPE,
 	"bool":   BOOLTYPE,
-	"memory": MEMORYTYPE,
+	"mut":    MUTABLETYPE,
 	"dirty":  DIRTYTYPE,
 
 	//

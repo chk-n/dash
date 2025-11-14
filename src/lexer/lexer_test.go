@@ -165,6 +165,7 @@ func TestNextToken(t *testing.T) {
 		{
 			name: "type keywords",
 			input: `
+				any
 				int
 				i8
 				i16
@@ -181,9 +182,10 @@ func TestNextToken(t *testing.T) {
 				bool
 				byte
 				char
-				memory
+				mut
 			`,
 			tokens: []wantToken{
+				{"any", token.ANYTYPE},
 				{"int", token.INTTYPE},
 				{"i8", token.I8TYPE},
 				{"i16", token.I16TYPE},
@@ -200,7 +202,7 @@ func TestNextToken(t *testing.T) {
 				{"bool", token.BOOLTYPE},
 				{"byte", token.BYTETYPE},
 				{"char", token.CHARTYPE},
-				{"memory", token.MEMORYTYPE},
+				{"mut", token.MUTABLETYPE},
 			},
 		},
 		{
@@ -209,7 +211,6 @@ func TestNextToken(t *testing.T) {
 				lib
 				pub
 				struct
-				gen
 				enum
 				type
 				fn
@@ -237,7 +238,6 @@ func TestNextToken(t *testing.T) {
 				{"lib", token.LIBRARY},
 				{"pub", token.PUBLIC},
 				{"struct", token.STRUCT},
-				{"gen", token.GENERIC},
 				{"enum", token.ENUM},
 				{"type", token.TYPE},
 				{"fn", token.FUNCTION},
@@ -297,6 +297,21 @@ func TestNextToken(t *testing.T) {
 				{"// some comment", token.COMMENT},
 				{"// other comment //", token.COMMENT},
 				{"// \"fn\"", token.COMMENT},
+			},
+		},
+		{
+			name: "char",
+			input: `
+				'a'
+				'\n'
+				'\''
+				'\\'
+			`,
+			tokens: []wantToken{
+				{"a", token.CHAR},
+				{`\n`, token.CHAR},
+				{`\'`, token.CHAR},
+				{`\\`, token.CHAR},
 			},
 		},
 	}

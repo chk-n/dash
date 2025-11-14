@@ -10,7 +10,11 @@ import (
 
 func isBuiltinFunction(lit string) bool {
 	switch lit {
-	case "len", "cap", "size", "make", "validate", "println", "assert":
+	case
+		"put", "get", //"remove",
+		"append", "slice",
+		"len", "cap",
+		"size", "make", "validate", "println", "assert":
 		return true
 	}
 	return false
@@ -18,62 +22,96 @@ func isBuiltinFunction(lit string) bool {
 
 // Constant argument and return types for built-in fns
 var (
-	intRetT     = []types.TypeSpec{&types.ConstI64}
-	genericArgT = []types.TypeSpec{&types.Generic{Name: "T"}}
+	intRetT     = []types.Type{&types.ConstI64}
+	genericArgT = []types.Type{&types.Generic{Name: "T"}}
 )
 
-func getBuiltinSignature(lit string, argsTypes []types.TypeSpec) *ast.FunctionExpression {
-	var args []types.TypeSpec
-	var rets []types.TypeSpec
+func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpression {
+	var args []types.Type
+	var rets []types.Type
 	var errorProne bool
 
 	switch lit {
+	case "append":
+		// fn append[T any](arr []T, el T) []T
+		// fn append[T any](arr []T. arr2 []T) []T
+		args = []types.Type{argsTypes[0], argsTypes[1]}
+		rets = []types.Type{argsTypes[0]}
+		errorProne = true
+	case "put":
+		// fn put[T any](arr []T, idx i64, T)! []T
+		arrType := types.GetUnderlyingTypeArray(argsTypes[0])
+		args = []types.Type{arrType, argsTypes[1], arrType.T}
+		rets = []types.Type{argsTypes[0]}
+		errorProne = true
+	case "get":
+		// fn get[T any](arr []T, idx i64)! T
+		var elemType types.Type
+		switch argsTypes[0].(type) {
+		case *types.String:
+			elemType = &types.ConstByte
+		default:
+			elemType = types.GetUnderlyingTypeArray(argsTypes[0]).T
+		}
+		args = []types.Type{argsTypes[0], argsTypes[1]}
+		rets = []types.Type{elemType}
+		errorProne = true
+	case "slice":
+		// fn slice[T any](arr []T, start i64, end i64)! []T
+		// TODO: assert argsTypes[1] and argsTypes[2] is *types.Int
+		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
+		rets = []types.Type{argsTypes[0]}
+		errorProne = true
 	case "len":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		// fn len[T any](arr []T) i64
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "len", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
 				&types.String{},
-				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
 		rets = intRetT
 	case "cap":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		// fn cap[T any](arr []T) i64
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "cap", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
-				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
 		rets = intRetT
 	case "size":
+		// fn size[T any](x T) i64
 		args = genericArgT
 		rets = intRetT
 	case "make":
 		// if initial value omitted, don't add third argument type
 		if len(argsTypes) < 3 {
-			args = []types.TypeSpec{&types.Type{T: argsTypes[0]}, &types.ConstI64}
+			args = []types.Type{argsTypes[0], &types.ConstI64}
 		} else {
-			args = []types.TypeSpec{&types.Type{T: argsTypes[0]}, &types.ConstI64, argsTypes[2]}
+			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
 		}
-		rets = []types.TypeSpec{&types.Memory{T: argsTypes[0]}}
+		rets = []types.Type{&types.Mutable{T: argsTypes[0]}}
+		errorProne = true
 	case "validate":
-		args = []types.TypeSpec{&types.Dirty{T: &types.Generic{Name: "T"}}}
-		rets = []types.TypeSpec{&types.ConstBool}
+		args = []types.Type{&types.Dirty{T: &types.Generic{Name: "T"}}}
+		rets = []types.Type{&types.ConstBool}
 	case "println":
-		args = []types.TypeSpec{
-			&types.Generic{Name: "T", Constraints: []types.TypeSpec{
+		args = []types.Type{
+			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.ConstString,
-				&types.Generic{Name: "T"},
+				&types.ConstAny,
 			}},
 		}
 	case "assert":
 		// builtin function that with type fn(bool, string)!
 		// it is error prone
-		args = []types.TypeSpec{&types.ConstBool, &types.ConstString}
+		args = []types.Type{&types.ConstBool, &types.ConstString}
 		errorProne = true
 	default:
 		return nil

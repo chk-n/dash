@@ -15,9 +15,9 @@ fn test_next_token()! {
         {"!=", tag.NEQ},
         {"=", tag.ASSGN},
         {">", tag.GT},
-        {">=", tag.GEQ},
+        {">=", tag.GTE},
         {"<", tag.LT},
-        {"<=", tag.LEQ},
+        {"<=", tag.LTE},
         {">>", tag.RSH},
         {"<<", tag.LSH},
         {"&", tag.AND},
@@ -44,9 +44,28 @@ fn test_next_token()! {
         {";", tag.SEMICOLON},
         {"@", tag.AT},
         // identifiers
+        {"_", tag.IDENT},
         {"abc", tag.IDENT},
-        {"i64", tag.IDENT},
         {"ifelse", tag.IDENT},
+        // type literals
+        {"u8", tag.U8_TYPE},
+        {"u16", tag.U16_TYPE},
+        {"u32", tag.U32_TYPE},
+        {"u64", tag.U64_TYPE},
+        {"i8", tag.I8_TYPE},
+        {"i16", tag.I16_TYPE},
+        {"i32", tag.I32_TYPE},
+        {"i64", tag.I64_TYPE},
+        {"int", tag.INT_TYPE},
+        {"f32", tag.F32_TYPE},
+        {"f64", tag.F64_TYPE},
+        {"float", tag.FLOAT_TYPE},
+        {"char", tag.CHAR_TYPE},
+        {"string", tag.STRING_TYPE},
+        {"bool", tag.BOOL_TYPE},
+        {"error", tag.ERROR},
+        {"mut", tag.MUT_TYPE},
+        {"any", tag.ANY_TYPE},
         // keywords
         {"pub", tag.PUB},
         {"lib", tag.LIB},
@@ -77,13 +96,13 @@ fn test_next_token()! {
     ]
 
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
-        let l, let tkn = next_tkn(l)
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
 
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.0, "literal mismatch")
     }
 }
@@ -94,17 +113,20 @@ fn test_string()! {
         {`""`, tag.STRING},                   
         {`"hello world"`, tag.STRING},        
         {`"hello\nworld"`, tag.STRING},       
-        // {`"`, tag.ILLEGAL},                   
+        {`"`, tag.ILLEGAL},                   
+        {`"a`, tag.ILLEGAL},                   
+        {`"a/`, tag.ILLEGAL},                   
+        {`"a/b`, tag.ILLEGAL},                   
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
-        let l, let tkn = next_tkn(l)
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.0, "literal mismatch")
     }
 }
@@ -120,18 +142,61 @@ fn test_number()! {
         {"123.", tag.FLOAT, "123."},                 
         {".123", tag.DOT, "."},               
         {"123.456.789", tag.ILLEGAL, "123.456."},        
+        {"123_", tag.ILLEGAL, "123_"},        
+        {"123__", tag.ILLEGAL, "123__"},        
         {"0..", tag.ILLEGAL, "0.."},
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
-        let l, let tkn = next_tkn(l)
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = try get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
+fn test_bool()! {
+    let tests = [
+        {"false", tag.BOOL, "false"},                      
+        {"true", tag.BOOL, "true"},                      
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = try get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
+fn test_char()! {
+    let tests = [
+        {`'a'`, tag.CHAR},        
+        {`'\n'`, tag.CHAR},       
+        {`'`, tag.ILLEGAL},                   
+        {`''`, tag.ILLEGAL},                   
+        {`'a`, tag.ILLEGAL},                   
+    ]
+    
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
-        try assert(lit == tc.2, "literal mismatch")
+        let lit = try get_literal(l, tkn)
+        try assert(lit == tc.0, "literal mismatch")
     }
 }
 
@@ -151,9 +216,9 @@ fn test_comment()! {
 ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
-        let l, let tkn = next_tkn(l)
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
         
         try assert(tkn.tag == tc.1, "token type mismatch")
     }
@@ -169,41 +234,41 @@ fn test_whitespace()! {
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
-        let l, let tkn = next_tkn(l)
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
+        let l, let tkn = try next_tkn(l)
        
         try assert(tkn.tag == tc.1, "token type mismatch")
 
-        let lit = get_literal(l, tkn)
+        let lit = try get_literal(l, tkn)
         try assert(lit == tc.2, "literal mismatch")
     }
 }
 
-// TODO: improve this test with token type array
+
 @test
 fn test_sequential()! {
     let tests = [
-        {"a+b", 3},
-        {"if(x>10){return true}", 10},
-        {"let x = 123 + 456", 6},
-        {"fn add(a, b int) { return a + b }", 14},
+        {`a("b")`, [tag.IDENT, tag.LPAREN, tag.STRING, tag.RPAREN]},       
+        {"a+b", [tag.IDENT, tag.ADD, tag.IDENT]},
+        {"if x>10 {return}", [tag.IF, tag.IDENT, tag.GT, tag.INT, tag.LBRACE, tag.RETURN, tag.RBRACE]},
+        {"let x = 123 + 456", [tag.LET, tag.IDENT, tag.ASSGN, tag.INT, tag.ADD, tag.INT]},
     ]
     
     for i = 0; i < len(tests); i++ {
-        let tc = tests[i]
-        let l = new([]byte(tc.0))
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0)
         
         var count = 0
         for {
-            let l, let tkn = next_tkn(l)
-            let lit = get_literal(l, tkn)
+            let l, let tkn = try next_tkn(l)
+            let lit = try get_literal(l, tkn)
             if tkn.tag == tag.EOF {
                 break
             }
+            let want = try get(tc.1, count)
+            try assert(tkn.tag == want, "token type mismatch")
             count = count + 1
         }
-        
-        try assert(count == tc.1, "token count mismatch")
     }
 }

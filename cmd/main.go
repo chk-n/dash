@@ -49,7 +49,7 @@ func main() {
 		if *testRecursive {
 			tr := tester.NewTestRunner(dir)
 			if err := tr.RunAll(); err != nil {
-				fmt.Println("unable to run tests:", err)
+				fmt.Println(err)
 				os.Exit(1)
 			}
 		} else {

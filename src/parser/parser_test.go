@@ -1,8 +1,10 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
+	"dash-lang.io/src/ast"
 	"dash-lang.io/src/lexer"
 )
 
@@ -45,7 +47,7 @@ func TestType(t *testing.T) {
 		{
 			name:  "array imported type",
 			input: "[]ast.token",
-			want:  "[]ast.unknown<token>",
+			want:  "[]ast.unknown[token]",
 		},
 		{
 			name:  "function empty",
@@ -84,18 +86,53 @@ func TestType(t *testing.T) {
 		},
 		{
 			name:  "memory",
-			input: "memory<string>",
-			want:  "memory<string>",
+			input: "mut[string]",
+			want:  "mut[string]",
 		},
 		{
 			name:  "memory nested",
-			input: "memory<[]i64>",
-			want:  "memory<[]i64>",
+			input: "mut[[]i64]",
+			want:  "mut[[]i64]",
 		},
 		{
 			name:  "char",
 			input: "char",
 			want:  "char",
+		},
+		{
+			name:  "error type",
+			input: "error",
+			want:  "error",
+		},
+		{
+			name:  "any",
+			input: "any",
+			want:  "any",
+		},
+		{
+			name:  "any array",
+			input: "[]any",
+			want:  "[]any",
+		},
+		{
+			name:  "parameterized type single",
+			input: "vec[i64]",
+			want:  "unknown[vec[i64]]",
+		},
+		{
+			name:  "parameterized type multiple",
+			input: "map[string, i64]",
+			want:  "unknown[map[string,i64]]",
+		},
+		{
+			name:  "nested parameterized type",
+			input: "option[vec[i64]]",
+			want:  "unknown[option[unknown[vec[i64]]]]",
+		},
+		{
+			name:  "optional parameterized type",
+			input: "?vec[i64]",
+			want:  "?unknown[vec[i64]]",
 		},
 	}
 
@@ -105,7 +142,7 @@ func TestType(t *testing.T) {
 			typ := p.parseType()
 
 			if tc.want != typ.String() {
-				t.Errorf("want %s but got %s\n%v", tc.input, typ.String(), typ)
+				t.Errorf("want %s but got %s\n%v", tc.want, typ.String(), typ)
 			}
 		})
 	}
@@ -139,6 +176,14 @@ func TestPrefixExpression(t *testing.T) {
 		{
 			name:  "force unwrap value of",
 			input: "?*a",
+		},
+		{
+			name:  "bitwise NOT",
+			input: "~a",
+		},
+		{
+			name:  "bitwise NOT with number",
+			input: "~5",
 		},
 	}
 
@@ -234,6 +279,91 @@ func TestInfixExpression(t *testing.T) {
 			name:  "dot access with arithmetic and function call",
 			input: "a.b + a.c()",
 			want:  "(a.b + a.c())",
+		},
+		{
+			name:  "bitwise left shift",
+			input: "1 << 2",
+			want:  "(1 << 2)",
+		},
+		{
+			name:  "bitwise right shift",
+			input: "8 >> 2",
+			want:  "(8 >> 2)",
+		},
+		{
+			name:  "bitwise AND",
+			input: "5 & 3",
+			want:  "(5 & 3)",
+		},
+		{
+			name:  "bitwise OR",
+			input: "5 | 3",
+			want:  "(5 | 3)",
+		},
+		{
+			name:  "bitwise XOR",
+			input: "5 ^ 3",
+			want:  "(5 ^ 3)",
+		},
+		{
+			name:  "bitwise XOR with variables",
+			input: "a ^ b",
+			want:  "(a ^ b)",
+		},
+		{
+			name:  "combined bitwise operations",
+			input: "a << 2 | b & 255",
+			want:  "((a << 2) | (b & 255))",
+		},
+		{
+			name:  "bitwise with XOR",
+			input: "a ^ b & c",
+			want:  "(a ^ (b & c))",
+		},
+		{
+			name:  "XOR with OR",
+			input: "a | b ^ c",
+			want:  "(a | (b ^ c))",
+		},
+		{
+			name:  "XOR precedence",
+			input: "1 & 2 ^ 3 | 4",
+			want:  "(((1 & 2) ^ 3) | 4)",
+		},
+		{
+			name:  "bitwise with arithmetic",
+			input: "a + b & 255",
+			want:  "((a + b) & 255)",
+		},
+		{
+			name:  "shift with arithmetic",
+			input: "1 << 2 + 3",
+			want:  "((1 << 2) + 3)",
+		},
+		{
+			name:  "complex bitwise expression",
+			input: "(a & 255) << 8 | (b & 255)",
+			want:  "(((a & 255) << 8) | (b & 255))",
+		},
+		{
+			name:  "bitwise NOT with infix",
+			input: "~a & 255",
+			want:  "(~a & 255)",
+		},
+		{
+			name:  "precedence: OR vs AND",
+			input: "a | b & c",
+			want:  "(a | (b & c))",
+		},
+		{
+			name:  "precedence: AND vs shift",
+			input: "a & b << 2",
+			want:  "(a & (b << 2))",
+		},
+		{
+			name:  "precedence: shift vs addition",
+			input: "a << b + c",
+			want:  "((a << b) + c)",
 		},
 	}
 
@@ -484,6 +614,11 @@ func TestIfElseExpression(t *testing.T) {
 			input: "if x { } else { } if z { }",
 			want:  "if x { } else { }",
 		},
+		{
+			name:  "dot expression in if else",
+			input: "if x.a { } else { }",
+			want:  "if x.a { } else { }",
+		},
 	}
 
 	for _, tc := range tests {
@@ -505,11 +640,19 @@ func TestCharLiteral(t *testing.T) {
 	}{
 		{
 			name:  "simple",
-			input: "'1'",
+			input: `'1'`,
 		},
 		{
 			name:  "newline",
-			input: "'\n'",
+			input: `'\n'`,
+		},
+		{
+			name:  "escape '",
+			input: `'\''`,
+		},
+		{
+			name:  "escape \\",
+			input: `'\\'`,
 		},
 		// 2, 4 and 8 hexadecimal code points e.g. \uE4
 	}
@@ -521,6 +664,61 @@ func TestCharLiteral(t *testing.T) {
 
 			if tc.input != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.input, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestHexLiteral(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  uint64
+	}{
+		{
+			name:  "simple hex",
+			input: `0xFF`,
+			want:  255,
+		},
+		{
+			name:  "hex with underscore",
+			input: `0xFF_FF`,
+			want:  65535,
+		},
+		{
+			name:  "lowercase hex",
+			input: `0xdeadbeef`,
+			want:  3735928559,
+		},
+		{
+			name:  "uppercase hex",
+			input: `0xDEADBEEF`,
+			want:  3735928559,
+		},
+		{
+			name:  "mixed case hex",
+			input: `0xDeAdBeEf`,
+			want:  3735928559,
+		},
+		{
+			name:  "zero",
+			input: `0x0`,
+			want:  0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseHexLiteral()
+
+			if tc.input != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.input, stmt.String(), stmt)
+			}
+
+			hexLit := stmt.(*ast.HexLiteral)
+			if hexLit.Value != tc.want {
+				t.Errorf("want value %d but got %d", tc.want, hexLit.Value)
 			}
 		})
 	}
@@ -561,41 +759,16 @@ func TestArrayLiteral(t *testing.T) {
 	}
 }
 
-func TestCopyExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "shallow copy", input: "x^", want: "x^"},
-		{
-			name:  "shallow copy with modification",
-			input: "x^ { x.field = 1 }",
-			want:  "x^ { x.field = 1 }",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := getParser(tt.input)
-			stmt := p.parseExpression(LOWEST)
-
-			if tt.want != stmt.String() {
-				t.Errorf("want %s but got %s", tt.input, stmt.String())
-			}
-		})
-	}
-}
-
 // ---------------------- //
 // Function related tests //
 // ---------------------- //
 
 func TestFunctionLiteral(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name   string
+		input  string
+		want   string
+		errors []string
 	}{
 		{
 			name: "public normal function",
@@ -638,9 +811,14 @@ func TestFunctionLiteral(t *testing.T) {
 			input: "pub fn test(args ...i64) {}",
 			want:  "pub fn test(args []i64) { }",
 		},
+		{
+			name:   "missing argument type",
+			input:  "fn test(x) {} ",
+			errors: []string{"argument 'x' missing type"},
+		},
 		// {
 		// 	name:  "ensure no infinite recursion",
-		// 	input: "fn some_func(m, memory<i64>)",
+		// 	input: "fn some_func(m, mut<i64>)",
 		// 	error: "",
 		// },
 	}
@@ -650,8 +828,21 @@ func TestFunctionLiteral(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseFunctionExpression()
 
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			// Check for expected errors
+			if tc.errors != nil {
+				if len(p.Errors()) != len(tc.errors) {
+					t.Errorf("expected %d errors but got %d", len(tc.errors), len(p.Errors()))
+				}
+				for i, err := range p.Errors() {
+					if i < len(tc.errors) && !strings.Contains(err, tc.errors[i]) {
+						t.Errorf("want error %s but got %s", tc.errors[i], err)
+					}
+				}
+			} else {
+				// Check that the function was parsed correctly when no errors expected
+				if tc.want != stmt.String() {
+					t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+				}
 			}
 		})
 	}
@@ -668,25 +859,15 @@ func TestErrorStatement(t *testing.T) {
 			input: "error divide_by_zero",
 			want:  "error divide_by_zero",
 		},
-		// {
-		// 	name:  "public error",
-		// 	input: "pub error network_error",
-		// 	want:  "pub error network_error",
-		// },
 		{
 			name:  "dynamic error with single param",
-			input: "error invalid_value(val string)",
-			want:  "error invalid_value(val string)",
+			input: "error invalid_value{val string}",
+			want:  "error invalid_value{val string}",
 		},
 		{
 			name:  "dynamic error with multiple params",
-			input: "error out_of_bounds(index i64, size i64)",
-			want:  "error out_of_bounds(index i64, size i64)",
-		},
-		{
-			name:  "error with multiple params same type",
-			input: "error invalid_range(start, end i64)",
-			want:  "error invalid_range(start, end i64)",
+			input: "error out_of_bounds{index i64 size i64}",
+			want:  "error out_of_bounds{index i64, size i64}",
 		},
 	}
 
@@ -732,6 +913,16 @@ func TestTryCatchExpression(t *testing.T) {
 			input: "other_fn(try risky_fn())",
 			want:  "other_fn(try risky_fn())",
 		},
+		{
+			name:  "try with dot access",
+			input: "try get(arr, 0).x",
+			want:  "try get(arr,0).x",
+		},
+		{
+			name:  "try with comparison expression",
+			input: "try true == get()",
+			want:  "try (true == get())",
+		},
 	}
 
 	for _, tc := range tests {
@@ -767,6 +958,11 @@ func TestErrorProneFunction(t *testing.T) {
 			input: "fn test()! { try risky() }",
 			want:  "fn test()! { try risky() }",
 		},
+		{
+			name:  "function with keyword parameter names",
+			input: "fn test(int i64, float f64, string string) {}",
+			want:  "fn test(int i64,float f64,string string) { }",
+		},
 	}
 
 	for _, tc := range tests {
@@ -797,12 +993,32 @@ func TestCallExpression(t *testing.T) {
 			input: "get(1 < 2, (1 + 2) * 3)",
 			want:  "get((1 < 2),((1 + 2) * 3))",
 		},
+		{
+			name:  "generic function call single type param",
+			input: "identity[i32](42)",
+			want:  "identity[i32](42)",
+		},
+		{
+			name:  "generic function call multiple type params",
+			input: "make_pair[i32, string](10, \"hello\")",
+			want:  `make_pair[i32, string](10,"hello")`,
+		},
+		{
+			name:  "generic function call with generic type param",
+			input: "make_box[T](value)",
+			want:  "make_box[unknown[T]](value)",
+		},
+		{
+			name:  "generic function using dot expression",
+			input: "abc.d[i32](42)",
+			want:  "abc.d[i32](42)",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
-			stmt := p.parseFunctionCallExpression()
+			stmt := p.parseExpression(LOWEST)
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
@@ -841,6 +1057,11 @@ func TestTypeCast(t *testing.T) {
 			name:  "aggregate, struct",
 			input: "abc(v)",
 			want:  "abc(v)",
+		},
+		{
+			name:  "error type cast",
+			input: `error("test message")`,
+			want:  `error("test message")`,
 		},
 	}
 
@@ -934,6 +1155,16 @@ func TestEnumStatement(t *testing.T) {
 				}`,
 			want: "enum status {running, stopped, unknown}",
 		},
+		{
+			name: "enum with type keywords",
+			input: `enum tag {
+						int
+						float
+						string
+						bool
+					}`,
+			want: "enum tag {int, float, string, bool}",
+		},
 	}
 
 	for _, tc := range tests {
@@ -983,7 +1214,7 @@ func TestTypeDefinitionStatement(t *testing.T) {
 		{
 			name:  "nested type def",
 			input: "type user abc",
-			want:  "type user unknown<abc>",
+			want:  "type user unknown[abc]",
 		},
 		{
 			name:  "with predicate",
@@ -1057,12 +1288,12 @@ func TestUnionDefinition(t *testing.T) {
 		{
 			name:  "one type",
 			input: "union abc { type_a }",
-			want:  "union abc {unknown<type_a>}",
+			want:  "union abc {unknown[type_a]}",
 		},
 		{
 			name:  "multiple types",
 			input: "union abc { type_a, type_b }",
-			want:  "union abc {unknown<type_a>, unknown<type_b>}",
+			want:  "union abc {unknown[type_a], unknown[type_b]}",
 		},
 	}
 	for _, tc := range tests {
@@ -1096,12 +1327,12 @@ func TestStructDefinition(t *testing.T) {
 		{
 			name:  "nested struct",
 			input: "struct user {x f64, friend user}",
-			want:  "struct user {x f64, friend unknown<user>}",
+			want:  "struct user {x f64, friend unknown[user]}",
 		},
 		{
-			name:  "struct - unnamed fields",
-			input: "struct point {i64, i64}",
-			want:  "struct point {i64, i64}",
+			name:  "struct - fields can use type keywords as names",
+			input: "struct point {int i64, float f64}",
+			want:  "struct point {int i64, float f64}",
 		},
 		{
 			name:  "with validation",
@@ -1111,16 +1342,115 @@ func TestStructDefinition(t *testing.T) {
 		{
 			name: "comment after field",
 			input: `struct point {
-						i64 // some really informative comment
-						i64
+						x i64 // some really informative comment
+						y i64
 					}`,
-			want: "struct point {i64, i64}",
+			want: "struct point {x i64, y i64}",
+		},
+		{
+			name: "struct with keyword field names",
+			input: `struct data {
+						int    i64
+						float  f64
+						string string
+						bool   bool
+					}`,
+			want: "struct data {int i64, float f64, string string, bool bool}",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseStructStatement()
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestGenericStructDefinition(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "single generic parameter",
+			input: "struct foo[T any] {a T, b i64}",
+			want:  "struct foo[T any] {a unknown[T], b i64}",
+		},
+		{
+			name:  "multiple generic parameters with same constraint",
+			input: "struct bar[K, V any] {x K, y V}",
+			want:  "struct bar[K any, V any] {x unknown[K], y unknown[V]}",
+		},
+		{
+			name:  "multiple generic parameters with different constraints",
+			input: "struct baz[T any, E error] {a T, b E}",
+			want:  "struct baz[T any, E error] {a unknown[T], b unknown[E]}",
+		},
+		{
+			name:  "generic struct with no fields",
+			input: "struct empty[T any] {}",
+			want:  "struct empty[T any] {}",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseStructStatement()
+
+			if tc.want != stmt.String() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestStructLiteral(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "imported struct literal",
+			input: `some_lib.strct{a: 1}`,
+			want:  `some_lib.strct{a: 1}`,
+		},
+		{
+			name:  "parameterized struct literal with single type parameter",
+			input: `abc[i32]{a: 1}`,
+			want:  `abc[i32]{a: 1}`,
+		},
+		{
+			name:  "parameterized struct literal with multiple type parameters",
+			input: `pair[i32, string]{first: 1, second: "hello"}`,
+			want:  `pair[i32, string]{first: 1, second: "hello"}`,
+		},
+		{
+			name:  "parameterized struct literal with complex types",
+			input: `container[[]i32]{data: [1, 2, 3]}`,
+			want:  `container[[]i32]{data: [1,2,3]}`,
+		},
+		{
+			name:  "parameterized struct literal with complex types",
+			input: `abc.d[[]i32]{}`,
+			want:  `abc.d[[]i32]{}`,
+		},
+		{
+			name:  "literal with copy",
+			input: `strct{..s, a: 1}`,
+			want:  `strct{..s, a: 1}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseExpression(LOWEST)
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
@@ -1145,120 +1475,6 @@ func TestAnonymousStruct(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
 			stmt := p.parseAnonymousStructLiteral()
-
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
-			}
-		})
-	}
-}
-
-func TestIndexExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "simple array access",
-			input: "l[0]",
-			want:  "l[0]",
-		},
-		{
-			name:  "nested array access",
-			input: "l[0][0]",
-			want:  "l[0][0]",
-		},
-		{
-			name:  "index of dot expression",
-			input: "l.val[0]",
-			want:  "l.val[0]",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := getParser(tc.input)
-			stmt := p.parseExpression(LOWEST)
-
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
-			}
-		})
-	}
-}
-
-func TestSliceExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "start and end",
-			input: "a[2:5]",
-			want:  "a[(2 : 5)]",
-		},
-		{
-			name:  "nested",
-			input: "a[2:4][3:4]",
-			want:  "a[(2 : 4)][(3 : 4)]",
-		},
-		{
-			name:  "reassign slice",
-			input: "a[2:4] = [1,2]",
-			want:  "(a[(2 : 4)] = [1,2])",
-		},
-		{
-			name:  "slice of dot expression",
-			input: "a.s[0:2]",
-			want:  "a.s[(0 : 2)]",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := getParser(tc.input)
-			stmt := p.parseExpression(LOWEST)
-
-			if tc.want != stmt.String() {
-				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
-			}
-		})
-	}
-}
-
-func TestUseExpression(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "reassignment",
-			input: "use xyz { xyz = 2 }",
-			want:  "use xyz { xyz = 2 }",
-		},
-		{
-			name:  "reassignment of struct field",
-			input: "use xyz { xyz.field = 2 }",
-			want:  "use xyz { xyz.field = 2 }",
-		},
-		{
-			name:  "reassignment of array element",
-			input: "use xyz { xyz[0] = 2 }",
-			want:  "use xyz { xyz[0] = 2 }",
-		},
-		{
-			name:  "empty body",
-			input: "use xyz {}",
-			want:  "use xyz { }",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p := getParser(tc.input)
-			stmt := p.parseExpression(LOWEST)
 
 			if tc.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
@@ -1315,7 +1531,7 @@ func TestAssignmentStatement(t *testing.T) {
 		},
 		{
 			name:  "match with expression",
-			input: "let res = match v { case a: v.i + v.j case _: 0 }",
+			input: `let res = match v { case a: v.i + v.j case _: 0 }`,
 			want:  "let res = match v { case a: (v.i + v.j) case _: 0 }",
 		},
 	}
@@ -1418,6 +1634,31 @@ func TestMatchStatement(t *testing.T) {
 			input: "match x' = x {}",
 			want:  "match (x' = x) { }",
 		},
+		{
+			name:  "match with library identifier in case",
+			input: "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
+			want:  "match x { case l.tag.field: l.tag.other case _: l.tag.default }",
+		},
+		{
+			name:  "match with multiple predicates in single case",
+			input: `match x { case 1, 2, 3: return "small" }`,
+			want:  `match x { case 1, 2, 3: return "small" }`,
+		},
+		{
+			name:  "match with multiple predicates in multiple cases",
+			input: `match x { case 1, 2: return "low" case 3, 4: return "high" }`,
+			want:  `match x { case 1, 2: return "low" case 3, 4: return "high" }`,
+		},
+		{
+			name:  "match with complex expressions as multiple predicates",
+			input: `match x { case a + b, c * d: return "complex" }`,
+			want:  `match x { case (a + b), (c * d): return "complex" }`,
+		},
+		{
+			name:  "match with mixed single and multiple predicates",
+			input: `match x { case 1: return "one" case 2, 3, 4: return "multiple" case _: return "default" }`,
+			want:  `match x { case 1: return "one" case 2, 3, 4: return "multiple" case _: return "default" }`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1478,7 +1719,7 @@ func TestBuiltinFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := getParser(tt.input)
-			stmt := p.parseFunctionCallExpression()
+			stmt := p.parseExpression(LOWEST)
 
 			if tt.want != stmt.String() {
 				t.Errorf("want %s but got %s\n%+v", tt.want, stmt.String(), stmt)
@@ -1568,11 +1809,11 @@ func TestLibrary(t *testing.T) {
 			name: "issue 62",
 			input: `lib main
 
-@extern(c)
-pub fn exit(c i64)
+		@extern(c)
+		pub fn exit(c i64)
 
-fn test() {}
-`,
+		fn test() {}
+		`,
 			want: "lib main @extern(c) pub fn exit(c i64) fn test() { }",
 		},
 	}
@@ -1581,6 +1822,52 @@ fn test() {}
 		t.Run(tc.name, func(t *testing.T) {
 			p := getParser(tc.input)
 			mod := p.ParseLibrary()
+
+			if tc.want != mod.String() {
+				t.Errorf("want %s but got %s", tc.want, mod.String())
+			}
+		})
+	}
+}
+
+func TestGenericFunctionDefinition(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		error []string
+	}{
+		{
+			name:  "single generic type with constraint",
+			input: "fn func[T any](x T) T {}",
+			want:  "fn func[T any](x unknown[T]) unknown[T] { }",
+		},
+		{
+			name:  "multiple generic types with same constraint",
+			input: "fn func[T, E any](x T, y E) {}",
+			want:  "fn func[T any, E any](x unknown[T],y unknown[E]) { }",
+		},
+		{
+			name:  "multiple generic types with different constraints",
+			input: "fn func[T any, E abc](x T, y E) {}",
+			want:  "fn func[T any, E unknown[abc]](x unknown[T],y unknown[E]) { }",
+		},
+		// {
+		// 	name:  "missing generic constraint",
+		// 	input: "lib test fn func[T](x T) T {}",
+		// 	error: []string{},
+		// },
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			mod := p.parseFunctionExpression()
+
+			if len(p.Errors()) != 0 {
+				t.Errorf("unexpected parsing errors: %v", p.Errors())
+				return
+			}
 
 			if tc.want != mod.String() {
 				t.Errorf("want %s but got %s", tc.want, mod.String())
