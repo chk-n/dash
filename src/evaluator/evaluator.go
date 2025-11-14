@@ -21,6 +21,9 @@ const (
 	NEXT
 )
 
+// Debug flag to enable/disable debug output
+var isDebug = false
+
 // Global error type descriptors to avoid recomputation
 var (
 	errDescIndexOutOfBounds = generateTypeDescriptor("runtime.index_out_of_bounds")
@@ -2260,18 +2263,21 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if idx < 0 || idx >= int64(len(arr)) {
+			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case []uint8:
 		if idx < 0 || idx >= int64(len(arr)) {
+			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case string:
 		if idx < 0 || idx >= int64(len(arr)) {
+			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2295,6 +2301,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			end = int64(len(arr))
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
+			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2304,6 +2311,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			end = int64(len(arr))
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
+			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2430,6 +2438,8 @@ func computeLocationHash(ctx *Context, varName string) uint64 {
 func castTo[T any](v any) (T, error) {
 	val, ok := v.(T)
 	if !ok {
+		var zero T
+		debugPrintf("[DEBUG castTo] Failed: v=%v (type %T) -> target type %T\n", v, v, zero)
 		return val, fmt.Errorf("unable to cast %v to type", v)
 	}
 	return val, nil
@@ -2518,5 +2528,11 @@ func valueToString(v any) string {
 		return b.String()
 	default:
 		return fmt.Sprintf("%v", v)
+	}
+}
+
+func debugPrintf(format string, args ...any) {
+	if isDebug {
+		fmt.Printf(format, args...)
 	}
 }
