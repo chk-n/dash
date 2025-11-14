@@ -2291,12 +2291,18 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
+		if end == -1 {
+			end = int64(len(arr))
+		}
 		if start < 0 || end > int64(len(arr)) || start > end {
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
 	case []uint8:
+		if end == -1 {
+			end = int64(len(arr))
+		}
 		if start < 0 || end > int64(len(arr)) || start > end {
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
