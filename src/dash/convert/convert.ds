@@ -1,0 +1,25 @@
+lib convert
+
+pub error unsupported_type{type string}
+
+// TODO: set proper generic constraint
+pub fn to_u8_array[T any](x T)! []u8 {
+    match x {
+    case u8:
+        return [x]
+    case u16:
+        let x1, let x2 = u8(x >> 8), u8(x)
+        return [x1, x2]
+    case u32:
+        let x1, let x2 = u8(x >> 24), u8(x >> 16)
+        let x3, let x4 = u8(x >> 8), u8(x)
+        return [x1, x2, x3, x4]
+    case u64:
+        let x1, let x2 = u8(x >> 56), u8(x >> 48)
+        let x3, let x4 = u8(x >> 40), u8(x >> 32)
+        let x5, let x6 = u8(x >> 24), u8(x >> 16)
+        let x7, let x8 = u8(x >> 8), u8(x)
+        return [x1, x2, x3, x4, x5, x6, x7, x8]
+    }
+    raise unsupported_type{type: ""}
+}
