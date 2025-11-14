@@ -1,5 +1,5 @@
-// NOTE: this library has not been verified to conform to
-// other rapidhash implementations. DO NOT USE
+// Originally ported from rapidhash (see license in this directory):
+// https://github.com/Nicoshev/rapidhash/blob/2df1d03aba25c4373f77dc0d559b2f789208fd42/rapidhash.h
 
 lib rapidhash
 
