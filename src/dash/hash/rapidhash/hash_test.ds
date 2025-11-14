@@ -1,0 +1,45 @@
+lib rapidhash
+
+@test
+fn test_nano()! {
+    let key = try generate_key("asdf", 256)
+    let sizes = [0,1,2,3,4,5,6,7,8,16,32,64,128,256,512,1024]
+    let outputs = [
+        u64(0x9c4986892b492226),
+        u64(0x9dc91b8b77245de0),
+        u64(0x3bec73db368ab65e),
+        u64(0x396ba70ca5e3f171),
+        u64(0xb998b1bdd85218d8),
+        u64(0xcf26ae33bf7e72b2),
+        u64(0xa4c956c977087d37),
+        u64(0xc96f1153dd226785),
+        u64(0xcd0abfc78ec91ed4),
+        u64(0x2d26bf1597570d11),
+        u64(0xba2b9dbc35d49c96),
+        u64(0x9577d929bba7bf00),
+        u64(0x54be4232508d0917),
+        u64(0xc9ccf2796b2116fc),
+        u64(0x8bac86241c6dda48),
+        u64(0x9372f3184862fe8e),
+    ]
+    var success = true
+    for i = 0; i < len(sizes); i++ {
+        let size = try get(sizes,i)
+        let got = try nano(slice(key,0,size),0)
+        let want = try get(outputs, i)
+        if want != got {
+            // printf("expected hash(%s) = %d, but got %d", key, expected[i], hash)
+            success = false
+        }
+    }
+    try assert(success, "expected hash to match")    
+}
+
+
+fn generate_key(s string, n i64)! []u8 {
+    var s_new = try make([]u8, 0, len(s) * n)
+    for i = 0; i < n; i++ {
+        s_new = append(s_new, []u8(s))
+    }
+    return s_new
+}

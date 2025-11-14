@@ -1,0 +1,113 @@
+// NOTE: this library has not been verified to conform to
+// other rapidhash implementations. DO NOT USE
+
+lib rapidhash
+
+// pub fn general() {}
+
+// pub fn micro() {}
+
+pub fn nano(k []u8, seed u64)! u64 {    
+    let n = len(k)
+
+    var i = u64(n)
+    var seed = seed ^ mix(seed ^ s2, s1)
+    var a, var b = u64(0), u64(0)
+    if n <= 16 {
+        if n >= 4 {
+            seed = seed ^ u64(n)
+            if n >= 8 {
+                let k_last = try slice(k, n-8, n)
+                a = try read64(k, 0)
+                b = try read64(k_last, 0)
+            } else {
+                let k_last = try slice(k, n-4, n)
+                a = try read32(k, 0)
+                b = try read32(k_last, 0)
+            }
+        } else if n > 0 {
+            a = try (u64(get(k,0)) << 45) | u64(get(k, n-1))
+            b = try u64(get(k, n>>1))
+        }
+    } else {
+        var bitpos = u64(0)
+        if i > 48 {
+            var see1, var see2 = seed, seed
+            for i > 48 {
+                seed = try mix(read64(k, bitpos) ^ s0, read64(k, bitpos+8) ^ seed)
+                see1 = try mix(read64(k, bitpos+16) ^ s1, read64(k, bitpos+24) ^ see1)
+                see2 = try mix(read64(k, bitpos+32) ^ s2, read64(k, bitpos+40) ^ see2)
+                
+                bitpos = bitpos + 48
+                i = i - 48
+            }
+            seed = seed ^ see1
+            seed = seed ^ see2
+        }
+        if i > 16 {
+            seed = try mix(read64(k, bitpos) ^ s2, read64(k, bitpos+8) ^ seed)
+            if i > 32 {
+                seed = try mix(read64(k, bitpos+16) ^ s2, read64(k, bitpos+24) ^ seed)
+            }
+        }
+        a = try read64(k, bitpos+i-16) ^ i
+        b = try read64(k, bitpos+i-8)
+    }
+    a = a ^ s1
+    b = b ^ seed
+    a, b = mum(a, b)
+    return mix(a ^ s7, b ^ s1 ^ i)
+}
+
+// default secret parameters
+let s0 = u64(0x2d358dccaa6c78a5)
+let s1 = u64(0x8bb84b93962eacc9)
+let s2 = u64(0x4b33a62ed433d4a3)
+let s3 = u64(0x4d5a2da51de1aa47)
+let s4 = u64(0xa0761d6478bd642f)
+let s5 = u64(0xe7037ed1a0b428db)
+let s6 = u64(0x90ed1765281c388c)
+let s7 = u64(0xaaaaaaaaaaaaaaaa)
+
+fn mix(a, b u64) u64 {
+    let a, let b = mum(a,b)
+    return a ^ b
+}
+
+// mum implements rapididhash protected mum
+fn mum(a, b u64) u64, u64 {
+    let h, let l = mul64(a, b)
+    return a ^ l, b ^ h
+}
+
+fn read64(k []u8, offset u64)! u64 {
+    return try u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
+        u64(get(k, offset+2))<<16 | u64(get(k, offset+3))<<24 |
+        u64(get(k, offset+4))<<32 | u64(get(k, offset+5))<<40 |
+        u64(get(k, offset+6))<<48 | u64(get(k, offset+7))<<56
+}
+
+fn read32(k []u8, offset u64)! u64 {    
+    return try u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
+        u64(get(k, offset+2))<<16 | u64(get(k, offset+3))<<24
+}
+
+// mul64 returns 128bit product of x and y in the form:
+// let high, let low = mul64(x,y), where high contains higher
+// bits of the product and low contains the lower bits
+fn mul64(x, y u64) u64, u64 {
+    let mask = u64(0xFFFFFFFF)
+    let x0 = x & mask
+	let x1 = x >> 32
+	let y0 = y & mask
+	let y1 = y >> 32
+	let w0 = x0 * y0
+	let t = (x1*y0) + (w0>>32)
+	let w1 = (t & mask) + x0 * y1
+	let w2 = t >> 32
+    
+	let hi = (x1*y1) + w2 + (w1>>32)
+    let lo = x * y
+    
+    return hi,lo
+}
