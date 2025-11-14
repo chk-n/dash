@@ -1493,6 +1493,11 @@ func TestBuiltInFunction(t *testing.T) {
 			input: `let arr = []u8([0]) try put(arr, 0, 1)`,
 			want:  "lib main pub fn main() { let arr []u8 = []u8([0]) try put(arr,0,1) }",
 		},
+		{
+			name:  "println",
+			input: `println(42)`,
+			want:  "lib main pub fn main() { println(42) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }
