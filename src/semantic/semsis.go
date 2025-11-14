@@ -679,7 +679,18 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 	case *ast.DotExpression:
 		s.analyse(n.Left, "")
-		switch left := n.Left.Type().(type) {
+
+		leftType := n.Left.Type()
+
+		// We assume null check was performed hence
+		// we can unwrap optional type here. In self-
+		// hosted compiler this will be properly checked
+		switch left := leftType.(type) {
+		case *types.Optional:
+			leftType = left.T
+		}
+
+		switch left := leftType.(type) {
 		case *types.Array:
 			s.analyse(n.Right, "")
 			n.SetType(n.Right.Type())
