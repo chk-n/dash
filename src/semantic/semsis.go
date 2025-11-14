@@ -214,8 +214,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				s.validateAppendFunction(n)
 				return
 			}
-
-			builtintFn := getBuiltinSignature(n.Token.Literal, getTypesFromExpressions(n.Arguments))
+			// Infer UnknownNamed types in arguments before getting builtin signature
+			argTypes := getTypesFromExpressions(n.Arguments)
+			builtintFn := getBuiltinSignature(n.Token.Literal, argTypes)
 			argTs := builtintFn.T.(*types.Function).Arg
 			retTs := builtintFn.T.(*types.Function).Ret
 
@@ -702,17 +703,32 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
+				// Resolve UnknownNamed types in field type
+				resolvedType := s.inferUnknownNamedType(typ)
+				if resolvedType != nil {
+					typ = resolvedType
+				}
 				t.T = typ
 			case *ast.IntegerLiteral:
 				typ, err := left.GetTypeByIndex(int(t.Value))
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
 				}
+				// Resolve UnknownNamed types in field type
+				resolvedType := s.inferUnknownNamedType(typ)
+				if resolvedType != nil {
+					typ = resolvedType
+				}
 				t.T = typ
 			case *ast.HexLiteral:
 				typ, err := left.GetTypeByIndex(int(t.Value))
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+				}
+				// Resolve UnknownNamed types in field type
+				resolvedType := s.inferUnknownNamedType(typ)
+				if resolvedType != nil {
+					typ = resolvedType
 				}
 				t.T = typ
 			default:
@@ -727,6 +743,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					typ, _, err := left.GetTypeByField(n.Right.TokenLiteral())
 					if err != nil {
 						s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+					}
+					// Resolve UnknownNamed types in field type
+					resolvedType := s.inferUnknownNamedType(typ)
+					if resolvedType != nil {
+						typ = resolvedType
 					}
 					t.T = typ
 				default:
@@ -746,6 +767,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				typ, _, err := structType.GetTypeByField(n.Right.TokenLiteral())
 				if err != nil {
 					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+				}
+				// Resolve UnknownNamed types in field type
+				resolvedType := s.inferUnknownNamedType(typ)
+				if resolvedType != nil {
+					typ = resolvedType
 				}
 				t.T = typ
 			default:
@@ -2381,6 +2407,9 @@ func (s *Semantics) checkErrorProneFunction(n *ast.FunctionCallExpression) {
 }
 
 func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
+	if typ == nil {
+		return nil
+	}
 	switch t := typ.(type) {
 	case *types.Dirty:
 		typ := s.inferUnknownNamedType(t.T)
@@ -2436,6 +2465,29 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		}
 
 	case *types.UnknownNamed:
+		// This is a shitty fix as ideally we dont wrap unknown around
+		// compound types like this
+		// handle cases where Name represents an array type like "[]T"
+		if len(t.Name) > 2 && t.Name[:2] == "[]" {
+			elemTypeName := t.Name[2:]
+			elemType := &types.UnknownNamed{Name: elemTypeName}
+			resolvedElemType := s.inferUnknownNamedType(elemType)
+			if resolvedElemType == nil {
+				// element type cant be resolved but this is still valid for generic types
+				// return the array with unresolved element type
+				return &types.Array{T: elemType}
+			}
+			return &types.Array{T: resolvedElemType}
+		}
+
+		// handle cases where Name is wrapped
+		// e.g. "unknown[T]" or "unknown[[]T]"
+		if len(t.Name) > 8 && t.Name[:8] == "unknown[" && t.Name[len(t.Name)-1] == ']' {
+			innerTypeName := t.Name[8 : len(t.Name)-1]
+			innerType := &types.UnknownNamed{Name: innerTypeName}
+			return s.inferUnknownNamedType(innerType)
+		}
+
 		// resolve base type
 		var baseType types.Type
 		if typ, ok := s.typeSt.Get(t.Name); ok {
@@ -2482,6 +2534,21 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 			return nil
 		}
 		t.Typ = typ
+		return t
+	case *types.Struct:
+		// Recursively resolve UnknownNamed types in struct fields
+		// Only resolve if we haven't already resolved this struct (to avoid infinite recursion on self-referential types)
+		for i, field := range t.Ts {
+			// Skip if the field type is already resolved (not UnknownNamed)
+			if _, ok := field.T.(*types.UnknownNamed); !ok {
+				continue
+			}
+			resolvedType := s.inferUnknownNamedType(field.T)
+			if resolvedType == nil {
+				return nil
+			}
+			t.Ts[i].T = resolvedType
+		}
 		return t
 	case nil:
 		return nil
@@ -2779,6 +2846,10 @@ func (s *Semantics) matchTypes(paramType types.Type, argType types.Type, typeMap
 		if ot, ok := argType.(*types.Optional); ok {
 			s.matchTypes(pt.T, ot.T, typeMap)
 		}
+	case *types.UnknownNamed:
+		// UnknownNamed types can appear during type inference for nested generic types
+		// They will be resolved later in the semantic analysis process
+		// TODO: potentially match type parameters if argType is also UnknownNamed
 	default:
 		panic("add more cases for compound type: " + pt.String())
 	}
@@ -2816,6 +2887,18 @@ func (s *Semantics) collectGenericNames(t types.Type, seen map[string]bool, name
 		for _, ret := range typ.Ret {
 			s.collectGenericNames(ret, seen, names)
 		}
+	case *types.Definition:
+		s.collectGenericNames(typ.Underlying, seen, names)
+	case *types.Alias:
+		s.collectGenericNames(typ.Underlying, seen, names)
+	case *types.Union:
+		panic("implement me")
+	case *types.UnknownNamed, *types.Int,
+		*types.Float, *types.Char, *types.Bool,
+		*types.Enum, *types.String, *types.Any,
+		*types.Error:
+		// do nothing
+
 	default:
 		panic("add more cases for compound type: " + typ.String())
 	}
