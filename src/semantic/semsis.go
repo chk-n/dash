@@ -2287,6 +2287,10 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		if mutType, ok := arrayType.(*types.Mutable); ok {
 			arrayType = mutType.T
 		}
+		// Handle pointer to array case (e.g., *[]T)
+		if ptrType, ok := arrayType.(*types.Pointer); ok {
+			arrayType = ptrType.T
+		}
 		// lit.T = expectedT
 		if arrayType, ok := arrayType.(*types.Array); ok {
 			s.analyseArrayLiteral(lit, arrayType)
