@@ -2814,14 +2814,17 @@ func (s *Semantics) instantiateGenericStruct(n *ast.StructLiteral, t *types.Stru
 		}
 	} else {
 		// case 2: infer type parameters from fields
-		for i, f := range n.Fields {
-			paramType := t.TypeParams[i]
+		// Try to match type parameters by looking at field types
+		for _, f := range n.Fields {
 			argType := f.Type()
 			if argType == nil {
 				continue
 			}
 
-			s.matchTypes(paramType, argType, typeMap)
+			// Try to match each type parameter against this field's type
+			for _, tp := range t.TypeParams {
+				s.matchTypes(tp, argType, typeMap)
+			}
 		}
 
 		s.validateTypeParameterInferred(n, t.TypeParams, typeMap)
@@ -2864,6 +2867,16 @@ func (s *Semantics) matchTypes(paramType types.Type, argType types.Type, typeMap
 		if ot, ok := argType.(*types.Optional); ok {
 			s.matchTypes(pt.T, ot.T, typeMap)
 		}
+	case *types.Struct:
+		at, ok := argType.(*types.Struct)
+		if !ok {
+			return
+		}
+		for i, field := range pt.Ts {
+			s.matchTypes(field.T, at.Ts[i].T, typeMap)
+		}
+	case *types.Int:
+		// Primitive type, no further matching needed
 	case *types.UnknownNamed:
 		// UnknownNamed types can appear during type inference for nested generic types
 		// They will be resolved later in the semantic analysis process
