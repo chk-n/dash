@@ -1321,7 +1321,7 @@ func TestTypeDefinition(t *testing.T) {
 				}
 				let u = fetch(user("peter"))
 				u`,
-			want: &Return{Values: []any{"peter"}},
+			want: "peter",
 		},
 		// BUG: leads to semsis nil panic
 		// {
