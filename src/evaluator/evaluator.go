@@ -343,6 +343,8 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, stk)
 
+		argValue = unwrapFunctionResult(argValue, 0)
+
 		// Wrap value in Any if parameter is 'any' type or generic with 'any' constraint
 		shouldWrapInAny := false
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
