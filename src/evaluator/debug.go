@@ -33,15 +33,15 @@ func recoverPanic(result *any) {
 		}
 
 		if location != "" {
-			*result = &Return{Values: []any{&Error{
+			*result = &Error{
 				descriptor: generateTypeDescriptor("RuntimeError"),
 				Err:        fmt.Sprintf("Runtime panic at %s: %s", location, errMsg),
-			}}}
+			}
 		} else {
-			*result = &Return{Values: []any{&Error{
+			*result = &Error{
 				descriptor: generateTypeDescriptor("RuntimeError"),
 				Err:        fmt.Sprintf("Runtime panic: %s", errMsg),
-			}}}
+			}
 		}
 	}
 }
