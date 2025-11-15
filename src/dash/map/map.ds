@@ -1,0 +1,393 @@
+lib map
+
+use "dash/hash/rapidhash"
+use "dash/convert"
+
+let MAX_DEPTH = u32(7)
+
+pub struct map[T, E any] {
+    len  u64
+    seed u64
+    root *node[T, E]    
+}
+
+struct node[T,E any] {
+    // 0 = hash points to node
+    // 1 = hash points to value
+    // disregard bits after position len(masks)
+    // bits are set from left to right
+    bitmap u32
+
+    // TODO: optimise overhead by using u8 to store
+    // size as arrays cant contain more than 32 values
+    // and use e.g. collections/array
+    // hashes array[u8, u8]
+    // keys   array[u8, T]
+    // values array[u8, E]
+    // nodes  array[u8, *node[T,E]]
+
+    // first 5 bits of hash stored in array
+    // index of array == to index of value or node
+    // invariant: len(hashes) = len(keys) + len(nodes)
+    masks  []u8
+    // to get index to keys first get index from hash
+    // check if that bit position is 1 and then count
+    // count 1's in bitmap until that bit position
+    keys    []T
+    values  []E
+    nodes   []*node[T, E]
+
+    // invariant: overflow == null if level != 7 
+    overflow ?*overflow_node[T,E]
+}
+
+struct overflow_node[T, E any] {
+    len    u64
+    keys   []T
+    values []E
+}
+
+
+pub fn new[T, E any]() *map[T,E] {
+    // TODO: generate new seed
+    let seed = 0
+    let n = &node[T,E]{
+        bitmap: 0,
+        masks: [],
+        keys: [],
+        values: [],
+        nodes: [],
+        overflow: null,
+    }
+    return &map[T, E]{
+        len: 0,
+        seed: seed,
+        root: n,
+    }
+    
+}
+
+pub fn insert[T, E any](m *map[T,E], k T, v E)! *map[T,E] {
+    let h = try hash(k, m.seed)
+    let lvl = u32(0)
+    let n, let i = try insert_value(m.root, m.seed, h, k, v, lvl)
+
+    // dont copy if update
+    if n == m.root && i == 0 {
+        return m
+    }
+
+    return &map[T,E]{
+        len: m.len + u64(i),
+        seed: m.seed,
+        root: n,
+    }
+}
+
+pub fn get_val[T, E any](m *map[T,E], k T)! ?E {
+    let h = try hash(k, m.seed)
+    let lvl = u32(0)
+    return try get_value[T,E](m.root, k, h, lvl)
+}
+
+// insert_value returns the updated node and the count which can be 0 or 1 depending on
+// if the value was updated or inserted
+fn insert_value[T, E any](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E], i64 {
+
+    let m = mask(h, lvl)
+    let pos = is_mask_match(n.masks, m)
+    
+    if pos == 32 {
+        // case: no matching hash found so we insert in current node
+        return try copy_insert_value(n, m, k, v), 1
+    } else if is_bit_set(n.bitmap, pos) {
+        let idx = data_index(n.bitmap, pos)
+        let h0 = try hash(get(n.keys, idx), s)
+        
+        if h == h0 {
+            // case: hashes match completely
+            return try copy_update_value(n, idx, k, v), 0
+        } else {
+            // case: hashes match partially so we need to move current
+            // key value to new node and store current k, v being inserted
+            let k0 = try get(n.keys, idx)
+            let v0 = try get(n.values, idx)
+            let new = try merge_pair(k0, k, v0, v, h0, h, lvl+1)
+            return try copy_migrate_to_node(n, pos, idx, new), 1
+        }
+    } else {
+        if n.overflow != null {
+            // case: hash matched completely but key/value not
+            // stored in keys & values array. As overflow node
+            // is set we know we are in leaf node meaning nodes
+            // array is empty
+        
+            // TODO: try assert(lvl == MAX_DEPTH, "")
+            // TODO: try assert(len(n.nodes) == 0, "")
+
+            return try copy_insert_to_overflow(n, k, v), 1
+        }
+        let idx = node_index(n.bitmap, pos)
+        // case: hash matched partially and key/value stored in
+        // a child node so we need to recursively try to insert
+        let old = try get(n.nodes, idx)
+        let new, let i = try insert_value(old, s, h, k, v, lvl+1)
+
+        if old == new {
+            return n, i
+        }
+
+        return try copy_update_node(n, new, pos, idx), i
+    }
+}
+
+fn copy_insert_value[T, E any](n *node[T,E], mask u8, k T, v E)! *node[T,E] {
+    let keys = try append(n.keys, k)
+    let vals = try append(n.values, v)
+    let masks = try append(n.masks, mask)
+
+    let idx = u32(len(masks)-1)
+    try assert(!is_bit_set(n.bitmap, idx), "bit should not be set")
+    
+    return &node[T,E]{
+        bitmap: set_bit(n.bitmap, idx),
+        masks: masks,
+        keys: keys,
+        values: vals,
+        nodes: n.nodes,
+    }
+}
+
+fn copy_update_value[T, E any](n *node[T,E], idx u32, k T, v E)! *node[T,E] {
+
+    // check if values the same to avoid copying
+    let existing_value = try get(n.values, idx)
+    if existing_value == v {
+        return n
+    }
+
+    let vals = try put(n.values, idx, v)
+
+    return &node[T,E]{
+        bitmap: n.bitmap,
+        masks: n.masks,
+        keys: n.keys,
+        values: vals,
+        nodes: n.nodes
+    }
+}
+
+fn merge_pair[T, E any](k0, k1 T, v0, v1 E, h0, h1 u64, lvl u32)! *node[T,E] {
+    let m0 = mask(h0, lvl)
+    let m1 = mask(h1, lvl)
+
+    if m0 != m1 {
+        return &node[T,E]{
+            bitmap: 3<<30,
+            masks: [m0, m1],
+            keys: [k0, k1],
+            values: [v0, v1],
+            nodes: [],
+            overflow: null,
+        }
+    } else {
+        // if we are at last depth and there was collision
+        // we need to use overflow_node
+        if lvl >= MAX_DEPTH {
+            try assert(h0 == h1, "expected collision")
+
+            let m = mask(h0, lvl)
+            let overflow = overflow_node[T,E]{
+                len: 2,
+                keys: [k0, k1],
+                values: [v0, v1],
+            }
+            return &node[T,E]{
+                bitmap: 0,
+                masks: [m],
+                keys: [],
+                values: [],
+                nodes: [],
+                overflow: overflow,
+            }
+        } else {
+            let n = try merge_pair(k0, k1, v0, v1, h0, h1, lvl+1)
+            return &node[T,E]{
+                bitmap: 0,
+                masks: [m0],
+                keys: [],
+                values: [],
+                nodes: [n],
+                overflow: null,
+            }
+
+        }
+    }
+}
+
+fn copy_migrate_to_node[T, E any](n *node[T,E], pos, idx u32, new *node[T,E])! *node[T,E]{
+    try assert(is_bit_set(n.bitmap, pos), "expected bit to be set")
+
+    let nidx = node_index(n.bitmap, pos)
+    var nodes = try make([]*node[T,E], 0, len(n.nodes)+1)
+    nodes = try append(nodes, slice(n.nodes, 0, nidx))
+    nodes = try append(nodes, new)
+    nodes = try append(nodes, slice(n.nodes, nidx, -1))
+
+    let keys = try append(slice(n.keys,0,idx), slice(n.keys,idx+1,-1))
+    let vals = try append(slice(n.values,0,idx), slice(n.values,idx+1,-1))
+
+    return &node[T,E]{
+        bitmap: unset_bit(n.bitmap, pos),
+        masks: n.masks,
+        keys: keys,
+        values: vals,
+        nodes: nodes,
+        overflow: n.overflow,
+    }
+}
+
+fn copy_insert_to_overflow[T, E any](n *node[T,E], k T, v E)! *node[T,E] {
+    // try assert(n.overflow != null, "")
+    // try assert(len(n.overflow.keys) == len(n.overflow.values), "")
+
+    let old = n.overflow
+
+    let keys = try append(old.keys, k)
+    let vals = try append(old.values, v)
+       
+    let o = &overflow_node[T,E]{
+        len: old.len + 1,
+        keys: keys,
+        values: vals,
+    }
+
+    return &node[T,E]{
+        bitmap: n.bitmap,
+        masks: n.masks,
+        keys: n.keys,
+        values: n.values,
+        nodes: n.nodes,
+        overflow: o,
+    }
+}
+
+// copy_update_node copies all nodes from n and sets element at index idx to new
+fn copy_update_node[T, E any](n, new *node[T,E], pos, idx u32)! *node[T,E] {
+    try assert(!is_bit_set(n.bitmap, pos), "expected bit to be set at pos")
+
+    let nodes = try put(n.nodes, idx, new)
+
+    return &node[T,E]{
+        bitmap: n.bitmap,
+        masks: n.masks,
+        keys: n.keys,
+        values: n.values,
+        nodes: nodes,
+        overflow: n.overflow
+    }
+}
+
+fn get_value[T, E any](n *node[T,E], k T, h u64, lvl u32)! ?E {
+    try assert(lvl <= MAX_DEPTH, "lvl should never be greater than MAX_DEPTH")
+
+    let m = mask(h, lvl)
+    let pos = is_mask_match(n.masks, m)
+
+    if pos == 32 {
+        return null
+    }
+
+    if is_bit_set(n.bitmap, pos) {
+        let idx = data_index(n.bitmap, pos)
+        return try get(n.values, idx)
+    } else {
+        if lvl >= MAX_DEPTH {
+            if n.overflow == null {
+                return null
+            }
+            for i = u32(0); i < u32(n.overflow.len); i++ {
+                let key = try get(n.overflow.keys, i)
+                if key == k {
+                    let val = try get(n.overflow.values, i)
+                    return val
+                }
+            }
+        }
+        let idx = node_index(n.bitmap, pos)
+        let nxt = try get(n.nodes, idx)
+        return try get_value(nxt, k, h, lvl+1)
+    }
+}
+
+
+
+// ------- //
+// Helpers //
+// ------- //
+
+// mask extracts the lvl-th 5-bit group from hash (left to right, 0-indexed)
+// and returns it as a u8. e.g. lvl=0 returns bits 59-63.
+fn mask(h u64, lvl u32) u8 {
+    let shift = u64(59 - lvl * 5)
+    return u8((h >> shift) & 31)
+}
+
+// is_mask_match returns the index at which m is found in masks
+// or it returns 32 meaning nothing was found
+fn is_mask_match(masks []u8, m u8) u32 {
+    try assert(len(masks) <= 32, "expected masks to be of size 32")
+
+    for i = 0; i < len(masks); i++ {
+        if try get(masks, i) == m {
+            return u32(i)
+        }
+    }
+
+    return u32(32)
+}
+
+// is_bit_set checks if the bit at position pos is 1
+// (pos=0 is the rightmost bit, idx=31 is the leftmost bit)
+fn is_bit_set(bitmap u32, pos u32) bool {
+    let bitpos = bitmap >> (31 - pos)
+    return (bitpos & 1) == 1
+}
+
+fn set_bit(bitmap u32, pos u32) u32 {
+    return bitmap | (1 << (31 - pos))
+}
+
+fn unset_bit(bitmap u32, pos u32) u32 {
+    return bitmap & ~(1 << (31 - pos))
+}
+
+// count number of '1' bits in bitmap before position pos
+fn data_index(bitmap u32, pos u32) u32 {
+    var cnt = bitmap >> (32 - pos)
+    cnt = cnt - ((cnt >> 1) & 0x55555555)
+    cnt = (cnt & 0x33333333) + ((cnt >> 2) & 0x33333333)
+    cnt = (cnt + (cnt >> 4)) & 0x0F0F0F0F
+    cnt = cnt + (cnt >> 8)
+    cnt = cnt + (cnt >> 16)
+    return cnt & 0x0000003F
+}
+
+// count number of '0' bits in bitmap until position pos
+fn node_index(bitmap u32, pos u32) u32 {
+    let d_idx = data_index(bitmap, pos)
+    return pos - d_idx
+}
+
+fn hash[T any](k T, seed u64)! u64 {
+    match k {
+    case string:
+        return try rapidhash.nano([]u8(k), seed)
+    case u64:
+        let b = convert.to_u8_array(k)
+        return try rapidhash.nano(b, seed)       
+    }
+    raise unknown_error
+}
+
+error unknown_error

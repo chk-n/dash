@@ -1,0 +1,126 @@
+lib map
+
+@test
+fn test_initialisation()! {
+    let m = new[string,u64]()
+
+    try assert(m.len == 0, "expected length to be zero")
+}
+
+
+@test
+fn test_insert_string_u64()! {
+    var m = new[string,u64]()
+
+    let want = u64(10)
+    m = try insert(m, "test", want)
+    try assert(m.len == 1, "length after one insert should be 1")
+
+    let got = try get_val[string,u64](m, "test") 
+    try assert(got == want, "value inserted should be equal to value gotten")
+}
+
+@test
+fn test_insert_u64_u64()! {
+    var m = new[u64,u64]()
+
+    let want = u64(10)
+    m = try insert(m, u64(1), want)
+    try assert(m.len == 1, "length after one insert should be 1")
+
+    let got = try get_val[u64,u64](m, u64(1)) 
+    try assert(got == want, "value inserted should be equal to value gotten")
+}
+
+@test
+fn test_insert_many()! {
+    var m = new[u64,u64]()
+    let limit = u64(5_000)
+
+    for i = u64(0); i < limit; i++ {
+        m = try insert(m, i, i)
+        try assert(m.len == i+1, "length should increase")
+        let got = try get_val[u64, u64](m, i)
+        try assert(got == i, "expected value to match")
+    }
+
+    // verify all values stored still accessible
+    for i = u64(0); i < limit; i++ {
+        let got = try get_val[u64,u64](m, i)
+        try assert(got == i, "expected value to match")
+    }
+}
+
+@test
+fn test_update_no_change()! {
+    var m = new[u64,u64]()
+
+    let want = u64(10)
+    
+    let m1 = try insert(m, u64(1), want)
+    try assert(m1.len == 1, "length after one insert should be 1")
+    let got1 = try get_val[u64,u64](m1, u64(1)) 
+    try assert(got1 == want, "value inserted should be equal to value gotten")
+
+    let m2 = try insert(m1, u64(1), want)
+    try assert(m2.len == 1, "length after update should be 1")
+    let got2 = try get_val[u64,u64](m2, u64(1)) 
+    try assert(got2 == want, "expected value tp update")
+
+    try assert(m1 == m2, "expected no change to occur")
+}
+
+@test
+fn test_update_new_value()! {
+    var m = new[u64,u64]()
+
+    let want1 = u64(10)
+    let m1 = try insert(m, u64(1), want1)
+    try assert(m1.len == 1, "length after one insert should be 1")
+    let got1 = try get_val[u64,u64](m1, u64(1)) 
+    try assert(got1 == want1, "value inserted should be equal to value gotten")
+
+    let want2 = u64(20)
+    let m2 = try insert(m1, u64(1), want2)
+    try assert(m2.len == 1, "length after update should be 1")
+    let got2 = try get_val[u64,u64](m2, u64(1)) 
+    try assert(got2 == want2, "expected value tp update")
+
+    try assert(m1 != m2, "expected change to occur")
+}
+
+@test 
+fn test_insert_with_branching()! {
+    var base = new[u64,u64]()
+    for i = 0; i < 100; i++ {
+        base = try insert(base, u64(i), u64(i))
+    }
+    
+    let branch_a = try insert(base, u64(100), u64(1000))
+    let branch_b = try insert(base, u64(200), u64(2000))
+    let branch_c = try insert(base, u64(300), u64(3000))
+
+    try assert(branch_a.len == 101, "branch_a should have 101 elements")
+    try assert(branch_b.len == 101, "branch_b should have 101 elements")
+    try assert(branch_c.len == 101, "branch_c should have 101 elements")
+
+    try assert(base.len == 100, "base should have 100 elements")
+    let vb = try get_val[u64,u64](base, u64(100))
+    try assert(vb == null, "base should not have key 100")
+
+    // validate branches untouched
+    let va = try get_val[u64,u64](branch_a, u64(100))
+    try assert(va == u64(1000), "branch_a should have key 100")
+    let va2 = try get_val[u64,u64](branch_a, u64(200))
+    try assert(va2 == null, "branch_a should not have key 200")
+
+    let vb1 = try get_val[u64,u64](branch_b, u64(200))
+    try assert(vb1 == u64(2000), "branch_b should have key 200")
+    let vb2 = try get_val[u64,u64](branch_b, u64(300))
+    try assert(vb2 == null, "branch_b should not have key 300")
+
+    let vc = try get_val[u64,u64](branch_c, u64(300))
+    try assert(vc == u64(3000), "branch_c should have key 300")
+    let vc2 = try get_val[u64,u64](branch_c, u64(100))
+    try assert(vc2 == null, "branch_c should not have key 100")
+}
