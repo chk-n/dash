@@ -690,31 +690,19 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 			res := e.eval(val, ctx)
 			if ret, ok := res.(*Return); ok {
 				for j := range len(ret.Values) {
-					switch decl := n.Declerations[i+j].(type) {
-					case *ast.DotExpression:
-						e.evalAssignmentToStructField(decl, ret.Values[j], ctx)
-					default:
-						setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), ret.Values[j], ctx)
-					}
+					setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), ret.Values[j], ctx)
 				}
 			} else {
-				switch decl := n.Declerations[i].(type) {
-				case *ast.DotExpression:
-					e.evalAssignmentToStructField(decl, res, ctx)
-				default:
-					setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
-				}
+				setOrUpdateForAssignment(n.Declerations[i], n.VarNameAt(i), res, ctx)
 			}
 		default:
 			res := e.eval(val, ctx)
 			res = unwrapFunctionResult(res, 0)
-			switch decl := n.Declerations[i].(type) {
+			switch n.Declerations[i].(type) {
 			case *ast.Identifier:
 				ctx.SetAll(n.VarNameAt(i), res)
 			case *ast.DeclarationStatement:
 				ctx.Set(n.VarNameAt(i), res)
-			case *ast.DotExpression:
-				e.evalAssignmentToStructField(decl, res, ctx)
 			}
 		}
 	}
@@ -728,26 +716,6 @@ func setOrUpdateForAssignment(assgn ast.Node, name string, res any, ctx *Context
 	} else {
 		ctx.Set(name, res)
 	}
-}
-
-func (e *Evaluator) evalAssignmentToStructField(exp *ast.DotExpression, res any, stk *Context) {
-	strct := e.eval(exp.Left, stk).(map[string]any)
-
-	// we know exp.Right must be an identifier or integer literal for struct fields
-	var field string
-	switch right := exp.Right.(type) {
-	case *ast.Identifier:
-		field = right.Value
-	case *ast.IntegerLiteral:
-		field = fmt.Sprintf("%d", right.Value)
-	case *ast.HexLiteral:
-		field = fmt.Sprintf("%d", right.Value)
-	default:
-		panic("this is a compiler error. please report")
-	}
-
-	strct[field] = res
-
 }
 
 func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression, stk *Context) any {
