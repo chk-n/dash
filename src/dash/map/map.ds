@@ -300,7 +300,12 @@ fn get_value[T, E any](n *node[T,E], k T, h u64, lvl u32)! ?E {
 
     if is_bit_set(n.bitmap, pos) {
         let idx = data_index(n.bitmap, pos)
-        return try get(n.values, idx)
+        let stored_key = try get(n.keys, idx)
+        if stored_key == k {
+            let val = try get(n.values, idx)
+            return val
+        }
+        return null
     } else {
         if lvl >= MAX_DEPTH {
             if n.overflow == null {
