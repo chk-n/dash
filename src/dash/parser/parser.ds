@@ -795,7 +795,7 @@ fn parse_assignment_statement(p parser)! parser, ast.index {
              lexer.tag.VAR:
             p, node = try parse_decleration_statement(p)                       
         case lexer.tag.IDENT:
-            p, node = try parse_expression(p, precedence.assgn)
+            p, node = try parse_literal(p)
         case _:
             p = try add_error(p, unexpected_token{i: p.tkn_i})
             return p, ast.NULL_IDX
