@@ -2,12 +2,59 @@ lib convert
 
 
 @test
-fn test_to_u8_array()! {
+fn test_u8_to_u8_array()! {
+    let x = u8(42)
+    let got = try to_u8_array(x)
+    try assert(len(got) == 1, "expected length to be 1")
+    let val = try get(got, 0)
+    try assert(val == 42, "expected value to be 42")
+}
+
+@test
+fn test_u16_to_u8_array()! {
+    let arr = []u8([0, 0])
+
+    for i = 1; i >= 0; i-- {
+        let want = try put(arr, i, 1)
+        let shift = 8 * (1 - i)
+        let x = u16(1 << shift)
+        let got = try to_u8_array(x)
+        try assert(len(want) == len(got), "expected lengths to match")
+
+        for idx = 0; idx < len(got); idx++ {
+            let e1 = try get(want, idx)
+            let e2 = try get(got, idx)
+            try assert(e1 == e2, "expected array elements to match")
+        }
+    }
+}
+
+@test
+fn test_u32_to_u8_array()! {
+    let arr = []u8([0, 0, 0, 0])
+
+    for i = 3; i >= 0; i-- {
+        let want = try put(arr, i, 1)
+        let shift = 8 * (3 - i)
+        let x = u32(1 << shift)
+        let got = try to_u8_array(x)
+        try assert(len(want) == len(got), "expected lengths to match")
+
+        for idx = 0; idx < len(got); idx++ {
+            let e1 = try get(want, idx)
+            let e2 = try get(got, idx)
+            try assert(e1 == e2, "expected array elements to match")
+        }
+    }
+}
+
+@test
+fn test_u64_to_u8_array()! {
    let arr = []u8([0,0,0,0,0,0,0,0])
 
     for i = 7; i >= 0; i-- {
         let want = try put(arr, i, 1)
-        let shift = 8 * (7 - i) 
+        let shift = 8 * (7 - i)
         let x = u64(1 << shift)
         let got = try to_u8_array(x)
         try assert(len(want) == len(got), "expected lengths to match")
