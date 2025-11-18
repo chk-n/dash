@@ -324,17 +324,20 @@ func (b *Builder) buildDependencyInfo(filesPerDir map[string][]string) (map[stri
 				libName = fmt.Sprintf("%s%s", b.projectName, dir[len(b.projectRoot):])
 			}
 
-			// skip if already parsed
-			if _, exists := importMap[libName]; exists {
-				continue
+			// Initialize import map for this library if not already done
+			if _, exists := importMap[libName]; !exists {
+				importMap[libName] = []string{}
 			}
 
-			importMap[libName] = []string{}
+			// Collect imports from all files in the library
 			for _, n := range lib.Nodes {
 				switch n := n.(type) {
 				case *ast.UseStatement:
 					importName := n.Name.TokenLiteral()
-					importMap[libName] = append(importMap[libName], importName)
+					// Avoid duplicates
+					if !slices.Contains(importMap[libName], importName) {
+						importMap[libName] = append(importMap[libName], importName)
+					}
 				}
 			}
 		}
