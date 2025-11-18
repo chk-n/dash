@@ -1259,46 +1259,6 @@ func (p *Parser) parseRaiseStatement() ast.Statement {
 // Expressions //
 // ----------- //
 
-// isGenericExpression checks if the current position indicates a generic type parameter
-// usage (e.g., vec[i64] or map[K, V]). Returns true if generic, false otherwise.
-// This function only peeks ahead and does not consume tokens.
-func (p *Parser) isGenericExpression() bool {
-	if !p.peekTokenIs(token.LBRACK) {
-		return false
-	}
-
-	if p.peekNTokenIsType(2) && !p.peekNTokenIs(2, token.IDENT) {
-		// Definitely generic: vec[int
-		// as types cant be used as identifiers
-		return true
-	}
-
-	if p.peekNTokenIs(2, token.IDENT) {
-		// Could be: 'map[K,' 'vec[T](' 'vec[T]{' 'a[b' 'if a[b] {' 'match a[b] {'
-		// Note: struct literals cant be defined within if and match cond
-		if p.peekNTokenIs(3, token.COMMA) ||
-			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LPAREN)) ||
-			(p.peekNTokenIs(3, token.RBRACK) && p.peekNTokenIs(4, token.LBRACE) &&
-				p.context != IF_ELSE && p.context != MATCH) {
-			return true
-		}
-	}
-
-	if p.peekNTokenIs(2, token.RBRACK) {
-		// e.g. vec[] (missing type)
-		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
-		return false
-	}
-
-	if p.peekNTokenIs(2, token.COMMA) {
-		// e.g. vec[, (malformed but parameterized)
-		p.addError(p.peekToken(), errInvalidToken(p.curToken.Literal))
-		return false
-	}
-
-	return false
-}
-
 func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 
 	if p.peekTokenIs(token.LPAREN) {
@@ -1309,13 +1269,10 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	// We use a simple decision tree with peeking to
-	// disamiguate between:
+	// [] is only used for generic type parameters
 	// - Generic function call: identity[i32](...)
 	// - Generic struct literal: vec[i64]{...}
-	// - Array indexing/slicing: a[0], a[b:c]
-	// - Arrax indexing/slicing within if/else & match condition
-	if p.isGenericExpression() {
+	if p.peekTokenIs(token.LBRACK) {
 		// Parse as generic function call or struct instantiation
 		p.nextToken() // consume ident
 		typeParams := p.parseTypeParameters()
@@ -1501,8 +1458,8 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 	p.nextToken()
 
 	if p.curTokenIsIdent() {
-		// Use the helper to check for generic expressions
-		if p.isGenericExpression() {
+		// [] is only used for generic type parameters
+		if p.peekTokenIs(token.LBRACK) {
 			ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 			p.nextToken() // consume ident
 			typeParams := p.parseTypeParameters()
