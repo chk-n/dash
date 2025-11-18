@@ -51,7 +51,11 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		case *types.String:
 			elemType = &types.ConstByte
 		default:
-			elemType = types.GetUnderlyingTypeArray(argsTypes[0]).T
+			arrType := types.GetUnderlyingTypeArray(argsTypes[0])
+			if arrType == nil {
+				return nil
+			}
+			elemType = arrType.T
 		}
 		args = []types.Type{argsTypes[0], argsTypes[1]}
 		rets = []types.Type{elemType}

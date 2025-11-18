@@ -217,6 +217,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// Infer UnknownNamed types in arguments before getting builtin signature
 			argTypes := getTypesFromExpressions(n.Arguments)
 			builtintFn := getBuiltinSignature(n.Token.Literal, argTypes)
+			if builtintFn == nil {
+				return
+			}
 			argTs := builtintFn.T.(*types.Function).Arg
 			retTs := builtintFn.T.(*types.Function).Ret
 
