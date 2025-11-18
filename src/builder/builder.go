@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"dash-lang.io/src/ast"
@@ -264,12 +265,22 @@ func (b *Builder) buildAllLibraries(nodes map[string]*dependencyTree) (map[strin
 		}
 	}
 
-	// Walk from all root nodes (this will visit all reachable nodes)
+	// Collect root nodes and sort them for deterministic processing
+	var rootNodes []*dependencyTree
 	for _, node := range nodes {
 		if !imported[node] {
-			if err := walkDependencyTree(node, parseAndMerge); err != nil {
-				return nil, fmt.Errorf("unable to walk dependency tree: %s", err)
-			}
+			rootNodes = append(rootNodes, node)
+		}
+	}
+	// Sort by absolute directory path for consistent build order
+	sort.Slice(rootNodes, func(i, j int) bool {
+		return rootNodes[i].AbsoluteDir < rootNodes[j].AbsoluteDir
+	})
+
+	// Walk from all root nodes (this will visit all reachable nodes)
+	for _, node := range rootNodes {
+		if err := walkDependencyTree(node, parseAndMerge); err != nil {
+			return nil, fmt.Errorf("unable to walk dependency tree: %s", err)
 		}
 	}
 
