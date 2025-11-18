@@ -27,6 +27,7 @@ fn test_parse_struct_literal()! {
 
     try assert_canonical_exp("a[i64]{a:2}")
     try assert_canonical_exp("a[i64,b,string]{a:2}")
+    try assert_canonical_exp("a[a.b.c,d.e]{a:2}")
 
     try assert_parse_error("{", [expected_identifier{i: 1}])
     try assert_parse_error("a{", [expected_identifier{i: 2}])
