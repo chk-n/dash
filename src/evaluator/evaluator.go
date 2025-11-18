@@ -333,6 +333,15 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	_fn, ok := stk.Get(n.TokenLiteral())
 	fn, ok := _fn.(*Function)
 	if !ok {
+		// Check if this is a custom type cast (type definition, union, etc.)
+		if _, exists := stk.GetType(n.TokenLiteral()); exists {
+			if len(n.Arguments) == 1 {
+				val := e.eval(n.Arguments[0], stk)
+				val = unwrapFunctionResult(val, 0)
+				return unwrapAny(val)
+			}
+			panic("type cast requires exactly one argument: " + n.TokenLiteral())
+		}
 		panic("not a function: " + n.TokenLiteral())
 	}
 

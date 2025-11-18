@@ -60,6 +60,18 @@ func (c *Context) Get(v string) (any, bool) {
 	return val, true
 }
 
+// GetType looks up a type in the current context and parent contexts
+func (c *Context) GetType(name string) (types.Type, bool) {
+	typ, ok := c.typs.Get(name)
+	if !ok {
+		if c.prev == nil {
+			return nil, false
+		}
+		return c.prev.GetType(name)
+	}
+	return typ, true
+}
+
 // Creates a new scope within the contexrt to prevent
 // variables from overlapping within different scopes
 // in program e.g. vars defined in if else block
