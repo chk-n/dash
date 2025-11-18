@@ -1971,7 +1971,12 @@ func (e *Evaluator) evalPostfixExpression(n *ast.PostfixExpression, stk *Context
 func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 	strct := make(map[string]any)
 	if n.Copy != nil {
-		s := e.eval(n.Copy, stk).(map[string]any)
+		copyVal := e.eval(n.Copy, stk)
+		// If the copy source is a pointer, unwrap it
+		if ptr, ok := copyVal.(*Pointer); ok {
+			copyVal = ptr.value
+		}
+		s := copyVal.(map[string]any)
 		maps.Copy(strct, s)
 	}
 
