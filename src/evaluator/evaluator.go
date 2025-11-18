@@ -359,11 +359,16 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
 			shouldWrapInAny = true
 		} else if genType, isGeneric := fn.arguments[i].Type.(*types.Generic); isGeneric {
-			// Check if generic has 'any' constraint
-			for _, constraint := range genType.Constraints {
-				if _, isAny := constraint.(*types.Any); isAny {
-					shouldWrapInAny = true
-					break
+			// Generic types with no constraints accept any type (like 'any')
+			// Also check if generic explicitly has 'any' constraint
+			if len(genType.Constraints) == 0 {
+				shouldWrapInAny = true
+			} else {
+				for _, constraint := range genType.Constraints {
+					if _, isAny := constraint.(*types.Any); isAny {
+						shouldWrapInAny = true
+						break
+					}
 				}
 			}
 		}
@@ -2318,8 +2323,28 @@ func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Conte
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, ctx)
 
-		// Check if parameter type is 'any' and convert if needed
+		argValue = unwrapFunctionResult(argValue, 0)
+
+		// Wrap value in Any if parameter is 'any' type or generic with 'any' constraint
+		shouldWrapInAny := false
 		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
+			shouldWrapInAny = true
+		} else if genType, isGeneric := fn.arguments[i].Type.(*types.Generic); isGeneric {
+			// Generic types with no constraints accept any type (like 'any')
+			// Also check if generic explicitly has 'any' constraint
+			if len(genType.Constraints) == 0 {
+				shouldWrapInAny = true
+			} else {
+				for _, constraint := range genType.Constraints {
+					if _, isAny := constraint.(*types.Any); isAny {
+						shouldWrapInAny = true
+						break
+					}
+				}
+			}
+		}
+
+		if shouldWrapInAny {
 			argValue = e.evalToAny(argValue)
 		}
 
