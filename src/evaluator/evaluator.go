@@ -2175,7 +2175,6 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	case []any:
 		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
-		// Create a copy first to ensure immutability
 		arrCopy := make([]any, len(arr))
 		copy(arrCopy, arr)
 		if anyArr, ok := val.([]any); ok {
@@ -2197,10 +2196,8 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 	case []uint8:
 		val := e.eval(args[1], ctx)
 		val = unwrapFunctionResult(val, 0)
-		// Create a copy first to ensure immutability
 		arrCopy := make([]uint8, len(arr))
 		copy(arrCopy, arr)
-		// Handle case where we're appending []uint8 to []uint8
 		if byteArr, ok := val.([]uint8); ok {
 			newArr = append(arrCopy, byteArr...)
 		} else {
@@ -2210,6 +2207,14 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 			case uint8:
 				newArr = append(arrCopy, val)
 			}
+		}
+	case string:
+		val := e.eval(args[1], ctx)
+		val = unwrapFunctionResult(val, 0)
+		if strVal, ok := val.(string); ok {
+			newArr = arr + strVal
+		} else if byteVal, ok := val.(uint8); ok {
+			newArr = arr + string([]byte{byteVal})
 		}
 	default:
 		panic("this is a compiler error. please report")
