@@ -1573,7 +1573,7 @@ func (s *Semantics) analyseTypes(nodes []ast.Node) {
 				_, exists := s.varSt.Get(f.Type.Ident())
 
 				var fieldType types.Type
-				if !exists && !types.IsTypeIdent(f.Type.Ident()) {
+				if !exists && !types.IsPrimitiveType(f.Type) {
 					fieldType = &types.UnknownNamed{Name: f.Type.Ident()}
 				} else {
 					fieldType = f.Type

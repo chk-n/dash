@@ -833,22 +833,10 @@ func (t *Multi) Equal(other Type) bool {
 // Helpers //
 // ------- //
 
-// Do not pass:
-// - pointer type e.g. "*T"
-// - dirty type
-// - type definition
-// - optional type
-func IsTypeIdent(ident string) bool {
-	switch ident {
-	case
-		"u8", "u16", "u32", "u64", "u128", "u256",
-		"i8", "i16", "i32", "i64", "i128", "i256",
-		"f32", "f64",
-		"string",
-		"bool",
-		"byte",
-		"error",
-		"array":
+func IsPrimitiveType(t Type) bool {
+	switch t.(type) {
+	case *Int, *Float, *Bool, *String,
+		*Char, *Byte, *Any:
 		return true
 	default:
 		return false
