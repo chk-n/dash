@@ -147,6 +147,8 @@ fn parse_library(p parser)! parser, ast.index {
         // case lexer.tag.ALIAS:
         case lexer.tag.STRUCT:
             p, node = try parse_struct_statement(p)
+        case lexer.tag.ERROR:
+            p, node = try parse_error_statement(p)
         case lexer.tag.ENUM:
             p, node = try parse_enum_statement(p)
         // case lexer.tag.ERROR:
@@ -344,6 +346,58 @@ fn parse_struct_statement(p parser)! parser, ast.index {
       }
     return try add_node(p, {
         tag: ast.tag.struct_def,
+        token: op_tkn,
+        data: {x: ident, y: fields}
+    })
+}
+
+fn parse_error_statement(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.ERROR), "expected 'error'")
+
+    let op_tkn = p.tkn_i
+    // consume 'error'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.IDENT) {
+        p = try add_error(p, expected_identifier{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+    p, let ident = try parse_literal(p)
+
+    if !is_tag(p, lexer.tag.LBRACE) {
+        p = try add_error(p, expected_brace{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+    p = next_token(p)
+
+    var extra = try make([]ast.index, 0, 4)
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+
+        if !is_tag(p, lexer.tag.IDENT) {
+            p = try add_error(p, expected_identifier{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+        p, let fname = try parse_literal(p)
+
+        if !is_type_literal(p) {
+            p = try add_error(p, expected_type{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+        p, let ftype = try parse_type_literal(p)
+
+        extra = try append(extra, [fname, ftype])
+    }
+    // allow empty error definitions (no fields)
+    if !is_tag(p, lexer.tag.RBRACE) {
+        p = try add_error(p, expected_brace{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+    p = next_token(p)
+
+    p, let fields = try add_extra(p, ast.tag.struct_fields, ast.NULL_TKN, extra)
+
+    return try add_node(p, {
+        tag: ast.tag.error_def,
         token: op_tkn,
         data: {x: ident, y: fields}
     })

@@ -350,6 +350,24 @@ fn test_parse_enum_statement()! {
 }
 
 @test
+fn test_parse_error_statement()! {
+    try assert_canonical_lib("lib a error xyz {f string}")
+    try assert_canonical_lib("lib a error xyz {f string msg u32}")
+    try assert_canonical_lib("lib a error xyz {a i64 b string c bool}")
+    try assert_canonical_lib("lib a error xyz {a y.z}")
+    try assert_canonical_lib("lib a pub error xyz {f string}")
+    try assert_canonical_lib("lib a error empty {}")
+
+    try assert_error("lib a error", [expected_identifier{i: 3}])
+    try assert_error("lib a error 1", [expected_identifier{i: 3}])
+    try assert_error("lib a error xyz", [expected_brace{i: 4}])
+    try assert_error("lib a error xyz { 123", [expected_identifier{i: 5}])
+    try assert_error("lib a error xyz { f", [expected_type{i: 6}])
+    try assert_error("lib a error xyz { f +", [expected_type{i: 6}])
+    try assert_error("lib a error xyz { f string", [expected_brace{i: 7}])
+}
+
+@test
 fn test_parse_function_statement()! {
     try assert_canonical_lib("lib a fn abc()")
     try assert_canonical_lib("lib a fn abc() i64")
