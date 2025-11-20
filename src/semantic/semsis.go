@@ -2719,13 +2719,29 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 	firstArgType := s.coalesceTypeForBuiltIn(n.Arguments[0].Type(), "append")
 	secondArgType := s.coalesceTypeForBuiltIn(n.Arguments[1].Type(), "append")
 
-	// validate first argument
-	arrayType, ok := firstArgType.(*types.Array)
-	if !ok {
-		s.addError(n.Arguments[0], errTypeMismatch("[]T", firstArgType.String()))
+	// validate first argument array or string
+	arrayType, isArray := firstArgType.(*types.Array)
+	_, isString := firstArgType.(*types.String)
+
+	if !isArray && !isString {
+		s.addError(n.Arguments[0], errTypeMismatch("[]T or string", firstArgType.String()))
 		return false
 	}
 
+	// Handle string append
+	if isString {
+		// For strings, second argument can be u8 (character) or string
+		if _, ok := secondArgType.(*types.String); ok {
+			return true
+		}
+		if intType, ok := secondArgType.(*types.Int); ok && intType.Width == 8 && intType.Signed == 0 {
+			return true
+		}
+		s.addError(n.Arguments[1], errTypeMismatch("u8 or string", secondArgType.String()))
+		return false
+	}
+
+	// Handle array append
 	elementType := arrayType.T
 
 	if secondArgArrType, ok := secondArgType.(*types.Array); ok {

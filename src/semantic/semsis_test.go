@@ -1641,12 +1641,37 @@ func TestAppendFunction(t *testing.T) {
 		{
 			name:   "append to non-slice",
 			input:  `let x = 42 let result = try append(x, 1)`,
-			errors: []string{"type mistmatch, expected type '[]T' but got 'i64'"},
+			errors: []string{"type mistmatch, expected type '[]T or string' but got 'i64'"},
 		},
 		{
 			name:  "append char to []byte",
 			input: `let buf = try make([]byte, 1) let result = try append(buf, 'A')`,
 			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,'A') }",
+		},
+		{
+			name:  "append u8 to string",
+			input: `let s = "hello" let result = try append(s, u8(65))`,
+			want:  "lib main pub fn main() { let s string = \"hello\" let result string = try append(s,u8(65)) }",
+		},
+		{
+			name:  "append string to string",
+			input: `let s = "hello" let result = try append(s, " world")`,
+			want:  "lib main pub fn main() { let s string = \"hello\" let result string = try append(s,\" world\") }",
+		},
+		{
+			name:  "append function result string to string",
+			input: `fn get_suffix() string { return "!" } let s = "hello" let result = try append(s, get_suffix())`,
+			want:  "lib main fn get_suffix() string { return \"!\" } pub fn main() { let s string = \"hello\" let result string = try append(s,get_suffix()) }",
+		},
+		{
+			name:  "append string to function result string",
+			input: `fn get_prefix() string { return "hello" } let result = try append(get_prefix(), " world")`,
+			want:  "lib main fn get_prefix() string { return \"hello\" } pub fn main() { let result string = try append(get_prefix(),\" world\") }",
+		},
+		{
+			name:   "append int to string",
+			input:  `let s = "hello" let result = try append(s, 42)`,
+			errors: []string{"type mistmatch, expected type 'u8 or string' but got 'i64'"},
 		},
 		{
 			name:  "put element in array",
