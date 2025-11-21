@@ -847,7 +847,10 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 	defer stk.Unscope()
 
 	typ := types.GetUnderlyingType(n.Scrutinee.Type())
-	// TODO: handle multiple predicates in one case
+	// Unwrap ImportedNamed to get the actual type for matching
+	if imported, ok := typ.(*types.ImportedNamed); ok {
+		typ = imported.Typ
+	}
 
 	// Check if type is 'any' or a generic with 'any' constraint
 	isAnyType := false
@@ -888,6 +891,10 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 			}
 		}
 	} else if _, ok := typ.(*types.Union); ok {
+		// Unwrap Any if the value came from a generic function
+		if anyVal, ok := scrutinee.(*Any); ok {
+			scrutinee = anyVal.value
+		}
 		unionVal, ok := scrutinee.(*Union)
 		if !ok {
 			panic("matching against non-union type")
@@ -1159,6 +1166,7 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) 
 	}
 
 	val := e.eval(n.Right, stk)
+	val = unwrapFunctionResult(val, 0)
 	var err error
 	switch n.Token.Type {
 	case token.MINUS:
