@@ -388,9 +388,9 @@ fn hash[T any](k T, seed u64)! u64 {
     match k {
     case string:
         return try rapidhash.nano([]u8(k), seed)
-    case u64:
+    case u8,u16,u32,u64:
         let b = convert.to_u8_array(k)
-        return try rapidhash.nano(b, seed)       
+        return try rapidhash.nano(b, seed)
     }
     raise unknown_error
 }
