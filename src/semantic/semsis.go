@@ -767,6 +767,20 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				default:
 					s.analyse(n.Right, "")
 				}
+			case *types.ImportedNamed:
+				if structType, ok := left.Typ.(*types.Struct); ok {
+					switch t := n.Right.(type) {
+					case *ast.Identifier:
+						typ, _, err := structType.GetTypeByField(n.Right.TokenLiteral())
+						if err != nil {
+							s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
+						}
+						typ = wrapTypeWithImportedNamed(left.Lib, typ)
+						t.T = typ
+					default:
+						s.analyse(n.Right, "")
+					}
+				}
 			}
 			n.SetType(n.Right.Type())
 		case *types.Definition, *types.Alias:
@@ -834,13 +848,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// already an ImportedNamed type we leave as is and if its
 				// not a builtin type we create a new ImportedNamed type
 				resolvedType, _, _ := t.GetTypeByField(n.Right.String())
-				_, ok := resolvedType.(*types.ImportedNamed)
-				if !ok && !types.IsBuiltinType(resolvedType) {
-					resolvedType = &types.ImportedNamed{
-						Lib: left.Lib,
-						Typ: resolvedType,
-					}
-				}
+				resolvedType = wrapTypeWithImportedNamed(left.Lib, resolvedType)
 				n.SetType(resolvedType)
 				return
 			} else if typ == nil {
@@ -854,13 +862,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// except if they are already of type
 				// ImportNamed or are a builtin type
 				for i, argT := range typ.Arg {
-					_, ok := argT.(*types.ImportedNamed)
-					if !ok && !types.IsBuiltinType(argT) {
-						typ.Arg[i] = &types.ImportedNamed{
-							Lib: left.Lib,
-							Typ: argT,
-						}
-					}
+					typ.Arg[i] = wrapTypeWithImportedNamed(left.Lib, argT)
 				}
 				// validate function call arguments for imported functions
 				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
@@ -870,13 +872,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// convert non builtin types to be
 				// ImportedNamed
 				for i, retT := range typ.Ret {
-					_, ok := retT.(*types.ImportedNamed)
-					if !ok && !types.IsBuiltinType(retT) {
-						typ.Ret[i] = &types.ImportedNamed{
-							Lib: left.Lib,
-							Typ: retT,
-						}
-					}
+					typ.Ret[i] = wrapTypeWithImportedNamed(left.Lib, retT)
 				}
 				n.SetType(&types.Multi{Ts: typ.Ret})
 			default:
@@ -2118,6 +2114,15 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			return false
 		}
 		return true
+	case *types.ImportedNamed:
+		switch tt.Typ.(type) {
+		case *types.Union, *types.Error:
+			if !types.CanCoalesce(exprType, targetType) {
+				s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+				return false
+			}
+			return true
+		}
 	case *types.Any:
 		return true
 	case *types.Generic:
@@ -3046,4 +3051,34 @@ func (s *Semantics) substituteTypeParameters(t types.Type, typeMap map[string]ty
 	default:
 		return t
 	}
+}
+
+// wrapTypeWithImportedNamed wraps a type with ImportedNamed, handling compound types
+// correctly by wrapping the inner type instead of the outer container.
+func wrapTypeWithImportedNamed(lib string, t types.Type) types.Type {
+	if t == nil {
+		return nil
+	}
+
+	if _, ok := t.(*types.ImportedNamed); ok {
+		return t
+	}
+
+	switch typ := t.(type) {
+	case *types.Pointer:
+		return &types.Pointer{T: wrapTypeWithImportedNamed(lib, typ.T)}
+	case *types.Array:
+		return &types.Array{T: wrapTypeWithImportedNamed(lib, typ.T), Size: typ.Size}
+	case *types.Optional:
+		return &types.Optional{T: wrapTypeWithImportedNamed(lib, typ.T)}
+	case *types.Mutable:
+		return &types.Mutable{T: wrapTypeWithImportedNamed(lib, typ.T)}
+	}
+
+	if types.IsBuiltinType(t) {
+		return t
+	}
+
+	// For non-builtin types (struct, enum, union, etc.), wrap with ImportedNamed
+	return &types.ImportedNamed{Lib: lib, Typ: t}
 }
