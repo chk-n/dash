@@ -15,23 +15,35 @@ type Context struct {
 	// stores variables, function closures, functions
 	vars *internal.StackedSymTab[any]
 	prev *Context
+	// Current library path (e.g., "dash/lexer").
+	// NOTE: its always set on every context as it
+	// is needed to generate type descriptor e.g.
+	// for match or any types
+	libPath string
 }
 
 func NewContext(prev *Context) *Context {
+	var libPath string
+	if prev != nil {
+		libPath = prev.libPath
+	}
 	return &Context{
-		imps: internal.NewCache[string, *ast.Library](),
-		vars: internal.NewStackedSymbolTable[any](),
-		prev: prev,
-		typs: internal.NewCache[string, types.Type](),
+		imps:    internal.NewCache[string, *ast.Library](),
+		vars:    internal.NewStackedSymbolTable[any](),
+		prev:    prev,
+		typs:    internal.NewCache[string, types.Type](),
+		libPath: libPath,
 	}
 }
 
-func NewContextWith(prev *Context, imps *internal.Cache[string, *ast.Library]) *Context {
+// NewContextWith creates a new context with an explicit library path
+func NewContextWith(prev *Context, libPath string) *Context {
 	return &Context{
-		imps: imps,
-		vars: internal.NewStackedSymbolTable[any](),
-		prev: prev,
-		typs: internal.NewCache[string, types.Type](),
+		imps:    internal.NewCache[string, *ast.Library](),
+		vars:    internal.NewStackedSymbolTable[any](),
+		prev:    prev,
+		typs:    internal.NewCache[string, types.Type](),
+		libPath: libPath,
 	}
 }
 

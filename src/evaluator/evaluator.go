@@ -99,17 +99,18 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 		if !ok {
 			continue
 		}
-		libName := imp.Name.TokenLiteral()
-		lib, ok := e.libs[libName]
+		libPath := imp.Name.TokenLiteral()
+		lib, ok := e.libs[libPath]
 		if !ok {
 			panic("")
 		}
 
-		normalisedLibName := path.Base(libName)
+		normalisedLibName := path.Base(libPath)
 		ctx.imps.Set(normalisedLibName, lib)
 
 		if _, ok := e.ctxs[normalisedLibName]; !ok {
-			ctxLib := NewContext(nil)
+			// Create context with the imported library's path
+			ctxLib := NewContextWith(nil, libPath)
 			e.eval(lib, ctxLib)
 			e.ctxs[normalisedLibName] = ctxLib
 		}
@@ -130,7 +131,7 @@ func (e *Evaluator) InitialiseLib(lib *ast.Library, ctx *Context) {
 		case *ast.EnumStatement:
 			e.initialiseEnumStatement(n, ctx)
 		case *ast.ErrorStatement:
-			typeName := lib.Name.String() + "." + n.Name.String()
+			typeName := ctx.libPath + "." + n.Name.String()
 			typeDesc := generateTypeDescriptor(typeName)
 			err := &Error{
 				descriptor: typeDesc,
@@ -212,7 +213,7 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		if _, ok := ctx.typs.Get(n.TokenLiteral()); ok {
 			res := e.eval(n.Arguments[0], ctx)
 			if _, ok := n.T.(*types.Union); ok {
-				typeName := n.Arguments[0].Type().Ident()
+				typeName := normaliseTypeDescriptorName(n.Arguments[0].Type(), ctx.libPath, e)
 				descriptor := generateTypeDescriptor(typeName)
 
 				res = &Union{
@@ -859,12 +860,13 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 		for _, c := range n.Cases {
 			// check each predicate in the case
 			for _, pred := range c.Predicates {
+				// For primitive types we check if predicate is TypeLiteral to get
+				// type name as semantic analyzer may set type to scrutinee type
 				var typeName string
 				if typeLit, ok := pred.(*ast.TypeLiteral); ok {
-					// Use token literal for type literals to get actual type name
 					typeName = typeLit.TokenLiteral()
 				} else {
-					typeName = pred.String()
+					typeName = normaliseTypeDescriptorName(pred.Type(), stk.libPath, e)
 				}
 				caseDescriptor := generateTypeDescriptor(typeName)
 
@@ -882,7 +884,13 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 		for _, c := range n.Cases {
 			// check each predicate in the case
 			for _, pred := range c.Predicates {
-				typeName := pred.String()
+				// Determine the type name for descriptor generation
+				var typeName string
+				if typeLit, ok := pred.(*ast.TypeLiteral); ok {
+					typeName = typeLit.TokenLiteral()
+				} else {
+					typeName = normaliseTypeDescriptorName(pred.Type(), stk.libPath, e)
+				}
 				caseDescriptor := generateTypeDescriptor(typeName)
 
 				if caseDescriptor == unionVal.descriptor {
@@ -1000,7 +1008,7 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 	// case 1: library access
 	if leftIdent, ok := n.Left.(*ast.Identifier); ok {
 		if libCtx, isLibrary := e.ctxs[leftIdent.Value]; isLibrary {
-			return e.evalLibraryAccess(libCtx, n.Right, stk)
+			return e.evalLibraryAccess(libCtx, n.Right, n.Type(), stk)
 		}
 	}
 
@@ -1018,7 +1026,7 @@ func (e *Evaluator) evalDotExpression(n *ast.DotExpression, stk *Context) any {
 	return e.evalLocalAccess(leftValue, n.Right, stk)
 }
 
-func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, stk *Context) any {
+func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, exprType types.Type, stk *Context) any {
 	switch right := right.(type) {
 	case *ast.Identifier:
 		// lib.variable or lib.enum access
@@ -1031,8 +1039,30 @@ func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, stk
 
 		// Check if it's a type cast: lib.Type(value)
 		if _, ok := libCtx.typs.Get(name); ok {
-			// For type casts, evaluate the argument and return it
-			return e.eval(right.Arguments[0], stk)
+			res := e.eval(right.Arguments[0], stk)
+			// Check if it's a union type (including imported unions)
+			// Use exprType from the DotExpression since right.T may be nil
+			isUnion := false
+			if _, ok := exprType.(*types.Union); ok {
+				isUnion = true
+			} else if imported, ok := exprType.(*types.ImportedNamed); ok {
+				if _, ok := imported.Typ.(*types.Union); ok {
+					isUnion = true
+				}
+			}
+			if isUnion {
+				argType := right.Arguments[0].Type()
+				argType = types.StripMultiType(argType)
+				// Use argType (the variant type) for descriptor, not exprType (the union type)
+				typeName := normaliseTypeDescriptorName(argType, libCtx.libPath, e)
+				descriptor := generateTypeDescriptor(typeName)
+
+				res = &Union{
+					descriptor: descriptor,
+					value:      res,
+				}
+			}
+			return res
 		}
 
 		// Otherwise it's a function call: lib.function(args...)
@@ -2375,6 +2405,31 @@ func generateTypeDescriptor(typeName string) uint32 {
 	hash := fnv.New32a()
 	hash.Write([]byte(typeName))
 	return hash.Sum32()
+}
+
+// normaliseTypeDescriptorName creates a consistent type descriptor name.
+// For primitives: returns just the type name (e.g., "u32")
+// For user-defined types: returns "library/path.type_name" (e.g., "dash/intern.my_type")
+// Pointer prefixes are stripped.
+func normaliseTypeDescriptorName(t types.Type, libPath string, e *Evaluator) string {
+	t = types.StripPointerType(t)
+
+	if imported, ok := t.(*types.ImportedNamed); ok {
+		// use full library path from evaluator contexts
+		typeName := imported.Typ.Ident()
+		if libCtx, ok := e.ctxs[imported.Lib]; ok {
+			return libCtx.libPath + "." + typeName
+		}
+		panic("this is a compiler error. please report")
+	}
+
+	typeName := t.Ident()
+
+	if types.IsPrimitiveType(t) {
+		return typeName
+	}
+
+	return libPath + "." + typeName
 }
 
 // convertGoTypeToDash converts Go type names to Dash type names

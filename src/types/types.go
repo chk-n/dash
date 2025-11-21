@@ -852,6 +852,14 @@ func StripImportedNamed(t Type) Type {
 	}
 }
 
+func StripPointerType(t Type) Type {
+	switch t := t.(type) {
+	case *Pointer:
+		return t.T
+	default:
+		return t
+	}
+}
 func StripMultiType(t Type) Type {
 	switch t := t.(type) {
 	case *Multi:

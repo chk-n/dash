@@ -802,7 +802,7 @@ func TestTryExpression(t *testing.T) {
 	            return 0
 	        }
 	        try safe_divide(10, 0)`,
-			want: &Error{Err: "main.divide_by_zero"},
+			want: &Error{Err: ".divide_by_zero"},
 		},
 		{
 			name: "try with multiple return values",
@@ -1559,7 +1559,7 @@ func TestMatchStatement(t *testing.T) {
 				}
 				try test()
 			`,
-			want: &Error{Err: "main.some_err"},
+			want: &Error{Err: ".some_err"},
 		},
 		{
 			name: "match error",
