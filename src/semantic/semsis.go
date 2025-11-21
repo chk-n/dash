@@ -1824,9 +1824,11 @@ func (s *Semantics) resolveAllTypeReferences(nodes []ast.Node) {
 			s.typeSt.Scope()
 			s.addGenericParametersToSymbolTable(n.GenericParameters)
 
-			// We dont need to scope the symbol table as all function literals
-			// encountered here are global within library
+			// Scope varSt to prevent function parameters from overwriting
+			// global type definitions (e.g., parameter 'ir' overwriting struct 'ir')
+			s.varSt.Scope()
 			s.analyseFunctionExpression(n, "")
+			s.varSt.Unscope()
 
 			s.typeSt.Unscope()
 		}
