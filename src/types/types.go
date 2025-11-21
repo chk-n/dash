@@ -852,6 +852,15 @@ func StripImportedNamed(t Type) Type {
 	}
 }
 
+func StripMultiType(t Type) Type {
+	switch t := t.(type) {
+	case *Multi:
+		return t.Ts[0]
+	default:
+		return t
+	}
+}
+
 func IsBuiltinType(t Type) bool {
 	switch t := t.(type) {
 	case *Dirty:

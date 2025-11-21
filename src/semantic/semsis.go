@@ -1059,7 +1059,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 	case *ast.PrefixExpression:
 		s.analyse(n.Right, "")
-		n.T = n.Right.Type()
+		// if n.Right is fn call we strip Multi type away
+		// TODO: validate n.Right returns only 1 argument
+		n.T = types.StripMultiType(n.Right.Type())
 		switch n.Token.Type {
 		case token.ASTERISK:
 			if pointerT, ok := n.T.(*types.Pointer); ok {
