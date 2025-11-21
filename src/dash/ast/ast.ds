@@ -63,6 +63,7 @@ pub enum tag {
     struct_def
     struct_gen_def
     struct_fields
+    error_def
     enum_def
     enum_fields
     union_def
@@ -269,8 +270,8 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
 
     match node.tag {
     case tag.library, tag.type_def,
-         tag.struct_def, tag.enum_def,
-         tag.union_def:
+         tag.struct_def, tag.error_def,
+         tag.enum_def, tag.union_def:
 
         buf = add_pub(a, idx, buf)
         let src_idx = try get(a.tkns, node.token).start
@@ -754,7 +755,8 @@ fn get_fixed_token(src []byte, idx source_index, t tag)! []byte {
         case tag.union_def, tag.break_stmt,
              tag.catch_expr, tag.raise_stmt,
              tag.defer_stmt, tag.match_stmt,
-             tag.float_type, tag.error_type: 5
+             tag.float_type, tag.error_type,
+             tag.error_def: 5
         case tag.enum_def, tag.type_def, tag.next_stmt,
              tag.case_stmt, tag.char_type, tag.bool_type: 4
         case tag.pub, tag.let_decl, tag.var_decl,
