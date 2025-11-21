@@ -167,6 +167,7 @@ pub enum tag {
     column_type
     optional_type
     mutable_type
+    pointer_type
 
     // only for usage within 'ast' lib
     pub
@@ -717,6 +718,10 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = append(buf, '<')
         buf = try to_string(a, data.x, buf)
         buf = append(buf, '>')
+
+    case tag.pointer_type:
+        buf = append(buf, '*')
+        buf = try to_string(a, data.x, buf)
 
     case tag.return_stmt:
         let src_idx = try get(a.tkns, node.token).start

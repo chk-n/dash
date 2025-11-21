@@ -300,6 +300,8 @@ fn test_struct_statement()! {
     try assert_canonical_lib("lib a struct x {a y b string}")
     try assert_canonical_lib("lib a struct x {a y.z}")
     try assert_canonical_lib("lib a pub struct x {a i64}")
+    try assert_canonical_lib("lib a struct x {a *a.b}")
+    try assert_canonical_lib("lib a struct x {a *i64 b *string}")
     
     try assert_canonical_lib("lib a struct x[T any] {a T}")
     try assert_canonical_lib("lib a struct x[T,U any] {a T}")
