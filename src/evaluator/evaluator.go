@@ -828,7 +828,19 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 }
 
 func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement, stk *Context) any {
-	scrutinee := e.eval(n.Scrutinee, stk)
+	var scrutinee any
+	var bindingName string
+
+	// Handle assignment pattern: match v = expr
+	// Only evaluate the right side and bind v to the result
+	if infixExp, ok := n.Scrutinee.(*ast.InfixExpression); ok && infixExp.Operator == "=" {
+		if ident, ok := infixExp.Left.(*ast.Identifier); ok {
+			bindingName = ident.Value
+			scrutinee = e.eval(infixExp.Right, stk)
+		}
+	} else {
+		scrutinee = e.eval(n.Scrutinee, stk)
+	}
 	scrutinee = unwrapFunctionResult(scrutinee, 0)
 
 	stk.Scope()
@@ -894,6 +906,10 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 				caseDescriptor := generateTypeDescriptor(typeName)
 
 				if caseDescriptor == unionVal.descriptor {
+					// Update binding to the inner value
+					if bindingName != "" {
+						stk.Set(bindingName, unionVal.value)
+					}
 					return e.evalMatchCase(c, stk)
 				}
 			}
