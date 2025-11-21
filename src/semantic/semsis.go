@@ -986,8 +986,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// This is required to be able to, for example, match byte
 				// with char literals. However, don't replace if scrutinee is
 				// a generic type, as we want to keep the concrete type.
-				_, isUnion := n.Scrutinee.Type().(*types.Union)
-				_, isGeneric := sT.(*types.Generic)
+				_sT := types.StripImportedNamed(sT)
+				_, isUnion := _sT.(*types.Union)
+				_, isGeneric := _sT.(*types.Generic)
 				if !isUnion && !isGeneric {
 					pred.SetType(sT)
 				}

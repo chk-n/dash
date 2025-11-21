@@ -843,6 +843,15 @@ func IsPrimitiveType(t Type) bool {
 	}
 }
 
+func StripImportedNamed(t Type) Type {
+	switch t := t.(type) {
+	case *ImportedNamed:
+		return t.Typ
+	default:
+		return t
+	}
+}
+
 func IsBuiltinType(t Type) bool {
 	switch t := t.(type) {
 	case *Dirty:
