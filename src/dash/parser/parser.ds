@@ -62,7 +62,7 @@ enum precedence {
     dot
 }
 
-pub fn parse(src []byte, m mode)! ast.ast {
+pub fn parse(src []byte, m mode)! *ast.ast {
     var tkns = try make([]ast.token, 0, len(src) / 8)
     var l = lexer.new(src, 0)
     for {

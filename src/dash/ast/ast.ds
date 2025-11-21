@@ -256,7 +256,8 @@ pub fn keyword_to_tag(t lexer.tag)! tag {
     }
 }
 
-pub fn to_string(a ast, idx index, buf []byte)! []byte {
+// to_string converts ast to a linear unformatted string
+pub fn to_string(a *ast, idx index, buf []byte)! []byte {
     if idx == NULL_IDX {
         return buf
     }    
@@ -779,7 +780,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag)! []byte {
 
 // optionally adds the 'pub' keyword to buf should be called
 // when at a token that could have 'pub' BEFORE it e.g. 'fn'
-fn add_pub(a ast, idx index, buf []byte)! []byte  {
+fn add_pub(a *ast, idx index, buf []byte)! []byte  {
     let node = try get(a.nodes, idx)
     if node.token == 0 || node.token == NULL_TKN {
         return buf
