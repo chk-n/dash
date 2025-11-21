@@ -4,7 +4,7 @@ lib parser
 use "dash/ast"
 use "dash/lexer"
 
-struct parser {
+pub struct parser {
     // TODO: replace with column list
     tkns   []ast.token
     nodes  []ast.node
@@ -15,7 +15,7 @@ struct parser {
 }
 
 // defines parser mode such as
-enum mode {
+pub enum mode {
     lib
     // use if only library name and imports 
     // should be parsed
