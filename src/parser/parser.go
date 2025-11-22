@@ -727,6 +727,11 @@ func (p *Parser) parseAssignmentStatementPre(firstAssignee ast.Expression) ast.S
 	stmt.Declerations = append(stmt.Declerations, firstAssignee)
 
 	for !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
+		// Skip comma separator between declarations
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+
 		if p.curTokenIs(token.LET) || p.curTokenIs(token.VAR) {
 			tkn := p.curToken
 			p.nextToken()
@@ -736,7 +741,7 @@ func (p *Parser) parseAssignmentStatementPre(firstAssignee ast.Expression) ast.S
 				Token:    tkn,
 				Assignee: assignee,
 			})
-		} else {
+		} else if !p.curTokenIs(token.ASSIGN) && !p.curTokenIs(token.EOF) {
 			stmt.Declerations = append(stmt.Declerations, p.parseExpression(ASSIGN))
 		}
 

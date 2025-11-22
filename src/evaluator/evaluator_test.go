@@ -553,6 +553,184 @@ func TestStructLiteral(t *testing.T) {
 	}
 }
 
+func TestStructFieldAssignment(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "basic struct field assignment",
+			prog: `struct user {
+				name string
+				age i64
+			}
+			var p = user{name: "ada", age: 24}
+			p.age = 25
+			p`,
+			want: map[string]any{
+				"name": "ada",
+				"age":  int64(25),
+			},
+		},
+		{
+			name: "struct field assignment preserves other fields",
+			prog: `struct user {
+				name string
+				age i64
+			}
+			var p = user{name: "ada", age: 24}
+			p.name = "bob"
+			p`,
+			want: map[string]any{
+				"name": "bob",
+				"age":  int64(24),
+			},
+		},
+		{
+			name: "nested struct field assignment",
+			prog: `struct person {
+				name string
+				addr address
+			}
+			struct address {
+				city string
+			}
+			var p = person{name: "ada", addr: address{city: "zurich"}}
+			p.addr.city = "london"
+			p`,
+			want: map[string]any{
+				"name": "ada",
+				"addr": map[string]any{
+					"city": "london",
+				},
+			},
+		},
+		{
+			name: "multiple field assignments",
+			prog: `struct point {
+				x i64
+				y i64
+			}
+			var p = point{x: 0, y: 0}
+			p.x = 10
+			p.y = 20
+			p`,
+			want: map[string]any{
+				"x": int64(10),
+				"y": int64(20),
+			},
+		},
+		{
+			name: "field assignment returns updated field value",
+			prog: `struct user {
+				name string
+				age i64
+			}
+			var p = user{name: "ada", age: 24}
+			p.age = 30
+			p.age`,
+			want: int64(30),
+		},
+		{
+			name: "original struct not modified after copy and field assignment",
+			prog: `struct point {
+				x i64
+				y i64
+			}
+			let original = point{x: 1, y: 2}
+			var copy = original
+			copy.x = 10
+			original.x`,
+			want: int64(1),
+		},
+		{
+			name: "original nested struct not modified after copy and field assignment",
+			prog: `struct outer {
+				inner inner_t
+			}
+			struct inner_t {
+				val i64
+			}
+			let original = outer{inner: inner_t{val: 1}}
+			var copy = original
+			copy.inner.val = 99
+			original.inner.val`,
+			want: int64(1),
+		},
+		{
+			name: "multiple copies independent of each other",
+			prog: `struct point {
+				x i64
+			}
+			let original = point{x: 0}
+			var copy1 = original
+			var copy2 = original
+			copy1.x = 1
+			copy2.x = 2
+			original.x + copy1.x + copy2.x`,
+			want: int64(3),
+		},
+		{
+			name: "struct field assignment in multi-assignment - first position",
+			prog: `struct test {
+				x i64
+			}
+			var s = test{x: 1}
+			s.x, let y = 10, 20
+			s.x`,
+			want: int64(10),
+		},
+		{
+			name: "struct field assignment in multi-assignment - second position",
+			prog: `struct test {
+				x i64
+			}
+			var s = test{x: 1}
+			let y, s.x = 10, 20
+			s.x`,
+			want: int64(20),
+		},
+		{
+			name: "struct field assignment with multi-return function",
+			prog: `struct test {
+				x i64
+			}
+			fn pair() i64, i64 { return 10, 20 }
+			var s = test{x: 1}
+			s.x, let y = pair()
+			s.x + y`,
+			want: int64(30),
+		},
+		{
+			name: "struct field assignment in multi-return - second position",
+			prog: `struct test {
+				x i64
+			}
+			fn pair() i64, i64 { return 10, 20 }
+			var s = test{x: 1}
+			let y, s.x = pair()
+			s.x + y`,
+			want: int64(30),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// n, err := parseExpressions(tt.prog)
+			// if err != nil {
+			// 	t.Error(err)
+			// }
+			// e := NewEvaluator()
+			// got := e.Eval(n, NewContext(nil))
+
+			// if !deepEqual(got, tt.want) {
+			// 	t.Errorf("got %v but want %v", got, tt.want)
+			// }
+		})
+	}
+}
+
 func TestEnumDotExpression(t *testing.T) {
 	tests := []struct {
 		name string

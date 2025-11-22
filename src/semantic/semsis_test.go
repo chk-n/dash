@@ -520,6 +520,41 @@ func TestDotExpression(t *testing.T) {
 			input: "struct a { i b } struct b { j i64 } let s = a{i: b{j: 1}} let f = s.i.j",
 			want:  "lib main struct a {i b} struct b {j i64} pub fn main() { let s a = a{i b: b{j i64: 1}} let f i64 = s.i.j }",
 		},
+		{
+			name:  "struct field assignment with var",
+			input: "struct test { x u8 } var s = test{x: 1} s.x = 2",
+			want:  "lib main struct test {x u8} pub fn main() { var s test = test{x u8: 1} s.x u8 = 2 }",
+		},
+		{
+			name:   "struct field assignment with let - illegal",
+			input:  "struct test { x i64 } let s = test{x: 1} s.x = 2",
+			errors: []string{"illegal update of 's'"},
+		},
+		{
+			name:  "nested struct field assignment with var",
+			input: "struct a { i b } struct b { j i64 } var s = a{i: b{j: 1}} s.i.j = 2",
+			want:  "lib main struct a {i b} struct b {j i64} pub fn main() { var s a = a{i b: b{j i64: 1}} s.i.j i64 = 2 }",
+		},
+		{
+			name:   "nested struct field assignment with let - illegal",
+			input:  "struct a { i b } struct b { j i64 } let s = a{i: b{j: 1}} s.i.j = 2",
+			errors: []string{"illegal update of 's'"},
+		},
+		{
+			name:   "struct field assignment type mismatch",
+			input:  "struct test { x i64 } var s = test{x: 1} s.x = \"hello\"",
+			errors: []string{"type mistmatch, expected type 'i64' but got 'string'"},
+		},
+		{
+			name:  "struct field assignment then struct reassignment",
+			input: "struct test { x i64 } var s = test{x: 1} s.x = 2 s = test{x: 3}",
+			want:  "lib main struct test {x i64} pub fn main() { var s test = test{x i64: 1} s.x i64 = 2 s test = test{x i64: 3} }",
+		},
+		{
+			name:  "struct field assignment then pass to function",
+			input: "struct test { x i64 } fn foo(t test) test { return t } var s = test{x: 1} s.x = 2 s = foo(s)",
+			want:  "lib main struct test {x i64} fn foo(t test) test { return t } pub fn main() { var s test = test{x i64: 1} s.x i64 = 2 s test = foo(s) }",
+		},
 	}
 	runAnalysisTests(t, tests)
 }

@@ -45,7 +45,7 @@ func TestImportLibrary(t *testing.T) {
 					lib two
 					let x = one.abc{x: 1}
 				`,
-			want: "lib two let x abc = one.abc{x i64: 1}",
+			want: "lib two let x one.abc = one.abc{x i64: 1}",
 		},
 		{
 			name: "use imported type in expression",
@@ -178,6 +178,37 @@ func TestImportLibrary(t *testing.T) {
 				}
 			`,
 			want: "lib two fn test(err error) i64 { return match err { case one.a: 1 case one.b: 2 } } pub fn main() { test(one.a) }",
+		},
+		{
+			name: "imported union type cast",
+			input: `
+				lib one
+				pub struct inner { x i64 }
+				pub union val {
+					inner
+					i64
+				}
+				pub fn make() val { return val(inner{x: 1}) }
+				--
+				lib two
+				let x = one.val(one.inner{x: 1})
+			`,
+			want: "lib two let x one.val = one.val(one.inner{x i64: 1})",
+		},
+		{
+			name: "imported union with variable argument",
+			input: `
+				lib one
+				pub struct decl { x i64 }
+				pub union value {
+					decl
+				}
+				--
+				lib two
+				let d = one.decl{x: 1}
+				let v = one.value(d)
+			`,
+			want: "lib two let d one.decl = one.decl{x i64: 1} let v one.value = one.value(d)",
 		},
 	}
 

@@ -1059,7 +1059,7 @@ func (e *DotExpression) Type() types.Type { return e.T }
 func (e *DotExpression) SetType(t types.Type) {
 	e.T = t
 }
-func (e *DotExpression) TokenLiteral() string { return e.Token.Literal }
+func (e *DotExpression) TokenLiteral() string { return e.Left.TokenLiteral() }
 func (e *DotExpression) String() string {
 	var out bytes.Buffer
 

@@ -717,11 +717,17 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 		default:
 			res := e.eval(val, ctx)
 			res = unwrapFunctionResult(res, 0)
-			switch n.Declerations[i].(type) {
+			switch decl := n.Declerations[i].(type) {
 			case *ast.Identifier:
 				ctx.SetAll(n.VarNameAt(i), res)
 			case *ast.DeclarationStatement:
 				ctx.Set(n.VarNameAt(i), res)
+			case *ast.DotExpression:
+				rootIdent := decl.TokenLiteral()
+				fieldPath := getFieldPath(decl)
+				currentValue, _ := ctx.Get(rootIdent)
+				newStruct := updateStructField(currentValue, fieldPath, res)
+				ctx.SetAll(rootIdent, newStruct)
 			}
 		}
 	}
@@ -730,9 +736,16 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 
 // Performs a context set but propagates the set up context chain if its a reassignment
 func setOrUpdateForAssignment(assgn ast.Node, name string, res any, ctx *Context) {
-	if _, ok := assgn.(*ast.Identifier); ok {
+	switch decl := assgn.(type) {
+	case *ast.Identifier:
 		ctx.SetAll(name, res)
-	} else {
+	case *ast.DotExpression:
+		rootIdent := decl.TokenLiteral()
+		fieldPath := getFieldPath(decl)
+		currentValue, _ := ctx.Get(rootIdent)
+		newStruct := updateStructField(currentValue, fieldPath, res)
+		ctx.SetAll(rootIdent, newStruct)
+	default:
 		ctx.Set(name, res)
 	}
 }
@@ -2583,6 +2596,44 @@ func (e *Error) String() string {
 	}
 
 	return b.String()
+}
+
+// getFieldPath extracts the field path from a potentially nested DotExpression.
+// For example: s.a.b -> returns ["a", "b"]
+func getFieldPath(expr *ast.DotExpression) []string {
+	var path []string
+	current := expr
+	for {
+		if ident, ok := current.Right.(*ast.Identifier); ok {
+			path = append([]string{ident.Value}, path...)
+		} else if intLit, ok := current.Right.(*ast.IntegerLiteral); ok {
+			path = append([]string{fmt.Sprintf("%d", intLit.Value)}, path...)
+		}
+		if next, ok := current.Left.(*ast.DotExpression); ok {
+			current = next
+		} else {
+			break
+		}
+	}
+	return path
+}
+
+// updateStructField creates a copy of the struct with the field at the given path updated.
+// It handles nested structs by recursively copying and updating.
+func updateStructField(value any, path []string, newValue any) map[string]any {
+	strct := value.(map[string]any)
+	result := make(map[string]any)
+	maps.Copy(result, strct)
+
+	if len(path) == 1 {
+		// Base case: set the field directly
+		result[path[0]] = newValue
+	} else {
+		// Recursive case: copy the nested struct and update it
+		result[path[0]] = updateStructField(result[path[0]], path[1:], newValue)
+	}
+
+	return result
 }
 
 func valueToString(v any) string {

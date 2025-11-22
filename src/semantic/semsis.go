@@ -476,21 +476,8 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			}
 			n.T = &typ
 		} else {
-
-			switch exp := n.Name.(type) {
-			case *ast.Identifier:
-				s.analyse(n.Name, "")
-			case *ast.DotExpression:
-				if lib, ok := s.importedSt[exp.Left.String()]; ok {
-					typ := lib[exp.Right.String()]
-					exp.Left.SetType(typ)
-					exp.SetType(typ)
-					n.SetType(typ)
-				} else {
-					// TODO: add error
-					panic("this is a compiler error. please report")
-				}
-			}
+			s.analyse(n.Name, "")
+			// n.SetType(n.Name.Type())
 
 			// validate struct exists
 			typ := n.Name.Type()
@@ -516,6 +503,14 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			case *types.AbstractStruct:
 				s.addError(n, errAliasUsedAsLiteral())
 				return
+			case *types.ImportedNamed:
+				// Handle imported struct types
+				st, ok := t.Typ.(*types.Struct)
+				if !ok {
+					s.addError(n, errTypeMismatch("struct", typ.String()))
+					return
+				}
+				structType = st
 			default:
 				// TODO: improve error here
 				if typ == nil {
@@ -656,6 +651,9 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 			// used properly by the struct literal.
 			case *types.Definition:
 				t.Underlying = structType
+				s.varSt.Set(n.Name.TokenLiteral(), &VarInfo{Type: typ})
+				n.T = typ
+			case *types.ImportedNamed:
 				s.varSt.Set(n.Name.TokenLiteral(), &VarInfo{Type: typ})
 				n.T = typ
 			}
@@ -875,6 +873,26 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					typ.Ret[i] = wrapTypeWithImportedNamed(left.Lib, retT)
 				}
 				n.SetType(&types.Multi{Ts: typ.Ret})
+			case *types.Union:
+				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+					if len(fn.Arguments) != 1 {
+						s.addError(fn, errTooManyArguments(name))
+						return
+					}
+					arg := fn.Arguments[0]
+					if !types.CanCoalesce(arg.Type(), typ) {
+						s.addError(fn, errTypeMismatch(typ.String(), arg.Type().String()))
+						return
+					}
+					// as this is a dot expression we can always wrap
+					// with importednamed
+					unionType := wrapTypeWithImportedNamed(left.Lib, typ)
+					fn.ReturnTypes = []types.Type{unionType}
+					n.SetType(unionType)
+				} else {
+					left.Typ = typ
+					n.SetType(left)
+				}
 			default:
 				left.Typ = typ
 				n.SetType(left)
@@ -1392,10 +1410,24 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 					}
 					s.fnSt.Set(n.VarNameAt(i+j), f)
 				} else {
-					ident := n.VarNameAt(i + j)
-					_, isMutable := n.TypeAt(i + j).(*types.Mutable)
-					isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j) || isMutable
-					s.setDeclerationInSymTab(ident, rt, isReassignable)
+					decl := n.Declerations[i+j]
+					// For field assignments (DotExpression), analyze and validate type
+					// but don't update the base variable's type in symbol table
+					if dotExpr, ok := decl.(*ast.DotExpression); ok {
+						s.analyse(dotExpr, "")
+						if dotExpr.Type() == nil {
+							return
+						}
+						if !types.CanCoalesce(rt, dotExpr.Type()) {
+							s.addError(n, errTypeMismatch(dotExpr.Type().String(), rt.String()))
+							return
+						}
+					} else {
+						ident := n.VarNameAt(i + j)
+						_, isMutable := n.TypeAt(i + j).(*types.Mutable)
+						isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j) || isMutable
+						s.setDeclerationInSymTab(ident, rt, isReassignable)
+					}
 				}
 				declCnt++
 			}
