@@ -631,6 +631,8 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 	switch v := v.(type) {
 	case *Return:
 		return e.evalStringCast(t, v.Values[0])
+	case string:
+		return v
 	case byte:
 		return string(v)
 	case []any:
