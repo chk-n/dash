@@ -2169,6 +2169,14 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		if ast.IsLiteral(lit.Right) {
 			return s.analyseExpressionType(lit.Right, lit.Right.Type(), targetType)
 		}
+		// Check if target is optional and expression matches inner type
+		if optType, ok := targetType.(*types.Optional); ok {
+			if exprType.Equal(optType.T) {
+				return true
+			}
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
+		}
 		// not a literal, so we do exact checking
 		if !exprType.Equal(targetType) {
 			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
@@ -2375,6 +2383,15 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 				return false
 			}
 			return true
+		}
+
+		// Check if target is optional and expression matches inner type
+		if optType, ok := targetType.(*types.Optional); ok {
+			if exprType.Equal(optType.T) {
+				return true
+			}
+			s.addError(expr, errTypeMismatch(targetType.String(), exprType.String()))
+			return false
 		}
 
 		if !exprType.Equal(targetType) {
