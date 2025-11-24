@@ -2417,6 +2417,16 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
+	case string:
+		if end == -1 {
+			end = int64(len(arr))
+		}
+		if start < 0 || end > int64(len(arr)) || start > end {
+			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
+			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			return &Return{Values: []any{}}
+		}
+		newArr = arr[start:end]
 	default:
 		panic("this is a compiler error. please report")
 	}
