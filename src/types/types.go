@@ -881,6 +881,8 @@ func IsBuiltinType(t Type) bool {
 		return IsBuiltinType(t.T)
 	case *ImportedNamed:
 		return IsBuiltinType(t.Typ)
+	case *Array:
+		return IsBuiltinType(t.T)
 	case *Struct, *Definition, *Alias,
 		*Union, *Enum:
 		return false
