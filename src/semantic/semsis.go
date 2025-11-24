@@ -737,17 +737,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					typ = resolvedType
 				}
 				t.T = typ
-			case *ast.HexLiteral:
-				typ, err := left.GetTypeByIndex(int(t.Value))
-				if err != nil {
-					s.addError(n, errStructUnknownField(n.Left.TokenLiteral(), n.Right.String()))
-				}
-				// Resolve UnknownNamed types in field type
-				resolvedType := s.inferUnknownNamedType(typ)
-				if resolvedType != nil {
-					typ = resolvedType
-				}
-				t.T = typ
 			default:
 				s.analyse(n.Right, "")
 			}
