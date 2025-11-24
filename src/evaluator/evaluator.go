@@ -664,9 +664,6 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 		}
 		return newArr
 	case *types.Int:
-		if t.Signed+t.Width != 8 {
-			panic("invalid array cast")
-		}
 		switch v := v.(type) {
 		case string:
 			// we assume semsis caught any issues e.g. []u64(str)
@@ -683,9 +680,6 @@ func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 			}
 			return newArr
 		case []any:
-			// no need to cast as []u8() only possible with
-			// literals that were already initialised to u8
-			// so we return v as is
 			return v
 		}
 	}
