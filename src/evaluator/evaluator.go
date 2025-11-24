@@ -2309,6 +2309,16 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 			for i, v := range valArr {
 				newArr.([]any)[idx+int64(i)] = v
 			}
+		} else if valArr, ok := val.([]uint8); ok {
+			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				return &Return{Values: []any{}}
+			}
+			newArr = make([]any, len(arr))
+			copy(newArr.([]any), arr)
+			for i, v := range valArr {
+				newArr.([]any)[idx+int64(i)] = v
+			}
 		} else {
 			if idx < 0 || idx >= int64(len(arr)) {
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
