@@ -102,10 +102,11 @@ fn insert_value[T, E any](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E]
         return try copy_insert_value(n, m, k, v), 1
     } else if is_bit_set(n.bitmap, pos) {
         let idx = data_index(n.bitmap, pos)
-        let h0 = try hash(get(n.keys, idx), s)
-        
-        if h == h0 {
-            // case: hashes match completely
+        let k0 = try get(n.keys, idx)
+        let h0 = try hash(k0, s)
+
+        if h == h0 && k == k0 {
+            // case: perfect match 
             return try copy_update_value(n, idx, k, v), 0
         } else {
             // case: hashes match partially so we need to move current
