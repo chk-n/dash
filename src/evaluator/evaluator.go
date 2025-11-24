@@ -2299,19 +2299,51 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	var newArr any
 	switch arr := arr.(type) {
 	case []any:
-		newArr = make([]any, len(arr))
-		copy(newArr.([]any), arr)
-		newArr.([]any)[idx] = val
+		if valArr, ok := val.([]any); ok {
+			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				return &Return{Values: []any{}}
+			}
+			newArr = make([]any, len(arr))
+			copy(newArr.([]any), arr)
+			for i, v := range valArr {
+				newArr.([]any)[idx+int64(i)] = v
+			}
+		} else {
+			if idx < 0 || idx >= int64(len(arr)) {
+				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				return &Return{Values: []any{}}
+			}
+			newArr = make([]any, len(arr))
+			copy(newArr.([]any), arr)
+			newArr.([]any)[idx] = val
+		}
 	case []uint8:
-		newArr = make([]uint8, len(arr))
-		copy(newArr.([]uint8), arr)
-		switch val := val.(type) {
-		case int32:
-			newArr.([]uint8)[idx] = uint8(val)
-		case uint8:
-			newArr.([]uint8)[idx] = val
-		default:
-			panic("this is a compiler error. please report")
+		if valArr, ok := val.([]uint8); ok {
+			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				return &Return{Values: []any{}}
+			}
+			newArr = make([]uint8, len(arr))
+			copy(newArr.([]uint8), arr)
+			for i, v := range valArr {
+				newArr.([]uint8)[idx+int64(i)] = v
+			}
+		} else {
+			if idx < 0 || idx >= int64(len(arr)) {
+				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				return &Return{Values: []any{}}
+			}
+			newArr = make([]uint8, len(arr))
+			copy(newArr.([]uint8), arr)
+			switch val := val.(type) {
+			case int32:
+				newArr.([]uint8)[idx] = uint8(val)
+			case uint8:
+				newArr.([]uint8)[idx] = val
+			default:
+				panic("this is a compiler error. please report")
+			}
 		}
 	default:
 		panic("this is a compiler error. please report")

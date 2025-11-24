@@ -2217,6 +2217,13 @@ func TestBuiltinArrayFunctions(t *testing.T) {
 			want: &Return{[]any{[]any{int64(1), int64(99), int64(3)}}},
 		},
 		{
+			name: "put slice in array",
+			prog: `
+			let arr = [1, 2, 3, 4, 5]
+			try put(arr, 1, [99, 88])`,
+			want: &Return{[]any{[]any{int64(1), int64(99), int64(88), int64(4), int64(5)}}},
+		},
+		{
 			name: "get element from array",
 			prog: `
 			let arr = [1, 2, 3]
@@ -2237,6 +2244,13 @@ func TestBuiltinArrayFunctions(t *testing.T) {
 			let new_arr = try put(arr, 0, 99)
 			arr`,
 			want: []any{int64(1), int64(2), int64(3)},
+		},
+		{
+			name: "put slice out of bounds",
+			prog: `
+			let arr = [1, 2, 3]
+			try put(arr, 2, [3, 4])`,
+			want: &Error{Err: "runtime.index_out_of_bounds"},
 		},
 		{
 			name: "slice entire array",

@@ -40,8 +40,8 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		errorProne = true
 	case "put":
 		// fn put[T any](arr []T, idx i64, T)! []T
-		arrType := types.GetUnderlyingTypeArray(argsTypes[0])
-		args = []types.Type{arrType, argsTypes[1], arrType.T}
+		// fn put[T any](arr []T, idx i64, []T)! []T
+		args = []types.Type{argsTypes[0], argsTypes[1], argsTypes[2]}
 		rets = []types.Type{argsTypes[0]}
 		errorProne = true
 	case "get":

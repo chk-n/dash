@@ -214,6 +214,11 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				s.validateAppendFunction(n)
 				return
 			}
+			// Special validation for put function
+			if n.Token.Literal == "put" {
+				s.validatePutFunction(n)
+				return
+			}
 			// Infer UnknownNamed types in arguments before getting builtin signature
 			argTypes := getTypesFromExpressions(n.Arguments)
 			builtintFn := getBuiltinSignature(n.Token.Literal, argTypes)
@@ -2792,6 +2797,43 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 		}
 	} else {
 		if !s.analyseExpressionType(n.Arguments[1], secondArgType, elementType) {
+			return false
+		}
+	}
+
+	n.SetType(n.Arguments[0].Type())
+
+	return true
+}
+
+// validatePutFunction validates that put() receives correct argument types
+func (s *Semantics) validatePutFunction(n *ast.FunctionCallExpression) bool {
+	if len(n.Arguments) < 3 {
+		s.addError(n, errTooLittleArguments("put"))
+		return false
+	} else if len(n.Arguments) > 3 {
+		s.addError(n, errTooManyArguments("put"))
+		return false
+	}
+
+	n.SetType(n.Arguments[0].Type())
+	firstArgType := s.coalesceTypeForBuiltIn(n.Arguments[0].Type(), "put")
+	thirdArgType := s.coalesceTypeForBuiltIn(n.Arguments[2].Type(), "put")
+
+	arrayType, isArray := firstArgType.(*types.Array)
+	if !isArray {
+		s.addError(n.Arguments[0], errTypeMismatch("[]T", firstArgType.String()))
+		return false
+	}
+
+	elementType := arrayType.T
+
+	if thirdArgArrType, ok := thirdArgType.(*types.Array); ok {
+		if !s.analyseExpressionType(n.Arguments[2], thirdArgArrType, arrayType) {
+			return false
+		}
+	} else {
+		if !s.analyseExpressionType(n.Arguments[2], thirdArgType, elementType) {
 			return false
 		}
 	}

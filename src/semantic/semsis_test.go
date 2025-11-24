@@ -1714,6 +1714,11 @@ func TestAppendFunction(t *testing.T) {
 			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result []i64 = try put(arr,1,99) }",
 		},
 		{
+			name:  "put slice in array",
+			input: `let arr = [1, 2, 3, 4, 5] let result = try put(arr, 1, [99, 88])`,
+			want:  "lib main pub fn main() { let arr []i64 = [1,2,3,4,5] let result []i64 = try put(arr,1,[99,88]) }",
+		},
+		{
 			name:  "get element from array",
 			input: `let arr = [1, 2, 3] let result = try get(arr, 1)`,
 			want:  "lib main pub fn main() { let arr []i64 = [1,2,3] let result i64 = try get(arr,1) }",
