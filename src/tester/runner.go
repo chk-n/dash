@@ -65,7 +65,7 @@ func (tr *TestRunner) RunAll() error {
 			continue
 		}
 
-		ctx := evaluator.NewContext(nil)
+		ctx := evaluator.NewContextWith(nil, libName)
 		eval.InitialiseLib(lib, ctx)
 
 		printedHeader := false
