@@ -64,7 +64,7 @@ enum precedence {
 
 pub fn parse(src []byte, m mode)! *ast.ast {
     var tkns = try make([]ast.token, 0, len(src) / 8)
-    var l = lexer.new(src, 0)
+    var l = lexer.new(src, 0, true)
     for {
         l, let tkn = try lexer.next_tkn(l)
         tkns = append(tkns, {
