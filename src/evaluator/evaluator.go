@@ -988,12 +988,14 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 		if _, ok := exp.(*Return); ok {
 			switch stmt.(type) {
 			case *ast.TryExpression:
-				// we want to avoid causing early return
-				// so we wonly return if an error was found
 				if e.err != nil {
 					return &Return{}
 				}
+				exp = unwrapFunctionResult(exp, 0)
+			case *ast.FunctionCallExpression:
+				exp = unwrapFunctionResult(exp, 0)
 			default:
+				// For return statements, if/match with returns etc. we propagate
 				return exp
 			}
 		} else if exp == BREAK || exp == NEXT {

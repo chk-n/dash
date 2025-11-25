@@ -894,11 +894,35 @@ func TestForStatement(t *testing.T) {
 			want: int64(5),
 		},
 		{
-			name: "ensure proper iterations with try",
+			name: "ensure proper iterations with try - assert",
 			prog: `var cnt = 0
 		    for i = 0; i < 3; i++ {
 		    	cnt = cnt + i
 		    	try assert(cnt == cnt, "")
+		    }
+		    cnt`,
+			want: int64(3),
+		},
+		{
+			name: "ensure proper iterations with try - error prone fn",
+			prog: `
+			fn test()! i64 { return 0 }
+			var cnt = 0
+		    for i = 0; i < 3; i++ {
+		    	cnt = cnt + i
+		    	try test()
+		    }
+		    cnt`,
+			want: int64(3),
+		},
+		{
+			name: "ensure proper iterations with try - fn",
+			prog: `
+			fn test() i64 { return 0 }
+			var cnt = 0
+		    for i = 0; i < 3; i++ {
+		    	cnt = cnt + i
+		    	test()
 		    }
 		    cnt`,
 			want: int64(3),
