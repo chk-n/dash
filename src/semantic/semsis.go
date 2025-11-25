@@ -2796,13 +2796,15 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 
 	// Handle array append
 	elementType := arrayType.T
+	// Coalesce element type to match the coalesced second argument type
+	coalescedElementType := s.coalesceTypeForBuiltIn(elementType, "append")
 
 	if secondArgArrType, ok := secondArgType.(*types.Array); ok {
 		if !s.analyseExpressionType(n.Arguments[1], secondArgArrType, arrayType) {
 			return false
 		}
 	} else {
-		if !s.analyseExpressionType(n.Arguments[1], secondArgType, elementType) {
+		if !s.analyseExpressionType(n.Arguments[1], secondArgType, coalescedElementType) {
 			return false
 		}
 	}
