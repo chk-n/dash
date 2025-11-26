@@ -2307,6 +2307,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	case []any:
 		if valArr, ok := val.([]any); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 				return &Return{Values: []any{}}
 			}
@@ -2317,6 +2318,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 			}
 		} else if valArr, ok := val.([]uint8); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 				return &Return{Values: []any{}}
 			}
@@ -2327,6 +2329,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 			}
 		} else {
 			if idx < 0 || idx >= int64(len(arr)) {
+				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 				return &Return{Values: []any{}}
 			}
@@ -2337,6 +2340,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	case []uint8:
 		if valArr, ok := val.([]uint8); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
+				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 				return &Return{Values: []any{}}
 			}
@@ -2347,6 +2351,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 			}
 		} else {
 			if idx < 0 || idx >= int64(len(arr)) {
+				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 				return &Return{Values: []any{}}
 			}
@@ -2376,21 +2381,21 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
+			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case []uint8:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
+			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case string:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] arr:%v, idx:%d\n", arr, idx)
+			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
