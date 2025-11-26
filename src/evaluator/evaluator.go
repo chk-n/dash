@@ -273,7 +273,12 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 	case *ast.StringLiteral:
 		return n.TokenLiteral()
 	case *ast.CharacterLiteral:
-		switch n.Type().(type) {
+		switch t := n.Type().(type) {
+		case *types.Int:
+			if t.Signed+t.Width != 8 {
+				panic("this is a compiler error. please report")
+			}
+			return uint8(n.Value)
 		case *types.Byte:
 			return uint8(n.Value)
 		case *types.Char:
