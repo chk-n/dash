@@ -780,6 +780,9 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 
 		for {
 			cond := e.eval(n.Condition, stk)
+			if _, ok := cond.(*Error); ok {
+				return cond
+			}
 			if !cond.(bool) {
 				break
 			}
