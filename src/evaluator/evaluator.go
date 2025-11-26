@@ -2674,6 +2674,7 @@ func getFieldPath(expr *ast.DotExpression) []string {
 // updateStructField creates a copy of the struct with the field at the given path updated.
 // It handles nested structs by recursively copying and updating.
 func updateStructField(value any, path []string, newValue any) map[string]any {
+	value = unwrapPointer(value)
 	strct := value.(map[string]any)
 	result := make(map[string]any)
 	maps.Copy(result, strct)
