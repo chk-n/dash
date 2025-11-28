@@ -1096,11 +1096,12 @@ type CatchExpression struct {
 	Left  Expression
 	Ident *Identifier
 	Block *BlockStatement
+	T     types.Type
 }
 
 func (s *CatchExpression) expressionNode()      {}
-func (s *CatchExpression) Type() types.Type     { return &types.Function{} } // NOTE: this might need to be changed
-func (s *CatchExpression) SetType(t types.Type) {}
+func (s *CatchExpression) Type() types.Type     { return s.T }
+func (s *CatchExpression) SetType(t types.Type) { s.T = t }
 func (s *CatchExpression) TokenLiteral() string { return s.Token.Literal }
 func (s *CatchExpression) String() string {
 	var out bytes.Buffer

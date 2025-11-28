@@ -238,6 +238,8 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		return e.evalMatchExpressionStatement(n, ctx)
 	case *ast.TryExpression:
 		return e.evalTryExpression(n, ctx)
+	case *ast.CatchExpression:
+		return e.evalCatchExpression(n, ctx)
 	case *ast.RaiseStatement:
 		return e.evalRaiseStatement(n, ctx)
 	case *ast.KeywordStatement:
@@ -1002,6 +1004,8 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 				exp = unwrapFunctionResult(exp, 0)
 			case *ast.FunctionCallExpression:
 				exp = unwrapFunctionResult(exp, 0)
+			case *ast.CatchExpression:
+				exp = unwrapFunctionResult(exp, 0)
 			default:
 				// For return statements, if/match with returns etc. we propagate
 				return exp
@@ -1030,7 +1034,7 @@ func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) an
 	for i := range n.Values {
 		res := e.eval(n.Values[i], stk)
 		switch n.Values[i].(type) {
-		case *ast.FunctionCallExpression, *ast.TryExpression, *ast.MatchExpressionStatement:
+		case *ast.FunctionCallExpression, *ast.TryExpression, *ast.MatchExpressionStatement, *ast.CatchExpression:
 			if ret, ok := res.(*Return); ok {
 				for j := range ret.Values {
 					vals = append(vals, unwrapFunctionResult(ret, j))
@@ -2100,6 +2104,26 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 
 func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 	return e.eval(n.Right, ctx)
+}
+
+func (e *Evaluator) evalCatchExpression(n *ast.CatchExpression, ctx *Context) any {
+	result := e.eval(n.Left, ctx)
+
+	if e.err != nil {
+		// We save the caught error so it is accessible
+		// within catch block and clear it globally to
+		// avoid premature return. the catch block can
+		// either set a default, return something else
+		// or raise the error causing it to be propagated
+		caughtErr := e.err
+		e.err = nil
+		ctx.Set(n.Ident.Value, caughtErr)
+
+		catchResult := e.evalBlockStatement(n.Block, ctx)
+		return catchResult
+	}
+
+	return result
 }
 
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {

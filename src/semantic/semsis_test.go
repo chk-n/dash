@@ -2024,6 +2024,22 @@ func TestBuiltinWithTypeAliases(t *testing.T) {
 	runAnalysisTests(t, tests)
 }
 
+func TestCatchExpression(t *testing.T) {
+	tests := []testCase{
+		{
+			name:  "catch with default value",
+			input: "error my_error fn error_prone()! i64 { raise my_error } fn use_catch() i64 { let x = error_prone() catch e { 42 } return x }",
+			want:  "lib main error my_error fn error_prone()! i64 { raise my_error } fn use_catch() i64 { let x i64 = error_prone() catch e { 42 } return x } pub fn main() { }",
+		},
+		{
+			name:  "catch with return statement",
+			input: "error my_error fn error_prone()! i64 { raise my_error } fn use_catch()! i64 { return error_prone() catch e { return 42 } }",
+			want:  "lib main error my_error fn error_prone()! i64 { raise my_error } fn use_catch()! i64 { return error_prone() catch e { return 42 } } pub fn main() { }",
+		},
+	}
+	runAnalysisTests(t, tests)
+}
+
 func TestScoping(t *testing.T) {
 	tests := []testCase{
 		{

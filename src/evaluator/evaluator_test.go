@@ -1109,6 +1109,89 @@ func TestTryExpression(t *testing.T) {
 	}
 }
 
+func TestCatchExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		prog string
+		want any
+	}{
+		{
+			name: "basic catch with fallback value",
+			prog: "error my_err fn f()! i64 { raise my_err } let x = f() catch e { 42 } x",
+			want: int64(42),
+		},
+		{
+			name: "catch when no error raised",
+			prog: "fn f()! i64 { return 10 } let x = f() catch e { 42 } x",
+			want: int64(10),
+		},
+		{
+			name: "catch with return statement in function",
+			prog: "error my_err fn test()! i64 { return f() catch e { return 99 } } fn f()! i64 { raise my_err } let x = try test() x",
+			want: int64(99),
+		},
+		{
+			name: "nested catch expressions",
+			prog: "error err1 error err2 fn f1()! i64 { raise err1 } fn f2()! i64 { raise err2 } let x = f1() catch e1 { f2() catch e2 { 0 } } x",
+			want: int64(0),
+		},
+		{
+			name: "catch with try inside catch block propagates error",
+			prog: "error err1 error err2 fn f1()! i64 { raise err1 } fn f2()! i64 { raise err2 } fn test()! i64 { return f1() catch e { try f2() } } try test()",
+			want: &Error{Err: ".err2"},
+		},
+		{
+			name: "error comparison in catch block - same type",
+			prog: "error err1 fn f()! i64 { raise err1 } fn test() bool { f() catch e { e == err1 } } test()",
+			want: &Return{Values: []any{true}},
+		},
+		{
+			name: "error comparison in catch block - different type",
+			prog: "error err1 error err2 fn f()! i64 { raise err1 } fn test() bool { f() catch e { e == err2 } } test()",
+			want: &Return{Values: []any{false}},
+		},
+		{
+			name: "if else expression with raise in else branch - no raise triggered",
+			prog: "error bounds_error fn test(x i64)! i64 { let y = if x > 10 { raise bounds_error } else { x * 2 } return y } fn run() i64 { let result = test(5) catch e { 99 } return result } run()",
+			want: &Return{Values: []any{int64(10)}},
+		},
+		{
+			name: "if else expression with raise in else branch - raise triggered",
+			prog: "error bounds_error fn test(x i64)! i64 { let y = if x > 10 { raise bounds_error } else { x * 2 } return y } fn run() i64 { let result = test(15) catch e { 99 } return result } run()",
+			want: &Return{Values: []any{int64(99)}},
+		},
+		{
+			name: "if else expression with raise in if branch - no raise triggered",
+			prog: "error bounds_error fn test(x i64)! i64 { let y = if x < 0 { raise bounds_error } else { x * 2 } return y } fn run() i64 { let result = test(5) catch e { 99 } return result } run()",
+			want: &Return{Values: []any{int64(10)}},
+		},
+		{
+			name: "if else expression with raise in if branch - raise triggered",
+			prog: "error bounds_error fn test(x i64)! i64 { let y = if x < 0 { raise bounds_error } else { x * 2 } return y } fn run() i64 { let result = test(-5) catch e { 99 } return result } run()",
+			want: &Return{Values: []any{int64(99)}},
+		},
+		{
+			name: "if else expression with multiple branches and raises",
+			prog: "error err1 error err2 fn test(x i64)! i64 { let y = if x > 10 { raise err1 } else if x < 0 { raise err2 } else { x * 2 } return y } fn run() i64 { let result = test(5) catch e { 99 } return result } run()",
+			want: &Return{Values: []any{int64(10)}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, err := parseExpressions(tt.prog)
+			if err != nil {
+				t.Error(err)
+			}
+			e := NewEvaluator()
+			got := e.Eval(n, NewContext(nil))
+			if !deepEqual(got, tt.want) {
+				t.Errorf("got %v but want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLenFunction(t *testing.T) {
 	tests := []struct {
 		name string

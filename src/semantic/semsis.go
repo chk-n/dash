@@ -947,6 +947,18 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.analyse(n.Right, "")
 		s.insideTryDepth--
 		n.SetType(n.Right.Type())
+	case *ast.CatchExpression:
+		s.insideTryDepth++
+		s.analyse(n.Left, "")
+		s.insideTryDepth--
+
+		s.varSt.Scope()
+		// store variable type as generic "error"
+		s.varSt.Set(n.Ident.Value, &VarInfo{Type: &types.ConstError})
+		s.analyse(n.Block, "")
+		s.varSt.Unscope()
+
+		n.SetType(n.Left.Type())
 	case *ast.RaiseStatement:
 		switch exp := n.Error.(type) {
 		case *ast.StructLiteral:
