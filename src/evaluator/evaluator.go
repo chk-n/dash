@@ -1007,6 +1007,8 @@ func (e *Evaluator) evalMatchCase(c *ast.MatchCase, stk *Context) any {
 		last = e.eval(stmt, stk)
 		if _, ok := last.(*Return); ok {
 			return last
+		} else if last == BREAK || last == NEXT {
+			return last
 		}
 	}
 	return last

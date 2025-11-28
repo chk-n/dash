@@ -1861,6 +1861,83 @@ func TestMatchStatement(t *testing.T) {
 			`,
 			want: &Return{Values: []any{int64(1)}},
 		},
+		{
+			name: "next inside match case in for loop",
+			prog: `
+				var sum = 0
+				for i = 0; i < 5; i++ {
+					match i {
+					case 2:
+						next
+						sum = sum + 100 
+					case _:
+						sum = sum + 1
+					}
+				}
+				sum
+			`,
+			want: int64(4),
+		},
+		{
+			name: "break inside match case in for loop",
+			prog: `
+				var sum = 0
+				for i = 0; i < 10; i++ {
+					match i {
+					case 5:
+						break
+					case _:
+						sum = sum + 1
+					}
+				}
+				sum
+			`,
+			want: int64(5),
+		},
+		{
+			name: "next in nested match case",
+			prog: `
+				var sum = 0
+				for i = 0; i < 5; i++ {
+					match i {
+					case 0, 1:
+						match i {
+						case 1:
+							next
+						case _:
+							sum = sum + 1
+						}
+						sum = sum + 10  
+					case _:
+						sum = sum + 1
+					}
+				}
+				sum
+			`,
+			// i=0: 11
+			// i=1: next
+			// i=2,3,4: 3
+			want: int64(14),
+		},
+		{
+			name: "break and next in different match cases",
+			prog: `
+				var sum = 0
+				for i = 0; i < 10; i++ {
+					match i {
+					case 3:
+						next
+					case 7:
+						break
+					case _:
+						sum = sum + 1
+					}
+				}
+				sum
+			`,
+			// 0,1,2,4,5,6 counted, 3 is skipped and 7 breaks
+			want: int64(6),
+		},
 	}
 
 	for _, tt := range tests {
