@@ -446,6 +446,11 @@ func (e *Evaluator) evalIntCast(t *types.Int, v any) any {
 func (e *Evaluator) toUint8(v any) uint8 {
 	v = unwrapAny(v)
 	switch v := v.(type) {
+	case bool:
+		if !v {
+			return 0
+		}
+		return 1
 	case uint8:
 		return v
 	case uint16:
@@ -469,6 +474,11 @@ func (e *Evaluator) toUint8(v any) uint8 {
 func (e *Evaluator) toUint16(v any) uint16 {
 	v = unwrapAny(v)
 	switch v := v.(type) {
+	case bool:
+		if !v {
+			return 0
+		}
+		return 1
 	case uint8:
 		return uint16(v)
 	case uint16:
@@ -492,6 +502,11 @@ func (e *Evaluator) toUint16(v any) uint16 {
 func (e *Evaluator) toUint32(v any) uint32 {
 	v = unwrapAny(v)
 	switch v := v.(type) {
+	case bool:
+		if !v {
+			return 0
+		}
+		return 1
 	case uint8:
 		return uint32(v)
 	case uint16:
@@ -514,6 +529,11 @@ func (e *Evaluator) toUint32(v any) uint32 {
 
 func (e *Evaluator) toUint64(v any) uint64 {
 	switch v := v.(type) {
+	case bool:
+		if !v {
+			return 0
+		}
+		return 1
 	case uint8:
 		return uint64(v)
 	case uint16:
@@ -537,6 +557,11 @@ func (e *Evaluator) toUint64(v any) uint64 {
 func (e *Evaluator) toInt64(v any) int64 {
 	v = unwrapAny(v)
 	switch v := v.(type) {
+	case bool:
+		if !v {
+			return 0
+		}
+		return 1
 	case uint8:
 		return int64(v)
 	case uint16:
