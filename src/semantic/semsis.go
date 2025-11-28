@@ -427,7 +427,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		// TODO: can we remove this?
 		// If assignment we want to validate two things:
-		// - last value in block is an expreesion
+		// - last value in block is an expression (or raise statement)
 		// - type of last expression in each block is equal
 		if s.scope.GetLast() == ASSIGNMENT {
 			var prevT types.Type
@@ -437,21 +437,27 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				lastStmt := cond.Block.Statements[len(cond.Block.Statements)-1]
 				switch exp := lastStmt.(type) {
 				case ast.Expression:
-					// do nothing
 					if prevT == nil {
 						prevT = exp.Type()
 					} else if !prevT.Equal(exp.Type()) {
 						hasTypeMismatch = true
 					}
 					typs[i] = exp.Type()
+				case *ast.RaiseStatement:
+					typs[i] = nil
 				default:
 					s.addError(cond, errIfElseExpNonExp())
 				}
 			}
 			if hasTypeMismatch {
-				typesStr := make([]string, len(typs))
-				for i, ts := range typs {
-					typesStr[i] = ts.String()
+				typesStr := make([]string, 0, len(typs))
+				for _, ts := range typs {
+					// we skip nil because it could either mean another
+					// error occured during type interference or we
+					// raise an error within the block
+					if ts != nil {
+						typesStr = append(typesStr, ts.String())
+					}
 				}
 				s.addError(n, errIfElseExpTypeMismatch(strings.Join(typesStr, ", ")))
 			}

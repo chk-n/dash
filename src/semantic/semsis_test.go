@@ -934,6 +934,26 @@ func TestIfElseExpression(t *testing.T) {
 			input:  "fn test(a i64) i64 { let b = if a > 1 { a } else { 1.0 } return b }",
 			errors: []string{"type mismatch in if else expression got (i64, f64)"},
 		},
+		{
+			name:  "if else expression with raise in else branch",
+			input: "error my_error fn test(a i64)! i64 { let b = if a > 1 { a } else { raise my_error } return b }",
+			want:  "lib main error my_error fn test(a i64)! i64 { let b i64 = if (a > 1) { a } else { raise my_error } return b } pub fn main() { }",
+		},
+		{
+			name:  "if else expression with multiple branches and raises",
+			input: "error err1 error err2 fn test(a i64)! i64 { let b = if a > 10 { raise err1 } else if a < 0 { raise err2 } else { a } return b }",
+			want:  "lib main error err1 error err2 fn test(a i64)! i64 { let b i64 = if (a > 10) { raise err1 } else if (a < 0) { raise err2 } else { a } return b } pub fn main() { }",
+		},
+		// {
+		// 	name:  "if else expression with all branches raising",
+		// 	input: "error err1 error err2 fn test(a i64)! i64 { let b = if a > 10 { raise err1 } else { raise err2 } return b }",
+		// 	want:  "lib main error err1 error err2 fn test(a i64)! i64 { let b i64 = if (a > 10) { raise err1 } else { raise err2 } return b } pub fn main() { }",
+		// },
+		{
+			name:   "if else expression with raise and type mismatch",
+			input:  "error my_error fn test(a i64)! i64 { let b = if a > 10 { 5 } else if a < 0 { raise my_error } else { 3.0 } return b }",
+			errors: []string{"type mismatch in if else expression got (i64, f64)"},
+		},
 	}
 	runAnalysisTests(t, tests)
 }
