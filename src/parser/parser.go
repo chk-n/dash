@@ -2175,11 +2175,14 @@ func (p *Parser) parseFunctionType() *types.Function {
 	if p.curTokenIs(token.COMMA) || p.curTokenIs(token.RPAREN) || p.curTokenIs(token.EOF) {
 		return typ
 	}
-	// case: f fn()!
+	// case: f fn()!, or fn()!)
 	if p.curTokenIs(token.BANG) {
 		typ.IsErrorProne = true
 		p.nextToken()
-		return typ
+		if p.curTokenIs(token.COMMA) || p.curTokenIs(token.RPAREN) || p.curTokenIs(token.EOF) ||
+			!p.curTokenIsType() {
+			return typ
+		}
 	}
 
 	for !p.curTokenIs(token.EOF) {
