@@ -427,7 +427,7 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		// TODO: can we remove this?
 		// If assignment we want to validate two things:
-		// - last value in block is an expression (or raise statement)
+		// - last value in block is an expression (or raise/return statement, or nested if-else)
 		// - type of last expression in each block is equal
 		if s.scope.GetLast() == ASSIGNMENT {
 			var prevT types.Type
@@ -444,6 +444,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					}
 					typs[i] = exp.Type()
 				case *ast.RaiseStatement:
+					// Raise statements don't contribute to type checking
+					typs[i] = nil
+				case *ast.ReturnStatement:
+					// Return statements don't contribute to type checking
 					typs[i] = nil
 				default:
 					s.addError(cond, errIfElseExpNonExp())

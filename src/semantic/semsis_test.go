@@ -925,9 +925,24 @@ func TestIfElseExpression(t *testing.T) {
 			want:  "lib main fn test(a i64) i64 { let b i64 = if (a > 1) { a } else { 1 } return b } pub fn main() { }",
 		},
 		{
-			name:   "if else expression, return",
-			input:  "fn test(a i64) i64 { let b = if a > 1 { a } else { return a } return b }",
-			errors: []string{"last value in if else expression not an expression"},
+			name:  "if else expression with return statement",
+			input: "fn test(a i64) i64 { let b = if a > 1 { a } else { return a } return b }",
+			want:  "lib main fn test(a i64) i64 { let b i64 = if (a > 1) { a } else { return a } return b } pub fn main() { }",
+		},
+		{
+			name:  "if else expression with nested if-else in branch",
+			input: "fn test(a i64, c bool) i64 { let b = if a > 1 { if c { 10 } else { 20 } } else { 30 } return b }",
+			want:  "lib main fn test(a i64,c bool) i64 { let b i64 = if (a > 1) { if c { 10 } else { 20 } } else { 30 } return b } pub fn main() { }",
+		},
+		{
+			name:  "if else expression with nested if-else returning different types in inner block",
+			input: "fn test(a i64, c bool) i64 { let b = if a > 1 { if c { return 5 } else { 10 } } else { 20 } return b }",
+			want:  "lib main fn test(a i64,c bool) i64 { let b i64 = if (a > 1) { if c { return 5 } else { 10 } } else { 20 } return b } pub fn main() { }",
+		},
+		{
+			name:  "if else expression with multiple nested if-else expressions",
+			input: "fn test(a i64, b i64) i64 { let x = if a > 0 { if b > 0 { 1 } else { 2 } } else { if b > 0 { 3 } else { 4 } } return x }",
+			want:  "lib main fn test(a i64,b i64) i64 { let x i64 = if (a > 0) { if (b > 0) { 1 } else { 2 } } else { if (b > 0) { 3 } else { 4 } } return x } pub fn main() { }",
 		},
 		{
 			name:   "if else expression, type mismatch",
