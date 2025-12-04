@@ -2336,6 +2336,10 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 			newArr = arr + strVal
 		} else if byteVal, ok := val.(uint8); ok {
 			newArr = arr + string([]byte{byteVal})
+		} else if charVal, ok := val.(int32); ok {
+			newArr = arr + string(charVal)
+		} else if charVal, ok := val.(uint32); ok {
+			newArr = arr + string(rune(charVal))
 		}
 	default:
 		panic("this is a compiler error. please report")

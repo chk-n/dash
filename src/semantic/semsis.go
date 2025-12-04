@@ -2805,12 +2805,15 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 
 	// Handle string append
 	if isString {
-		// For strings, second argument can be u8 (character) or string
+		// For strings, second argument can be u8, char or string
 		if _, ok := secondArgType.(*types.String); ok {
 			return true
-		}
-		if intType, ok := secondArgType.(*types.Int); ok && intType.Width == 8 && intType.Signed == 0 {
+		} else if _, ok := secondArgType.(*types.Char); ok {
 			return true
+		} else if intType, ok := secondArgType.(*types.Int); ok {
+			if intType.Width == 8 && intType.Signed == 0 {
+				return true
+			}
 		}
 		s.addError(n.Arguments[1], errTypeMismatch("u8 or string", secondArgType.String()))
 		return false

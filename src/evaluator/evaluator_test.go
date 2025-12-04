@@ -2369,6 +2369,27 @@ func TestAppend(t *testing.T) {
 			append(arr, 3)`,
 			want: &Return{[]any{[]any{uint8(3)}}},
 		},
+		{
+			name: "append char to empty string",
+			prog: `try append("", '%')`,
+			want: &Return{Values: []any{"%"}},
+		},
+		{
+			name: "append char to non-empty string",
+			prog: `try append("hello", '!')`,
+			want: &Return{Values: []any{"hello!"}},
+		},
+		{
+			name: "append multiple chars",
+			prog: `
+				var s = ""
+				s = try append(s, 'a')
+				s = try append(s, 'b')
+				s = try append(s, 'c')
+				s
+			`,
+			want: "abc",
+		},
 	}
 
 	for _, tt := range tests {
