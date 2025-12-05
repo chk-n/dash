@@ -1415,7 +1415,7 @@ func (e *Evaluator) evalInfixExpression(n *ast.InfixExpression, ctx *Context) an
 	case token.COLON:
 		val = []any{l, r}
 	case token.PIPE:
-		val = e.evalInfixPipe(l, r, ctx)
+		panic("pipe operator not implemented")
 	}
 
 	if err != nil {
@@ -1974,44 +1974,6 @@ func (e *Evaluator) evalInfixAssign(n *ast.InfixExpression, r any, ctx *Context)
 	ctx.SetAll(ident.Value, r)
 
 	return r
-}
-
-// The left expression result becomes the first argument to the right function
-func (e *Evaluator) evalInfixPipe(l, r any, ctx *Context) any {
-	// If left is a function result, unwrap it to get the actual value
-	if ret, ok := l.(*Return); ok {
-		l = unwrapFunctionResult(ret, 0)
-	}
-
-	switch rightExpr := r.(type) {
-	// case: value |> functionName
-	case *ast.Identifier:
-		fnVal, ok := ctx.Get(rightExpr.Value)
-		if !ok {
-			panic("this is a compiler error. please report")
-		}
-
-		fn, ok := fnVal.(*Function)
-		if !ok {
-			panic("this is a compiler error. please report")
-		}
-
-		newCtx := NewContext(fn.ctx)
-
-		// set arguments of 'r' function
-		if ret, ok := l.(*Return); ok {
-			for i, val := range ret.Values {
-				paramName := fn.arguments[i].Name.Value
-				newCtx.Set(paramName, val)
-			}
-		} else {
-			paramName := fn.arguments[0].Name.Value
-			newCtx.Set(paramName, l)
-		}
-
-		return e.eval(fn.body, newCtx)
-	}
-	return nil
 }
 
 // ------------------ //
