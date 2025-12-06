@@ -833,6 +833,9 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	if n.Condition != nil && n.Change == nil {
 		for {
 			cond := e.eval(n.Condition, stk)
+			if _, ok := cond.(*Error); ok {
+				return cond
+			}
 			cond = unwrapFunctionResult(cond, 0)
 			if !cond.(bool) {
 				break
@@ -854,6 +857,9 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	if n.Condition == nil {
 		for {
 			exp := e.eval(n.Block, stk)
+			if _, ok := exp.(*Error); ok {
+				return exp
+			}
 			if _, ok := exp.(*Return); ok {
 				return exp
 			} else if exp == BREAK {
