@@ -455,6 +455,11 @@ func TestForStatement(t *testing.T) {
 			input: "for i = 0; i < N; i = i + 2 { }",
 			want:  "for i = 0; (i < N); (i = (i + 2)) { }",
 		},
+		{
+			name:  "for boolean with let",
+			input: "for end >= start { let ch = 5 }",
+			want:  "for (end >= start) { let ch = 5 }",
+		},
 	}
 
 	for _, tc := range tests {

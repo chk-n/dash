@@ -83,6 +83,7 @@ const (
 	NONE context = iota
 	IF_ELSE
 	MATCH
+	FOR_LOOP
 )
 
 type Parser struct {
@@ -985,7 +986,9 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 	}
 
 	// tkn := p.curToken
+	p.context = FOR_LOOP
 	exp := p.parseExpression(LOWEST)
+	p.context = NONE
 	// var assign *ast.InfixExpression
 	switch a := exp.(type) {
 	// We need to check if infix operation
@@ -1285,7 +1288,7 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 		if p.curTokenIs(token.LPAREN) {
 			return p.parseFunctionCallExpression(ident.Token, typeParams)
 		} else if p.curTokenIs(token.LBRACE) {
-			if p.context == IF_ELSE || p.context == MATCH {
+			if p.context == IF_ELSE || p.context == MATCH || p.context == FOR_LOOP {
 				p.nextToken()
 				return ident
 			}
@@ -1298,7 +1301,7 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 
 	// Handle normal struct literal, dot expression, or plain identifier
 	if p.peekTokenIs(token.LBRACE) {
-		if p.context == IF_ELSE || p.context == MATCH {
+		if p.context == IF_ELSE || p.context == MATCH || p.context == FOR_LOOP {
 			p.nextToken()
 			return ident
 		}
