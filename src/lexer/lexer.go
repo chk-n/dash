@@ -286,6 +286,11 @@ func (l *Lexer) readString() string {
 	pos := l.prevPos + 1
 	for {
 		l.next()
+		if l.ch == '\\' {
+			// skip the escaped character
+			l.next()
+			continue
+		}
 		if l.ch == '"' || l.ch == 0 {
 			break
 		}

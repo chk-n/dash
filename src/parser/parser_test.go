@@ -1876,6 +1876,101 @@ func TestGenericFunctionDefinition(t *testing.T) {
 	}
 }
 
+func TestStringEscapeSequences(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "newline escape",
+			input: `"hello\nworld"`,
+			want:  "hello\nworld",
+		},
+		{
+			name:  "tab escape",
+			input: `"hello\tworld"`,
+			want:  "hello\tworld",
+		},
+		{
+			name:  "carriage return escape",
+			input: `"hello\rworld"`,
+			want:  "hello\rworld",
+		},
+		{
+			name:  "bell escape",
+			input: `"\a"`,
+			want:  "\a",
+		},
+		{
+			name:  "backspace escape",
+			input: `"\b"`,
+			want:  "\b",
+		},
+		{
+			name:  "quote escape",
+			input: `"say \"hello\""`,
+			want:  `say "hello"`,
+		},
+		{
+			name:  "backslash escape",
+			input: `"path\\to\\file"`,
+			want:  `path\to\file`,
+		},
+		{
+			name:  "all escapes",
+			input: `"\a\b\n\r\t\\\""`,
+			want:  "\a\b\n\r\t\\\"",
+		},
+		{
+			name:  "adjacent escapes - backslash before n",
+			input: `"\\n"`,
+			want:  `\n`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := getParser(tc.input)
+			stmt := p.parseExpression(LOWEST)
+
+			if tc.want != stmt.TokenLiteral() {
+				t.Errorf("want %s but got %s\n%v", tc.want, stmt.String(), stmt)
+			}
+		})
+	}
+}
+
+func TestStringEscapeErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "invalid escape q",
+			input: `"hello\qworld"`,
+		},
+		{
+			name:  "invalid escape x",
+			input: `"hello\xworld"`,
+		},
+		{
+			name:  "invalid escape u",
+			input: `"\u"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := getParser(tt.input)
+			_ = p.parseExpression(LOWEST)
+
+			if len(p.Errors()) == 0 {
+				t.Error("expected parser error for invalid escape sequence")
+			}
+		})
+	}
+}
+
 //------------------//
 // Helper functions //
 //------------------//

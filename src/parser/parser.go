@@ -1659,6 +1659,11 @@ func (p *Parser) parseFloatLiteral() ast.Expression {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	lit := &ast.StringLiteral{Token: p.curToken}
+
+	if processedValue, ok := p.processStringEscapes(p.curToken.Literal); ok {
+		lit.Token.Literal = processedValue
+	}
+
 	p.nextToken()
 	return lit
 }
@@ -1693,6 +1698,44 @@ func (p *Parser) parseCharacterLiteral() ast.Expression {
 	}
 	p.nextToken()
 	return lit
+}
+
+// processStringEscapes processes escape sequences in string literals
+func (p *Parser) processStringEscapes(input string) (string, bool) {
+	var result strings.Builder
+	result.Grow(len(input))
+
+	i := 0
+	for i < len(input) {
+		if input[i] == '\\' && i+1 < len(input) {
+			switch input[i+1] {
+			case 'n':
+				result.WriteByte('\n')
+			case 't':
+				result.WriteByte('\t')
+			case 'r':
+				result.WriteByte('\r')
+			case 'a':
+				result.WriteByte('\a')
+			case 'b':
+				result.WriteByte('\b')
+			case '\\':
+				result.WriteByte('\\')
+			case '"':
+				result.WriteByte('"')
+			default:
+				p.addError(p.curToken, errInvalidEscapeSequence(input[i+1]))
+				return "", false
+			}
+			// skip both backslash and escaped char
+			i += 2
+		} else {
+			result.WriteByte(input[i])
+			i++
+		}
+	}
+
+	return result.String(), true
 }
 
 func (p *Parser) parseBooleanLiteral() ast.Expression {

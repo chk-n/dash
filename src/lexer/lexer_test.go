@@ -314,6 +314,27 @@ func TestNextToken(t *testing.T) {
 				{`\\`, token.CHAR},
 			},
 		},
+		{
+			name: "string with escaped quote",
+			input: `"say \"hello\""`,
+			tokens: []wantToken{
+				{`say \"hello\"`, token.STRING},
+			},
+		},
+		{
+			name: "string with multiple escapes",
+			input: `"line1\nline2\ttab\r\nline3"`,
+			tokens: []wantToken{
+				{`line1\nline2\ttab\r\nline3`, token.STRING},
+			},
+		},
+		{
+			name: "string with backslash escapes",
+			input: `"path\\to\\file"`,
+			tokens: []wantToken{
+				{`path\\to\\file`, token.STRING},
+			},
+		},
 	}
 
 	for _, tc := range tests {

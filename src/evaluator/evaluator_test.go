@@ -288,6 +288,26 @@ func TestAssignmentStatement(t *testing.T) {
 			want: "hello",
 		},
 		{
+			name: "string with newline escape",
+			prog: `let v = "hello\nworld" v`,
+			want: "hello\nworld",
+		},
+		{
+			name: "string with tab escape",
+			prog: `let v = "a\tb" v`,
+			want: "a\tb",
+		},
+		{
+			name: "string with quote escape",
+			prog: `let v = "say \"hi\"" v`,
+			want: `say "hi"`,
+		},
+		{
+			name: "string with backslash escape",
+			prog: `let v = "path\\file" v`,
+			want: `path\file`,
+		},
+		{
 			name: "assign fn result",
 			prog: `
 				fn test() i64, i64 { return 11, 12}

@@ -10,6 +10,9 @@ var (
 	errMissingArgumentType = func(argName string) error {
 		return fmt.Errorf("argument '%s' missing type", argName)
 	}
+	errInvalidEscapeSequence = func(ch byte) error {
+		return fmt.Errorf("invalid escape sequence '\\%c' in string literal", ch)
+	}
 )
 
 // Attribute errors
