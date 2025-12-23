@@ -1108,7 +1108,7 @@ func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, exp
 		name := right.TokenLiteral()
 
 		// Check if it's a type cast: lib.Type(value)
-		if _, ok := libCtx.typs.Get(name); ok {
+		if _, ok := libCtx.GetType(name); ok {
 			res := e.eval(right.Arguments[0], stk)
 			// Check if it's a union type (including imported unions)
 			// Use exprType from the DotExpression since right.T may be nil
