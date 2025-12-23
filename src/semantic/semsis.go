@@ -647,7 +647,6 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 					// BUG: we need to compare against f.Value.Type() here
 					// but there is another issue
 					if !fieldType.Equal(f.Type()) {
-						fmt.Println(fieldType, f.Value.Type(), f.T)
 						s.addError(n, errTypeMismatch(fieldType.String(), f.Value.Type().String()))
 						continue
 					}
