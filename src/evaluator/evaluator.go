@@ -281,9 +281,9 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		case *types.Int:
 			return e.evalIntCast(t, n.Value)
 		case *types.Byte:
-			return e.evalByteCast(t, n.Value)
+			return e.evalByteCast(n.Value)
 		case *types.Char:
-			return e.evalCharCast(t, n.Value)
+			return e.evalCharCast(n.Value)
 		case *types.Any:
 			return n.Value
 		case *types.Generic:
@@ -401,11 +401,11 @@ func (e *Evaluator) evalTypeCastExpression(n *ast.TypeCastExpression, stk *Conte
 	case *types.Int:
 		return e.evalIntCast(t, val)
 	case *types.Byte:
-		return e.evalByteCast(t, val)
+		return e.evalByteCast(val)
 	case *types.Char:
-		return e.evalCharCast(t, val)
+		return e.evalCharCast(val)
 	case *types.String:
-		return e.evalStringCast(t, val)
+		return e.evalStringCast(val)
 	case *types.Array:
 		return e.evalArrayCast(t, val)
 
@@ -597,7 +597,7 @@ func (e *Evaluator) toFloat64(v any) float64 {
 
 // Byte casting
 
-func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
+func (e *Evaluator) evalByteCast(v any) any {
 	switch v := v.(type) {
 	case uint8:
 		return v
@@ -620,7 +620,7 @@ func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 }
 
 // Char casting
-func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
+func (e *Evaluator) evalCharCast(v any) any {
 	switch v := v.(type) {
 	case uint8:
 		return uint32(v)
@@ -643,7 +643,7 @@ func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
 }
 
 // String casting
-func (e *Evaluator) evalStringCast(t *types.String, v any) any {
+func (e *Evaluator) evalStringCast(v any) any {
 	switch v := v.(type) {
 	case string:
 		return v
@@ -2059,9 +2059,9 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 			case *types.Int:
 				val = e.evalIntCast(t, val)
 			case *types.Byte:
-				val = e.evalByteCast(t, val)
+				val = e.evalByteCast(val)
 			case *types.Char:
-				val = e.evalCharCast(t, val)
+				val = e.evalCharCast(val)
 			}
 		}
 
