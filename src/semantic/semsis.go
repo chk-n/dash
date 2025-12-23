@@ -2830,17 +2830,22 @@ func (s *Semantics) validateAppendFunction(n *ast.FunctionCallExpression) bool {
 		return false
 	}
 
-	// Handle array append
-	elementType := arrayType.T
-	// Coalesce element type to match the coalesced second argument type
-	coalescedElementType := s.coalesceTypeForBuiltIn(elementType, "append")
+	// get the original element type from the first argument (before coalescing)
+	// to preserve ImportedNamed wrappers for proper type comparison
+	originalArrayType := types.GetUnderlyingTypeArray(n.Arguments[0].Type())
+	if originalArrayType == nil {
+		s.addError(n.Arguments[0], errTypeMismatch("[]T", n.Arguments[0].Type().String()))
+		return false
+	}
+	originalElementType := originalArrayType.T
 
 	if secondArgArrType, ok := secondArgType.(*types.Array); ok {
 		if !s.analyseExpressionType(n.Arguments[1], secondArgArrType, arrayType) {
 			return false
 		}
 	} else {
-		if !s.analyseExpressionType(n.Arguments[1], secondArgType, coalescedElementType) {
+		// we use original type for comparison to preserve library context
+		if !s.analyseExpressionType(n.Arguments[1], n.Arguments[1].Type(), originalElementType) {
 			return false
 		}
 	}
