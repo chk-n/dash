@@ -1600,3 +1600,20 @@ func ArrayTypeAt(t Type, pos int) Type {
 	}
 	return typ
 }
+
+// Returns true if t has an underlying type which is Array
+func IsArray(t Type) (*Array, bool) {
+	switch t := t.(type) {
+	case *Dirty:
+		return IsArray(t.T)
+	case *Pointer:
+		return IsArray(t.T)
+	case *Definition:
+		return IsArray(t.Underlying)
+	case *Mutable:
+		return IsArray(t.T)
+	case *Array:
+		return t, true
+	}
+	return nil, false
+}

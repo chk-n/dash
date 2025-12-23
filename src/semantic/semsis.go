@@ -2858,26 +2858,29 @@ func (s *Semantics) validatePutFunction(n *ast.FunctionCallExpression) bool {
 	} else if len(n.Arguments) > 3 {
 		s.addError(n, errTooManyArguments("put"))
 		return false
-	}
-
-	n.SetType(n.Arguments[0].Type())
-	firstArgType := s.coalesceTypeForBuiltIn(n.Arguments[0].Type(), "put")
-	thirdArgType := s.coalesceTypeForBuiltIn(n.Arguments[2].Type(), "put")
-
-	arrayType, isArray := firstArgType.(*types.Array)
-	if !isArray {
-		s.addError(n.Arguments[0], errTypeMismatch("[]T", firstArgType.String()))
+	} else if n.Arguments[1].Type() == nil || n.Arguments[2] == nil {
+		// another error occured
 		return false
 	}
 
-	elementType := arrayType.T
+	n.SetType(n.Arguments[0].Type())
+
+	firstArgType := n.Arguments[0].Type()
+	arrayType, ok := types.IsArray(firstArgType)
+	if !ok {
+		s.addError(n.Arguments[0], errTypeMismatch("[]T", firstArgType.String()))
+		return false
+
+	}
+	thirdArgType := s.coalesceTypeForBuiltIn(n.Arguments[2].Type(), "put")
 
 	if thirdArgArrType, ok := thirdArgType.(*types.Array); ok {
 		if !s.analyseExpressionType(n.Arguments[2], thirdArgArrType, arrayType) {
 			return false
 		}
 	} else {
-		if !s.analyseExpressionType(n.Arguments[2], thirdArgType, elementType) {
+		// we use original type arg type without coalescing for comparison to preserve library context
+		if !s.analyseExpressionType(n.Arguments[2], n.Arguments[2].Type(), arrayType.T) {
 			return false
 		}
 	}
