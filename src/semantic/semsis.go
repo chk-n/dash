@@ -1361,8 +1361,15 @@ func (s *Semantics) analyseCallArguments(n *ast.FunctionCallExpression, expected
 			// We want to treat type defs as the underlying
 			// type so that they can be used with built-in
 			// functions
-			argT := s.coalesceTypeForBuiltIn(arg.Type(), n.TokenLiteral())
-			expectedT := s.coalesceTypeForBuiltIn(expectedType, n.TokenLiteral())
+			argT := types.GetUnderlyingType(arg.Type())
+			// NOTE: we need a better way to strip multi type e.g. when
+			// argument is another function call
+			if aT, ok := argT.(*types.Multi); ok {
+				if len(aT.Ts) > 0 {
+					argT = aT.Ts[0]
+				}
+			}
+			expectedT := types.GetUnderlyingType(expectedType)
 			if !expectedT.Equal(argT) {
 				s.addError(arg, errTypeMismatch(expectedT.String(), argT.String()))
 			}
