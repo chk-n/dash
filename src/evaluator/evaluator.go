@@ -1229,9 +1229,6 @@ func (e *Evaluator) evalPrefixExpression(n *ast.PrefixExpression, stk *Context) 
 	case token.BNOT:
 		val, err = e.evalPrefixBitwiseNot(val)
 	case token.OPTIONAL:
-		if _, ok := n.Right.(*ast.FunctionCallExpression); ok {
-			val = unwrapFunctionResult(val, 0)
-		}
 		val = e.evalPrefixOptional(val)
 	case token.ASTERISK:
 		val = e.evalPrefixDereference(val)
