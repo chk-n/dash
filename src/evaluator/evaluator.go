@@ -209,19 +209,9 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		if res, ok := e.evalBuiltinFunction(n, ctx); ok {
 			return res
 		}
-		// If ok is true then it is a custom type cast
-		if _, ok := ctx.typs.Get(n.TokenLiteral()); ok {
-			res := e.eval(n.Arguments[0], ctx)
-			if _, ok := n.T.(*types.Union); ok {
-				typeName := normaliseTypeDescriptorName(n.Arguments[0].Type(), ctx.libPath, e)
-				descriptor := generateTypeDescriptor(typeName)
-
-				res = &Union{
-					descriptor: descriptor,
-					value:      res,
-				}
-			}
-			return &Return{Values: []any{res}}
+		// check if its a custom type cast
+		if res, ok := e.evalCustomTypeCast(n, ctx); ok {
+			return res
 		}
 		return e.evalFunctionCall(n, ctx)
 	case *ast.TypeCastExpression:
@@ -2153,6 +2143,35 @@ func (e *Evaluator) evalBuiltinFunction(n *ast.FunctionCallExpression, ctx *Cont
 	default:
 		return nil, false
 	}
+}
+
+func (e *Evaluator) evalCustomTypeCast(n *ast.FunctionCallExpression, ctx *Context) (any, bool) {
+	if _, ok := ctx.GetType(n.TokenLiteral()); !ok {
+		return nil, false
+	}
+
+	res := e.eval(n.Arguments[0], ctx)
+	// if cast is a union we need to also
+	// generate a type descriptor
+	if unionType, ok := n.T.(*types.Union); ok {
+		argType := n.Arguments[0].Type()
+
+		// if argType is a generic type (like E), use the first union variant
+		if _, isGeneric := argType.(*types.Generic); isGeneric {
+			if len(unionType.Ts) > 0 {
+				argType = unionType.Ts[0]
+			}
+		}
+
+		typeName := normaliseTypeDescriptorName(argType, ctx.libPath, e)
+		descriptor := generateTypeDescriptor(typeName)
+
+		res = &Union{
+			descriptor: descriptor,
+			value:      res,
+		}
+	}
+	return &Return{Values: []any{res}}, true
 }
 
 func (e *Evaluator) evalLen(args []ast.Expression, stk *Context) any {
