@@ -2441,7 +2441,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			end = int64(len(arr))
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
-			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
+			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2451,7 +2451,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			end = int64(len(arr))
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
-			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
+			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2461,7 +2461,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 			end = int64(len(arr))
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
-			debugPrintf("[DEBUG] runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", arr, start, end)
+			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
 			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
 			return &Return{Values: []any{}}
 		}
@@ -2475,7 +2475,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Context) any {
 	newCtx := NewContext(fn.ctx)
 
-	// evaluate arguments and set values in fresh symbol table
+	// evaluate arguments and set values in fresh context
 	for i, arg := range args {
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, ctx)
