@@ -1517,6 +1517,14 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.Type, fnName string) types.Ty
 		return t
 	case *types.Mutable:
 		return s.coalesceTypeForBuiltIn(t.T, fnName)
+	case *types.ImportedNamed:
+		return s.coalesceTypeForBuiltIn(t.Typ, fnName)
+	case *types.Multi:
+		// Multi type with single element should unwrap to that element
+		if len(t.Ts) == 1 {
+			return s.coalesceTypeForBuiltIn(t.Ts[0], fnName)
+		}
+		return t
 	default:
 		return t
 	}
