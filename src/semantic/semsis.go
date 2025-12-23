@@ -863,23 +863,26 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 			switch typ := typ.(type) {
 			case *types.Function:
-				// convert local types to be ImportNamed
-				// except if they are already of type
-				// ImportNamed or are a builtin type
+				// instantiate generic type parameters from actual arguments.
+				// this is needed for imported generic functions e.g. map.get_val[T, E any]
+
+				// wrap with ImportNamed
+				instantiatedArgs := make([]types.Type, len(typ.Arg))
 				for i, argT := range typ.Arg {
-					typ.Arg[i] = wrapTypeWithImportedNamed(left.Lib, argT)
-				}
-				// validate function call arguments for imported functions
-				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
-					s.analyseCallArguments(fn, typ.Arg)
+					instantiatedArgs[i] = wrapTypeWithImportedNamed(left.Lib, argT)
 				}
 
-				// convert non builtin types to be
-				// ImportedNamed
+				instantiatedRets := make([]types.Type, len(typ.Ret))
 				for i, retT := range typ.Ret {
-					typ.Ret[i] = wrapTypeWithImportedNamed(left.Lib, retT)
+					instantiatedRets[i] = wrapTypeWithImportedNamed(left.Lib, retT)
 				}
-				n.SetType(&types.Multi{Ts: typ.Ret})
+
+				// validate function call arguments for imported functions
+				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+					s.analyseCallArguments(fn, instantiatedArgs)
+				}
+
+				n.SetType(&types.Multi{Ts: instantiatedRets})
 			case *types.Union:
 				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
 					if len(fn.Arguments) != 1 {
