@@ -2073,9 +2073,12 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 		strct[name] = val
 	}
 	if _, ok := n.T.(*types.Error); ok {
+		typeName := normaliseTypeDescriptorName(n.T, stk.libPath, e)
+		typeDesc := generateTypeDescriptor(typeName)
 		return &Error{
-			Err:  n.Name.String(),
-			Args: strct,
+			descriptor: typeDesc,
+			Err:        typeName,
+			Args:       strct,
 		}
 	}
 	return strct
