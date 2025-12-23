@@ -697,6 +697,10 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		s.analyse(n.Left, "")
 
 		leftType := n.Left.Type()
+		if leftType == nil {
+			// another error occured
+			return
+		}
 
 		// We assume null check was performed hence
 		// we can unwrap optional type here. In self-
