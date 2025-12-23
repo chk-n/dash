@@ -971,6 +971,10 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 				caseDescriptor := generateTypeDescriptor(typeName)
 
 				if caseDescriptor == errVal.descriptor {
+					// update binding to the underlying error type
+					if bindingName != "" {
+						stk.Set(bindingName, errVal.Args)
+					}
 					return e.evalMatchCase(c, stk)
 				}
 			}
