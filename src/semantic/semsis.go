@@ -2440,13 +2440,27 @@ func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array)
 	switch eleT := typ.T.(type) {
 	case *types.Int:
 		for _, el := range lit.Values {
-			elInt, ok := el.(*ast.IntegerLiteral)
-			if ok {
+			if elInt, ok := el.(*ast.IntegerLiteral); ok {
+				// if literal check it fits
 				if !types.IntValueFitsIn(elInt.Value, eleT) {
 					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
 					continue
 				}
 				elInt.T = eleT
+			} else if prefixExpr, ok := el.(*ast.PrefixExpression); ok && ast.IsLiteral(prefixExpr.Right) {
+				// for literals in prefix expressions e.g. -1, we need to check negated value fits
+				if innerInt, ok := prefixExpr.Right.(*ast.IntegerLiteral); ok {
+					valueToCheck := innerInt.Value
+					if prefixExpr.Operator == "-" {
+						valueToCheck = -innerInt.Value
+					}
+					if !types.IntValueFitsIn(valueToCheck, eleT) {
+						s.addError(el, errIntLiteralOverflows(valueToCheck, eleT.String()))
+						continue
+					}
+					innerInt.T = eleT
+					prefixExpr.T = eleT
+				}
 			} else {
 				if !typ.T.Equal(el.Type()) {
 					s.addError(lit, errTypeMismatch(typ.T.String(), el.Type().String()))
