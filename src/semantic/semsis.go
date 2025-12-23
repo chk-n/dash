@@ -2639,7 +2639,10 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		}
 		return baseType
 	case *types.ImportedNamed:
-		// resolve imported type
+		if t.Typ == nil {
+			// another error has occured
+			return nil
+		}
 		typ, ok := s.importedSt[t.Lib][t.Typ.Ident()]
 		if !ok {
 			return nil
