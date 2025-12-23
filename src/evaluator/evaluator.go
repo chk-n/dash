@@ -435,7 +435,7 @@ func (e *Evaluator) evalIntCast(t *types.Int, v any) any {
 		return e.toUint32(v)
 	case 64:
 		return e.toUint64(v)
-	case 17, 33, 65:
+	case 9, 17, 33, 65:
 		return e.toInt64(v)
 	}
 	panic("invalid int cast")
