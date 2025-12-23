@@ -676,7 +676,7 @@ func (e *Evaluator) evalStringCast(t *types.String, v any) any {
 func (e *Evaluator) evalArrayCast(t *types.Array, v any) any {
 	v = unwrapFunctionResult(v, 0)
 	v = unwrapAny(v)
-	switch t := t.T.(type) {
+	switch t.T.(type) {
 	case *types.Byte:
 		str := v.(string)
 		newArr := make([]byte, len(str))
@@ -934,7 +934,7 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 		}
 		unionVal, ok := scrutinee.(*Union)
 		if !ok {
-			panic("matching against non-union type")
+			panic(fmt.Sprintf("matching against non-union type (got %T)", scrutinee))
 		}
 
 		for _, c := range n.Cases {
@@ -961,7 +961,7 @@ func (e *Evaluator) evalMatchExpressionStatement(n *ast.MatchExpressionStatement
 	} else if _, ok := typ.(*types.Error); ok {
 		errVal, ok := scrutinee.(*Error)
 		if !ok {
-			panic("matching against non-union type")
+			panic("matching against non-error type")
 		}
 
 		for _, c := range n.Cases {
