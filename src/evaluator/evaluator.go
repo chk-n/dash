@@ -2248,9 +2248,14 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 	}
 
 	if !cond {
-		msg := e.eval(args[1], ctx).(string)
+		msg := e.eval(args[1], ctx)
+		if e.err != nil {
+			// avoid overwritting error when evaluating args[1]
+			return nil
+		}
+		msg = unwrapFunctionResult(msg, 0)
 		typeDesc := generateTypeDescriptor("std.assert")
-		e.err = &Error{descriptor: typeDesc, Err: msg}
+		e.err = &Error{descriptor: typeDesc, Err: msg.(string)}
 	}
 	return nil
 }
