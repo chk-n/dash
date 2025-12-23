@@ -3010,19 +3010,37 @@ func (s *Semantics) matchTypes(paramType types.Type, argType types.Type, typeMap
 	case *types.Struct:
 		at, ok := argType.(*types.Struct)
 		if !ok {
-			return
+			// argType might be ImportedNamed wrapping a struct
+			if imported, ok := argType.(*types.ImportedNamed); ok {
+				if structType, ok := imported.Typ.(*types.Struct); ok {
+					at = structType
+				} else {
+					return
+				}
+			} else {
+				return
+			}
 		}
-		for i, field := range pt.Ts {
-			s.matchTypes(field.T, at.Ts[i].T, typeMap)
+		// match type parameters e.g. map[T, E]
+		for i, tp := range pt.TypeParams {
+			if i < len(at.TypeParams) {
+				s.matchTypes(tp, at.TypeParams[i], typeMap)
+			}
 		}
-	case *types.Int:
-		// Primitive type, no further matching needed
+		// we skip field matching to avoid infinite recursion
+		// on sel-referential structs
 	case *types.UnknownNamed:
 		// UnknownNamed types can appear during type inference for nested generic types
-		// They will be resolved later in the semantic analysis process
+		// they will be resolved later in the semantic analysis process
 		// TODO: potentially match type parameters if argType is also UnknownNamed
+	case *types.ImportedNamed:
+		// when matching imported types, we match underlying type
+		s.matchTypes(pt.Typ, argType, typeMap)
+	case *types.Int, *types.Byte, *types.Float, *types.Char, *types.Bool,
+		*types.String, *types.Any:
+		// no matching needed for these types
 	default:
-		panic("add more cases for compound type: " + pt.String())
+		// for unknown types, we skip silently. this allows partial matching
 	}
 }
 
