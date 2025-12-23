@@ -2341,7 +2341,9 @@ func (e *Evaluator) evalAppend(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 	// Handle array/map case: put(arr, idx, val)
 	arr := e.eval(args[0], ctx)
-	idx := e.toInt64(e.eval(args[1], ctx))
+	idxVal := e.eval(args[1], ctx)
+	idxVal = unwrapFunctionResult(idxVal, 0)
+	idx := e.toInt64(idxVal)
 	val := e.eval(args[2], ctx)
 	val = unwrapFunctionResult(val, 0)
 
@@ -2417,7 +2419,9 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 
 func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
-	idx := e.toInt64(e.eval(args[1], ctx))
+	idxVal := e.eval(args[1], ctx)
+	idxVal = unwrapFunctionResult(idxVal, 0)
+	idx := e.toInt64(idxVal)
 
 	arr = unwrapFunctionResult(arr, 0)
 	var result any
@@ -2452,8 +2456,12 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 	arr := e.eval(args[0], ctx)
 	arr = unwrapFunctionResult(arr, 0)
-	start := e.toInt64(e.eval(args[1], ctx))
-	end := e.toInt64(e.eval(args[2], ctx))
+	startVal := e.eval(args[1], ctx)
+	startVal = unwrapFunctionResult(startVal, 0)
+	start := e.toInt64(startVal)
+	endVal := e.eval(args[2], ctx)
+	endVal = unwrapFunctionResult(endVal, 0)
+	end := e.toInt64(endVal)
 
 	var newArr any
 	switch arr := arr.(type) {
