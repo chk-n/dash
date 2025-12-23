@@ -598,7 +598,6 @@ func (e *Evaluator) toFloat64(v any) float64 {
 // Byte casting
 
 func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
-	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
 	case uint8:
 		return v
@@ -622,7 +621,6 @@ func (e *Evaluator) evalByteCast(t *types.Byte, v any) any {
 
 // Char casting
 func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
-	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
 	case uint8:
 		return uint32(v)
@@ -646,10 +644,7 @@ func (e *Evaluator) evalCharCast(t *types.Char, v any) any {
 
 // String casting
 func (e *Evaluator) evalStringCast(t *types.String, v any) any {
-	v = unwrapFunctionResult(v, 0)
 	switch v := v.(type) {
-	case *Return:
-		return e.evalStringCast(t, v.Values[0])
 	case string:
 		return v
 	case byte:
