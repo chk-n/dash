@@ -1246,6 +1246,13 @@ func CanCoalesce(from, to Type) bool {
 	case *Mutable:
 		return CanCoalesce(from.T, to)
 	case *ImportedNamed:
+		// check both from same library
+		if toImported, ok := to.(*ImportedNamed); ok {
+			if from.Lib == toImported.Lib {
+				return CanCoalesce(from.Typ, toImported.Typ)
+			}
+			return false
+		}
 		return CanCoalesce(from.Typ, to)
 	case *Pointer:
 		if to, ok := to.(*Pointer); ok {
