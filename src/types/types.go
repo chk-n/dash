@@ -1418,7 +1418,7 @@ func IntTypeFitsIn(t1 *Int, t2 *Int) bool {
 
 // Checks whether an int value v can be coalesced into type t2
 func IntValueFitsIn(v int64, t2 *Int) bool {
-	if v < 0 && t2.Signed == 1 {
+	if v < 0 && t2.Signed == 0 {
 		return false
 	}
 
