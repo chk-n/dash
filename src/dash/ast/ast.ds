@@ -122,7 +122,8 @@ pub enum tag {
     mul
     div
     mod
-    incr_decr
+    incr
+    decr
     // binary ops
     negate_byte
     or
@@ -668,7 +669,7 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = try to_string(a, data.y, buf)
         buf = append(buf, ']')
 
-    case tag.incr_decr:
+    case tag.incr, tag.decr:
         buf = try to_string(a, data.x, buf)
         let src_idx = try get(a.tkns, node.token).start
         let op = get_fixed_token(a.src, src_idx, node.tag)
@@ -774,7 +775,7 @@ fn get_fixed_token(src []byte, idx source_index, t tag)! []byte {
              tag.any_type, tag.u16_type, tag.u32_type, tag.u64_type,
              tag.i16_type, tag.i32_type, tag.i64_type,
              tag.int_type, tag.f32_type, tag.f64_type: 3
-        case tag.if_stmt, tag.incr_decr,
+        case tag.if_stmt, tag.incr, tag.decr,
              tag.null_coalesce, tag.u8_type, tag.i8_type: 2
         case tag.fn_def, tag.fn_err_def, tag.fn_gen_def, tag.fn_gen_err_def,
              tag.lor, tag.land, tag.andnot,

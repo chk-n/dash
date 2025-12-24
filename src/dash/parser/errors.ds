@@ -113,6 +113,11 @@ error unexpected_eof {
 
 error unimplemented
 
+error parser_error {
+    i   ast.token_index
+    rsn string
+}
+
 // fn error_to_string(err error) string {
 //     match err = err {
 //     case invalid_token:

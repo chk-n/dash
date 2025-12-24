@@ -1944,12 +1944,18 @@ fn parse_increment_expression(p parser, prev ast.index)! parser, ast.index {
     )
 
     let op_tkn = p.tkn_i
+    let op_tag = current_tag(p)
     // consume '++' or '--'
     var p = next_token(p)
-    var tag = ast.tag.incr_decr
+
+    let tag = match op_tag {
+        case lexer.tag.ADDADD: ast.tag.incr
+        case lexer.tag.SUBSUB: ast.tag.decr
+        case _: raise parser_error{rsn: "expected ADDADD or SUBSUB due to assertion", i: op_tkn} 
+    }
 
     p, let exp = try add_node(p, {
-        tag: ast.tag.incr_decr,
+        tag: tag,
         token: op_tkn,
         data: {x: prev, y: ast.NULL_IDX}
     })
