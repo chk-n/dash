@@ -154,7 +154,7 @@ fn parse_library(p parser)! parser, ast.index {
         // case lexer.tag.ERROR:
         case lexer.tag.UNION:
             p, node = try parse_union_statement(p)
-        case lexer.tag.LET, lexer.tag.VAR:
+        case lexer.tag.LET: 
             p, node = try parse_assignment_statement(p)
         case lexer.tag.AT:
             p, node = try parse_attribute_statement(p)
@@ -199,8 +199,7 @@ fn find_next_valid_global_token(p parser)! parser {
              lexer.tag.STRUCT, lexer.tag.ENUM,
              lexer.tag.ERROR, lexer.tag.TYPE,
              lexer.tag.ALIAS, lexer.tag.UNION,
-             lexer.tag.FN, lexer.tag.LET,
-             lexer.tag.VAR:
+             lexer.tag.FN, lexer.tag.LET:
             return p
         case _:
             p = next_token(p)

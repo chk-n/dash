@@ -207,20 +207,20 @@ fn test_parse_library()! {
 @test
 fn test_parse_global_assignment()! {
     try assert_canonical_lib("lib a let x = 1")
-    try assert_canonical_lib("lib a var x = test()")
-    try assert_canonical_lib("lib a let x,var y,var z = 1,2,3")
-    try assert_canonical_lib("lib a let x = 1 var y = 2")
+    try assert_canonical_lib("lib a let x,let y,let z = 1,2,3")
+    try assert_canonical_lib("lib a let x = 1 let y = 2")
     try assert_parse("lib a let a = 1,", "lib a let a = 1")
     try assert_canonical_lib("lib a pub let x = 1")
 
     try assert_error("lib a x", [invalid_statement{i: 2}])
+    try assert_error("lib a var", [invalid_statement{i: 2}])
     try assert_error("lib a let", [expected_identifier{i: 3}])
-    try assert_error("lib a var = 1", [expected_identifier{i: 3}])
+    try assert_error("lib a let = 1", [expected_identifier{i: 3}])
     try assert_error("lib a let a", [expected_assign_or_comma{i: 4}])
     try assert_error("lib a let a,", [expected_assign_or_comma{i: 5}])
     try assert_error("lib a let a =", [expected_expression{i: 5}])
     try assert_error("lib a let x = 1,,", [expected_expression{i: 7}, invalid_statement{i: 7}])
-    try assert_error("lib a let x, var = 1", [expected_identifier{i: 6}])
+    try assert_error("lib a let x, let = 1", [expected_identifier{i: 6}])
 }
 
 @test
