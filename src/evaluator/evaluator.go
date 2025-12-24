@@ -285,9 +285,9 @@ func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
 		case *types.Char:
 			return e.evalCharCast(n.Value)
 		case *types.Any:
-			return n.Value
+			return int64(n.Value)
 		case *types.Generic:
-			return n.Value
+			return int64(n.Value)
 		default:
 			panic("this is a compiler error. please report")
 		}

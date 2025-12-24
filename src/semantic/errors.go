@@ -238,7 +238,10 @@ var (
 	errUintLiteralOverflows = func(val uint64, t string) error {
 		return fmt.Errorf("unisgned integer literal '%d' overflows '%s'", val, t)
 	}
-	errIntLiteralOverflows = func(val int64, t string) error {
+	errIntLiteralOverflows = func(val uint64, t string, isNegated bool) error {
+		if isNegated {
+			return fmt.Errorf("integer literal '-%d' overflows '%s'", val, t)
+		}
 		return fmt.Errorf("integer literal '%d' overflows '%s'", val, t)
 	}
 	errFloatLiteralNotRepresentable = func(val float64, t string) error {

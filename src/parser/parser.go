@@ -1622,13 +1622,13 @@ func (p *Parser) parseCatchExpression(left ast.Expression) ast.Expression {
 func (p *Parser) parseIntegerLiteral() ast.Expression {
 	lit := &ast.IntegerLiteral{Token: p.curToken, T: &types.ConstI64}
 	i := strings.ReplaceAll(p.curToken.Literal, "_", "")
-	intValue, err := strconv.ParseInt(i, 10, 64)
+	uintValue, err := strconv.ParseUint(i, 10, 64)
 	if err != nil {
 		p.addError(p.curToken, errInvalidToken(p.curToken.Literal))
 		p.nextToken()
 		return lit
 	}
-	lit.Value = intValue
+	lit.Value = uintValue
 	p.nextToken()
 	return lit
 }

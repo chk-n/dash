@@ -1202,7 +1202,7 @@ func TestMatchExpressionStatement(t *testing.T) {
 		{
 			name:   "int, cases out of bounds for type",
 			input:  `let x = u8(1) let y = match x { case 256: 0 case -1: 1 }`,
-			errors: []string{"integer literal '256' overflows 'u8'"},
+			errors: []string{"integer literal '256' overflows 'u8'", "integer literal '-1' overflows 'u8'"},
 		},
 		{
 			name:  "byte with char literals",

@@ -1165,7 +1165,7 @@ func (e *Comment) String() string {
 
 type IntegerLiteral struct {
 	Token token.Token
-	Value int64
+	Value uint64 // Changed from int64 to support values > MaxInt64
 
 	// Set by semsis
 	T types.Type

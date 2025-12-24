@@ -2210,6 +2210,19 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 	switch lit := expr.(type) {
 	case *ast.PrefixExpression:
 		if ast.IsLiteral(lit.Right) {
+			// Special handling for negated integer literals to support min int64
+			if intLit, ok := lit.Right.(*ast.IntegerLiteral); ok && lit.Operator == "-" {
+				coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
+				intType := coercedType.(*types.Int) // Force cast - negated literals can only be Int type
+				if !types.IntValueFitsIn(intLit.Value, intType, true) {
+					s.addError(expr, errIntLiteralOverflows(intLit.Value, coercedType.String(), true))
+					return false
+				}
+				// Don't set type on inner literal - keep it as uint64 for evaluation
+				// The PrefixExpression itself will have the correct type
+				lit.T = coercedType
+				return true
+			}
 			return s.analyseExpressionType(lit.Right, lit.Right.Type(), targetType)
 		}
 		// Check if target is optional and expression matches inner type
@@ -2282,18 +2295,18 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		coercedType := types.GetUnderlyingTypeIfLiteral(targetType)
 		switch t := coercedType.(type) {
 		case *types.Byte:
-			if !types.IntValueFitsIn(lit.Value, &types.ConstU8) {
-				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU8, false) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String(), false))
 				return false
 			}
 		case *types.Int:
-			if !types.IntValueFitsIn(lit.Value, t) {
-				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+			if !types.IntValueFitsIn(lit.Value, t, false) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String(), false))
 				return false
 			}
 		case *types.Char:
-			if !types.IntValueFitsIn(lit.Value, &types.ConstU32) {
-				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String()))
+			if !types.IntValueFitsIn(lit.Value, &types.ConstU32, false) {
+				s.addError(expr, errIntLiteralOverflows(lit.Value, coercedType.String(), false))
 				return false
 			}
 
@@ -2361,7 +2374,7 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	case *ast.CharacterLiteral:
-		intType := types.LowestFittingInt(int64(lit.Value), false)
+		intType := types.LowestFittingInt(uint64(lit.Value), false)
 		if !types.CanCoalesce(intType, targetType) {
 			s.addError(expr, errTypeMismatch(targetType.String(), intType.String()))
 			return false
@@ -2451,21 +2464,17 @@ func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array)
 	case *types.Int:
 		for _, el := range lit.Values {
 			if elInt, ok := el.(*ast.IntegerLiteral); ok {
-				// if literal check it fits
-				if !types.IntValueFitsIn(elInt.Value, eleT) {
-					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
+				if !types.IntValueFitsIn(elInt.Value, eleT, false) {
+					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String(), false))
 					continue
 				}
 				elInt.T = eleT
 			} else if prefixExpr, ok := el.(*ast.PrefixExpression); ok && ast.IsLiteral(prefixExpr.Right) {
-				// for literals in prefix expressions e.g. -1, we need to check negated value fits
+				// For literals in prefix expressions e.g. -1, check with negation flag
 				if innerInt, ok := prefixExpr.Right.(*ast.IntegerLiteral); ok {
-					valueToCheck := innerInt.Value
-					if prefixExpr.Operator == "-" {
-						valueToCheck = -innerInt.Value
-					}
-					if !types.IntValueFitsIn(valueToCheck, eleT) {
-						s.addError(el, errIntLiteralOverflows(valueToCheck, eleT.String()))
+					isNegated := prefixExpr.Operator == "-"
+					if !types.IntValueFitsIn(innerInt.Value, eleT, isNegated) {
+						s.addError(el, errIntLiteralOverflows(innerInt.Value, eleT.String(), isNegated))
 						continue
 					}
 					innerInt.T = eleT
@@ -2484,8 +2493,8 @@ func (s *Semantics) analyseArrayLiteral(lit *ast.ArrayLiteral, typ *types.Array)
 		for _, el := range lit.Values {
 			elInt, ok := el.(*ast.IntegerLiteral)
 			if ok {
-				if !types.IntValueFitsIn(elInt.Value, &types.ConstU8) {
-					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String()))
+				if !types.IntValueFitsIn(elInt.Value, &types.ConstU8, false) {
+					s.addError(el, errIntLiteralOverflows(elInt.Value, eleT.String(), false))
 					continue
 				}
 				elInt.T = eleT

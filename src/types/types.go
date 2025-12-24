@@ -1312,26 +1312,28 @@ func GetSign(t Type) int {
 	return -1
 }
 
-func LowestFittingInt(v int64, signed bool) *Int {
+func LowestFittingInt(v uint64, signed bool) *Int {
 	if signed {
+		// For signed integers, check positive range of each type
 		if v <= math.MaxInt8 {
 			return &ConstI8
 		} else if v <= math.MaxInt16 {
 			return &ConstI16
 		} else if v <= math.MaxInt32 {
 			return &ConstI32
+		} else if v <= math.MaxInt64 {
+			return &ConstI64
 		} else {
+			// Value too large for i64, will fail validation later
 			return &ConstI64
 		}
 	} else {
-		if v < 0 {
-			panic("v was less than zero")
-		}
-		if v >= 0 && v <= math.MaxUint8 {
+		// For unsigned integers
+		if v <= math.MaxUint8 {
 			return &ConstU8
-		} else if v >= 0 && v <= math.MaxUint16 {
+		} else if v <= math.MaxUint16 {
 			return &ConstU16
-		} else if v >= 0 && v <= math.MaxUint32 {
+		} else if v <= math.MaxUint32 {
 			return &ConstU32
 		} else {
 			return &ConstU64
@@ -1424,38 +1426,59 @@ func IntTypeFitsIn(t1 *Int, t2 *Int) bool {
 }
 
 // Checks whether an int value v can be coalesced into type t2
-func IntValueFitsIn(v int64, t2 *Int) bool {
-	if v < 0 && t2.Signed == 0 {
-		return false
-	}
-
+// isNegated indicates if the value will be negated (e.g., in -9223372036854775808)
+func IntValueFitsIn(v uint64, t2 *Int, isNegated bool) bool {
 	if t2.Signed == 1 {
+		// Signed integer types
 		switch t2.Width {
 		case 8:
-			if v < math.MinInt8 || v > math.MaxInt8 {
-				return false
+			if isNegated {
+				if v > 128 {
+					return false
+				}
+			} else {
+				if v > math.MaxInt8 {
+					return false
+				}
 			}
 		case 16:
-			if v < math.MinInt16 || v > math.MaxInt16 {
-				return false
+			if isNegated {
+				if v > 32768 {
+					return false
+				}
+			} else {
+				if v > math.MaxInt16 {
+					return false
+				}
 			}
 		case 32:
-			if v < math.MinInt32 || v > math.MaxInt32 {
-				return false
+			if isNegated {
+				if v > 2147483648 {
+					return false
+				}
+			} else {
+				if v > math.MaxInt32 {
+					return false
+				}
 			}
 		case 64:
-			if v < math.MinInt64 || v > math.MaxInt64 {
-				return false
+			if isNegated {
+				// 9223372036854775808 represents MinInt64 when negated
+				if v > 9223372036854775808 {
+					return false
+				}
+			} else {
+				if v > math.MaxInt64 {
+					return false
+				}
 			}
-		case 128, 256:
-			// For widths greater than 64 bits, any int value fits
-			return true
 		}
 	} else {
-		// Unsigned integers
-		if v < 0 {
+		// Unsigned integer types cannot be negative
+		if isNegated {
 			return false
 		}
+
 		switch t2.Width {
 		case 8:
 			if v > math.MaxUint8 {
@@ -1466,14 +1489,10 @@ func IntValueFitsIn(v int64, t2 *Int) bool {
 				return false
 			}
 		case 32:
-			if uint32(v) > math.MaxUint32 {
+			if v > math.MaxUint32 {
 				return false
 			}
 		case 64:
-			if uint64(v) > math.MaxUint64 {
-				return false
-			}
-		case 128, 256:
 			return true
 		}
 	}
@@ -1482,7 +1501,6 @@ func IntValueFitsIn(v int64, t2 *Int) bool {
 
 func UintValueFitsIn(v uint64, t2 *Int) bool {
 	if t2.Signed == -1 {
-		// For signed integers, check if the uint64 value fits within the signed range
 		switch t2.Width {
 		case 8:
 			if v > math.MaxInt8 {
@@ -1539,7 +1557,7 @@ func LowestFittingUint(v uint64, signed bool) *Int {
 		} else if v <= math.MaxInt64 {
 			return &ConstI64
 		} else {
-			// Value too large for signed int64, use uint64
+			// value too large for signed int64, use uint64
 			return &ConstU64
 		}
 	} else {
