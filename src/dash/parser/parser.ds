@@ -633,7 +633,7 @@ fn parse_function_statement(p parser)! parser, ast.index {
     }
 
     // if generic, update tag and include gen_params in extra
-    var extra = []ast.index{}
+    var extra = try make([]ast.index, 0, 2)
     if type_params != ast.NULL_IDX {
         tag = match tag {
             case ast.tag.fn_def: ast.tag.fn_gen_def

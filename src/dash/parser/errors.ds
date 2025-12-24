@@ -80,10 +80,6 @@ error invalid_prefix_expression {
     i ast.token_index
 }
 
-error invalid_negation {
-    i ast.index
-}
-
 error invalid_postfix_expression {
     i ast.token_index
 }
@@ -103,7 +99,7 @@ error unexpected_expression {
 }
 
 error unexpected_statement {
-    i ast.index
+    i ast.token_index
 }
 
 error unexpected_eof {
