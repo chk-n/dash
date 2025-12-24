@@ -1,0 +1,13 @@
+lib ascii
+
+// Returns true if ascii letter is in upper case
+pub fn is_upper(ch u8) bool {
+    return 'A' <= ch && ch <= 'Z'
+}
+
+// Returns lowercase of ascii if it is an upper
+// case letter otherwise returns byte as is
+pub fn to_lower(ch u8) u8 {
+    let mask = u8(is_upper(ch)) << 5
+    return ch | mask
+}

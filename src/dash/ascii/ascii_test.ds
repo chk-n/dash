@@ -1,0 +1,20 @@
+lib ascii
+
+@test
+fn test_is_upper()! {
+    try assert(is_upper('A') == true, "A")
+    try assert(is_upper('Z') == true, "Z")
+    try assert(is_upper('a') == false, "a")
+    try assert(is_upper('z') == false, "z")
+    try assert(is_upper(0xFF) == false, "0xFF")
+}
+
+@test
+fn test_to_lower()! {
+    try assert(to_lower('A') == 'a', "A->a")
+    try assert(to_lower('Z') == 'z', "Z->z")
+    try assert(to_lower('a') == 'a', "a->a")
+    try assert(to_lower('z') == 'z', "z->z")
+    try assert(to_lower('0') == '0', "0->0")
+    try assert(to_lower(0xFF) == 0xFF, "0xFF")
+}
