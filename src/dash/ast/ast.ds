@@ -106,7 +106,8 @@ pub enum tag {
     int
     float
     string
-    bool
+    true_lit
+    false_lit
     char
     struct_lit
     anon_struct_lit
@@ -179,7 +180,8 @@ pub fn literal_to_tag(t lexer.tag)! tag {
         case lexer.tag.INT:   tag.int
         case lexer.tag.FLOAT: tag.float
         case lexer.tag.STRING: tag.string
-        case lexer.tag.BOOL: tag.bool
+        case lexer.tag.TRUE: tag.true_lit
+        case lexer.tag.FALSE: tag.false_lit
         case lexer.tag.CHAR: tag.char
         case lexer.tag.ANY_TYPE: tag.any_type
         case lexer.tag.U8_TYPE: tag.u8_type
@@ -576,7 +578,7 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = try to_string(a, data.x, buf)
 
     case tag.ident, tag.int, tag.float,
-         tag.string, tag.bool, tag.char:
+         tag.string, tag.true_lit, tag.false_lit, tag.char:
         let src_idx = try get(a.tkns, node.token).start
         let lit = try get_variable_token(a.src, src_idx)
         buf = append(buf, lit)

@@ -162,8 +162,8 @@ fn test_number()! {
 @test
 fn test_bool()! {
     let tests = [
-        {"false", tag.BOOL, "false"},                      
-        {"true", tag.BOOL, "true"},                      
+        {"false", tag.FALSE, "false"},
+        {"true", tag.TRUE, "true"},
     ]
     
     for i = 0; i < len(tests); i++ {

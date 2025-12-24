@@ -60,7 +60,8 @@ pub enum tag {
     FLOAT      // 0.314
     STRING       // "abc"
     MULTI_STRING // `xyz`
-    BOOL
+    TRUE       // true
+    FALSE      // false
     CHAR
 
     // type literals
@@ -167,8 +168,8 @@ let keywords = [
     {"mut", tag.MUT_TYPE},
     {"any", tag.ANY_TYPE},
     {"error", tag.ERROR},
-    {"true", tag.BOOL},
-    {"false", tag.BOOL}
+    {"true", tag.TRUE},
+    {"false", tag.FALSE}
 ]
 
 pub fn get_tag_by_keyword(k string) tag {
