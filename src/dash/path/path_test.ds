@@ -1,0 +1,31 @@
+lib path
+
+
+@test
+fn test_base()! {
+    let tests = [
+        {"", "."},
+        {"/", "/"},
+        {"///", "/"},
+        {"lib", "lib"},
+        {"/lib", "lib"},
+        {"lib/", "lib"},
+        {"/lib/", "lib"},
+        {"////lib///", "lib"},
+        {"..", ".."},
+        {"a/lib/..", ".."},
+        {"./lib", "lib"},
+        {"a/b/c.txt", "c.txt"},
+        {"a/b/c/d/e/f/g/h", "h"},
+        {"path/file-name_2", "file-name_2"},
+        {"path/my file", "my file"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let input = tc.0
+        let want = tc.1
+        let got = try base(input)
+        try assert(got == want, "expected base(" + input + ") to be '" + want + "', got '" + got + "'")
+    }
+}

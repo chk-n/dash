@@ -1,0 +1,42 @@
+lib path
+
+// TODO: add @platform()
+// base returns the last element of a file path, similar to basename(1).
+// Trailing path separators are removed before extracting the last element.
+// If the path is empty, base returns ".".
+// If the path consists entirely of separators, base returns "/".
+pub fn base(p string)! string {
+    if len(p) == 0 {
+      return "."
+    }
+    
+    var p = p
+    // Strip trailing slash
+    for len(p) > 0 {
+        let last = len(p)-1
+        if try get(p, last) != '/' {
+            break
+        }
+        p = try slice(p, 0, last)
+    }
+
+    if len(p) == 0 {
+        return "/"
+    }
+
+
+    // Find last slash
+    var last_slash = -1
+    for i = len(p)-1; i >= 0; i-- {
+        if try get(p, i) == '/' {
+            last_slash = i
+            break
+        }
+    }
+
+    if last_slash == -1 {
+      return p
+    }
+
+    return try slice(p, last_slash + 1, -1)
+}
