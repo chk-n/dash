@@ -984,6 +984,14 @@ func CanCoalesce(from, to Type) bool {
 	switch from := from.(type) {
 	case *Any:
 		return true
+	case *Generic:
+		// TODO: check actual constraints when they're properly implemented
+		for _, c := range from.Constraints {
+			if _, ok := c.(*Any); ok {
+				return true
+			}
+		}
+		return false
 	case *Int:
 		switch to := to.(type) {
 		case *Dirty:
