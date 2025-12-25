@@ -1,0 +1,84 @@
+lib fmt
+
+use "dash/strings"
+use "dash/convert"
+
+// format
+// %[fill][align][sign][#][width][.precision][type]
+// - if fill used then align needs to be used too
+// 
+// format specifiers
+// - %i integers
+// - %x hex 
+// - %b binary
+// - %o octal
+// - %f float
+// - %e scientific
+// - %p pointer
+// - %s string
+// - %t type of argument
+// - %v structs, arrays, bool
+//
+// alignment
+// - %>20s right align, width 20
+// - %<20s left align, width 20
+// - %^20s center align, width 20
+// with fill 
+// - %0>10d  zero-filled, width 10
+
+// raised when format specifier found but no
+// matching argument found to be formated
+// e.g. stringf("x = %i", [])
+pub error missing_fmt_argument
+// raised when an unknown format specifier used
+pub error unknown_fmt_specifier
+
+// TODO: add support for interface e.g. io.writer so this function
+// doesnt allocate
+// TODO: add support for other specifiers than {}
+// TODO: update to use ..any variadic notation once supported
+pub fn stringf(format string, args []any)! string {
+    var idx = 0
+    var arg_idx = 0
+    var buf = try make([]byte, 0, len(format))
+    for idx < len(format) {
+        let ch1 = try get(format, idx)
+        idx = idx + 1
+        match ch1 {
+        case '%':
+            let ch2 = try get(format, idx)
+            // %%
+            if ch2 == '%' {
+                buf = try append(buf, '%')
+                idx = idx + 1
+            // %s
+            } else if ch2 == 's' {
+                let arg = get(args, arg_idx) catch e {
+                    raise missing_fmt_argument
+                }
+                // BUG: semsis should disallow casting "any" to another type
+                // without either forcing the expression to be tried or matching
+                // against the type to unwrap "any"
+                buf = try append(buf, []byte(arg))
+                arg_idx = arg_idx + 1
+                idx = idx + 1
+            // %d
+            } else if ch2 == 'd' {
+                let arg = get(args, arg_idx) catch e {
+                    raise missing_fmt_argument
+                }
+                let arg_str = try convert.to_string(arg)
+                buf = try append(buf, []byte(arg_str))
+                arg_idx = arg_idx + 1
+                idx = idx + 1
+            } else {
+                raise unknown_fmt_specifier
+            }
+        case _:
+            buf = try append(buf, ch1)
+        }
+    }
+    // TODO: should we raise error if arg_idx < len(args)-1
+    // i.e. when we have too little format specifiers?
+    return string(buf)
+}

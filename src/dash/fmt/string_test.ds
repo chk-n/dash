@@ -1,0 +1,36 @@
+lib fmt
+
+@test
+fn test_stringf()! {
+    try assert(stringf("", []) == "", "")
+    try assert(stringf("", [""]) == "", "")
+    try assert(stringf("%s", ["a"]) == "a", "")
+    try assert(stringf("%sa", ["a"]) == "aa", "")
+    try assert(stringf("a%s", ["a"]) == "aa", "")
+    try assert(stringf("%%%s", ["a"]) == "%a", "")
+    try assert(stringf("%s%%", ["a"]) == "a%", "")
+    try assert(stringf("%s%s%s", ["a","a","a"]) == "aaa", "")
+    try assert(stringf(" %s %s %s ", ["a","a","a"]) == " a a a ", "")
+
+    // %d tests
+    try assert(stringf("%d", [u8(42)]) == "42", "")
+    try assert(stringf("%d", [i32(100)]) == "100", "")
+    try assert(stringf("%d", [i64(-255)]) == "-255", "")
+    try assert(stringf("%d %d", [u32(1), u32(2)]) == "1 2", "")
+    try assert(stringf("count: %d name: %s", [u32(5), "test"]) == "count: 5 name: test", "")
+    try assert(stringf("%d", [u64(0)]) == "0", "")
+
+    // error tests
+    try assert_error(fn()! { try stringf("%s", []) }, missing_fmt_argument)
+    // TODO: should this be an error?
+    // try assert_error(fn()! { try stringf("bb", ["a"]) }, missing_fmt_specifier)
+    }
+
+fn assert_error(f fn()!, err error)! {
+    var cnt = 0
+    f() catch e {
+        cnt = 1
+        try assert(e == err, "expected errors to match")
+    }
+    try assert(cnt == 1, "expected error")
+}
