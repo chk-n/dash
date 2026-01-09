@@ -351,29 +351,9 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 	for i, arg := range n.Arguments {
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, stk)
-
 		argValue = unwrapFunctionResult(argValue, 0)
 
-		// Wrap value in Any if parameter is 'any' type or generic with 'any' constraint
-		shouldWrapInAny := false
-		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
-			shouldWrapInAny = true
-		} else if genType, isGeneric := fn.arguments[i].Type.(*types.Generic); isGeneric {
-			// Generic types with no constraints accept any type (like 'any')
-			// Also check if generic explicitly has 'any' constraint
-			if len(genType.Constraints) == 0 {
-				shouldWrapInAny = true
-			} else {
-				for _, constraint := range genType.Constraints {
-					if _, isAny := constraint.(*types.Any); isAny {
-						shouldWrapInAny = true
-						break
-					}
-				}
-			}
-		}
-
-		if shouldWrapInAny {
+		if shouldWrapTypeInAny(fn.arguments[i].Type) {
 			argValue = e.evalToAny(argValue)
 		}
 
@@ -385,17 +365,16 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		return nil
 	}
 
-	if returnVal, ok := res.(*Return); ok {
-		// check if function has any return types that are 'any'
+
+	if ret, ok := res.(*Return); ok {
 		for i, retType := range n.ReturnTypes {
-			if _, isAnyType := retType.(*types.Any); isAnyType && i < len(returnVal.Values) {
-				// wrap return value in Any if not already
-				if _, isAlreadyAny := returnVal.Values[i].(*Any); !isAlreadyAny {
-					returnVal.Values[i] = e.evalToAny(returnVal.Values[i])
+			if shouldWrapTypeInAny(retType) && i < len(ret.Values) {
+				if _, isAlreadyAny := ret.Values[i].(*Any); !isAlreadyAny {
+					ret.Values[i] = e.evalToAny(ret.Values[i])
 				}
 			}
 		}
-		return returnVal
+		return ret
 	}
 	return &Return{Values: []any{res}}
 }
@@ -2103,6 +2082,10 @@ func (e *Evaluator) evalStructLiteral(n *ast.StructLiteral, stk *Context) any {
 			case *types.Char:
 				val = e.evalCharCast(val)
 			}
+			// Unwrap Any if field type is not 'any' type
+			// This handles values from generic functions that are wrapped in Any{}
+			// but need to be stored as concrete types in struct fields
+			val = unwrapAny(val)
 		}
 
 		strct[name] = val
@@ -2461,6 +2444,7 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	idx := e.toInt64(idxVal)
 
 	arr = unwrapFunctionResult(arr, 0)
+	arr = unwrapAny(arr)
 	var result any
 	switch arr := arr.(type) {
 	case []any:
@@ -2545,29 +2529,9 @@ func (e *Evaluator) evalFunction(fn *Function, args []ast.Expression, ctx *Conte
 	for i, arg := range args {
 		fnArgName := fn.arguments[i].Name.Value
 		argValue := e.eval(arg, ctx)
-
 		argValue = unwrapFunctionResult(argValue, 0)
 
-		// Wrap value in Any if parameter is 'any' type or generic with 'any' constraint
-		shouldWrapInAny := false
-		if _, isAnyType := fn.arguments[i].Type.(*types.Any); isAnyType {
-			shouldWrapInAny = true
-		} else if genType, isGeneric := fn.arguments[i].Type.(*types.Generic); isGeneric {
-			// Generic types with no constraints accept any type (like 'any')
-			// Also check if generic explicitly has 'any' constraint
-			if len(genType.Constraints) == 0 {
-				shouldWrapInAny = true
-			} else {
-				for _, constraint := range genType.Constraints {
-					if _, isAny := constraint.(*types.Any); isAny {
-						shouldWrapInAny = true
-						break
-					}
-				}
-			}
-		}
-
-		if shouldWrapInAny {
+		if shouldWrapTypeInAny(fn.arguments[i].Type) {
 			argValue = e.evalToAny(argValue)
 		}
 
@@ -2704,6 +2668,35 @@ func castTo[T any](v any) (T, error) {
 		return val, fmt.Errorf("unable to cast %v to type", v)
 	}
 	return val, nil
+}
+
+// shouldWrapTypeInAny returns true if a type requires Any{} wrapping at runtime
+func shouldWrapTypeInAny(t types.Type) bool {
+	if t == nil {
+		return false
+	}
+
+	switch typ := t.(type) {
+	case *types.Optional:
+		return shouldWrapTypeInAny(typ.T)
+	case *types.Pointer:
+		return shouldWrapTypeInAny(typ.T)
+	case *types.Array:
+		return shouldWrapTypeInAny(typ.T)
+	case *types.Any:
+		return true
+	case *types.Generic:
+		if len(typ.Constraints) == 0 {
+			return true
+		}
+		for _, constraint := range typ.Constraints {
+			if _, isAny := constraint.(*types.Any); isAny {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // evalToAny converts a value to Any{} with type descriptor if not already Any
