@@ -1162,13 +1162,13 @@ func TestCatchExpression(t *testing.T) {
 		},
 		{
 			name: "error comparison in catch block - same type",
-			prog: "error err1 fn f()! i64 { raise err1 } fn test() bool { f() catch e { e == err1 } } test()",
-			want: &Return{Values: []any{true}},
+			prog: "error err1 fn f()! i64 { raise err1 } fn test() i64 { return f() catch e { if e == err1 { 0 } else { 1 } } } test()",
+			want: &Return{Values: []any{int64(0)}},
 		},
 		{
 			name: "error comparison in catch block - different type",
-			prog: "error err1 error err2 fn f()! i64 { raise err1 } fn test() bool { f() catch e { e == err2 } } test()",
-			want: &Return{Values: []any{false}},
+			prog: "error err1 error err2 fn f()! i64 { raise err1 } fn test() i64 { return f() catch e { if e == err2 { 0 } else { 1 } } } test()",
+			want: &Return{Values: []any{int64(1)}},
 		},
 		{
 			name: "if else expression with raise in else branch - no raise triggered",
