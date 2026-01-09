@@ -1271,6 +1271,13 @@ func CanCoalesce(from, to Type) bool {
 		_, ok := to.(*Error)
 		return ok
 	case *Union:
+		// if both are unions with the same name, they should be equal
+		if toUnion, ok := to.(*Union); ok {
+			if from.Name == toUnion.Name {
+				return true
+			}
+		}
+
 		for _, t := range from.Ts {
 			if CanCoalesce(t, to) {
 				return true
