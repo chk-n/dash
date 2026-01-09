@@ -14,11 +14,13 @@ import (
 	"dash-lang.io/src/types"
 )
 
-type keyword uint8
+type state uint8
 
 const (
-	BREAK keyword = iota
+	NONE state = iota
+	BREAK
 	NEXT
+	ERROR
 )
 
 // Debug flag to enable/disable debug output
@@ -79,7 +81,9 @@ type Evaluator struct {
 	// Maps variable locations to existing pointers (for pointer identity)
 	// Key is a hash of context+variable path
 	pointerCache map[uint64]*Pointer
-	err          *Error
+	state        state
+	// can be *Error, *Return or nil
+	stateVar any
 }
 
 func New(libs map[string]*ast.Library) *Evaluator {
@@ -160,18 +164,19 @@ func (e *Evaluator) Eval(n ast.Node, ctx *Context) (result any) {
 	defer recoverPanic(&result)
 
 	result = e.eval(n, ctx)
-	if e.err != nil {
+	if e.state == ERROR {
 		// reset error after evaluation
-		err := e.err
-		e.err = nil
+		err := e.stateVar
+		e.stateVar = nil
+		e.state = NONE
 		return err
 	}
 	return
 }
 
 func (e *Evaluator) eval(n ast.Node, ctx *Context) (result any) {
-	if e.err != nil {
-		return e.err
+	if e.state == ERROR {
+		return e.stateVar
 	}
 
 	switch n := n.(type) {
@@ -375,6 +380,10 @@ func (e *Evaluator) evalFunctionCall(n *ast.FunctionCallExpression, stk *Context
 		newCtx.Set(fnArgName, argValue)
 	}
 	res := e.eval(fn.body, newCtx)
+	if e.state == ERROR {
+		assertType[*Error](e.stateVar)
+		return nil
+	}
 
 	if returnVal, ok := res.(*Return); ok {
 		// check if function has any return types that are 'any'
@@ -790,72 +799,102 @@ func (e *Evaluator) evalForStatement(n *ast.ForStatement, stk *Context) any {
 	defer stk.Unscope()
 	// classic for loop
 	if n.Assignment != nil {
-		e.evalAssignmentStatement(n.Assignment, stk)
-
-		for {
-			cond := e.eval(n.Condition, stk)
-			if _, ok := cond.(*Error); ok {
-				return cond
-			}
-			if !cond.(bool) {
-				break
-			}
-			exp := e.eval(n.Block, stk)
-			if _, ok := exp.(*Return); ok {
-				return exp
-			} else if exp == BREAK {
-				break
-			} else if exp == NEXT {
-				e.eval(n.Change, stk)
-				continue
-			}
-			e.eval(n.Change, stk)
-		}
-		return nil
+		return e.evalForClassic(n, stk)
 	}
 
 	// conditional loop
 	if n.Condition != nil && n.Change == nil {
-		for {
-			cond := e.eval(n.Condition, stk)
-			if _, ok := cond.(*Error); ok {
-				return cond
-			}
-			cond = unwrapFunctionResult(cond, 0)
-			if !cond.(bool) {
-				break
-			}
-
-			exp := e.eval(n.Block, stk)
-			if _, ok := exp.(*Return); ok {
-				return exp
-			} else if exp == BREAK {
-				break
-			} else if exp == NEXT {
-				continue
-			}
-		}
-		return nil
+		return e.evalForConditional(n, stk)
 	}
 
 	// infinite loop
 	if n.Condition == nil {
-		for {
-			exp := e.eval(n.Block, stk)
-			if _, ok := exp.(*Error); ok {
-				return exp
-			}
-			if _, ok := exp.(*Return); ok {
-				return exp
-			} else if exp == BREAK {
-				break
-			} else if exp == NEXT {
-				continue
-			}
-		}
-		return nil
+		return e.evalForInfinite(n, stk)
 	}
 
+	panic("this is a compiler error. please report")
+}
+
+func (e *Evaluator) evalForClassic(n *ast.ForStatement, stk *Context) any {
+	e.evalAssignmentStatement(n.Assignment, stk)
+outer:
+	for {
+		cond := e.eval(n.Condition, stk)
+		if e.state == ERROR {
+			return nil
+		}
+		cond = unwrapFunctionResult(cond, 0)
+		if !cond.(bool) {
+			break
+		}
+		exp := e.eval(n.Block, stk)
+		if _, ok := exp.(*Return); ok {
+			return exp
+		}
+		switch e.state {
+		case ERROR:
+			return nil
+		case BREAK:
+			e.state = NONE
+			break outer
+		case NEXT:
+			e.state = NONE
+			e.eval(n.Change, stk)
+			continue
+		}
+		e.eval(n.Change, stk)
+	}
+	return nil
+}
+
+func (e *Evaluator) evalForConditional(n *ast.ForStatement, stk *Context) any {
+outer:
+	for {
+		cond := e.eval(n.Condition, stk)
+		if e.state == ERROR {
+			return nil
+		}
+		cond = unwrapFunctionResult(cond, 0)
+		if !cond.(bool) {
+			break
+		}
+
+		exp := e.eval(n.Block, stk)
+		if _, ok := exp.(*Return); ok {
+			return exp
+		}
+		switch e.state {
+		case ERROR:
+			return nil
+		case BREAK:
+			e.state = NONE
+			break outer
+		case NEXT:
+			e.state = NONE
+			continue
+		}
+	}
+	return nil
+}
+
+func (e *Evaluator) evalForInfinite(n *ast.ForStatement, stk *Context) any {
+outer:
+	for {
+		exp := e.eval(n.Block, stk)
+		if _, ok := exp.(*Return); ok {
+			return exp
+		}
+		switch e.state {
+		case ERROR:
+			return nil
+		case BREAK:
+			e.state = NONE
+			break outer
+		case NEXT:
+			e.state = NONE
+			continue
+		}
+	}
 	return nil
 }
 
@@ -999,8 +1038,9 @@ func (e *Evaluator) evalMatchCase(c *ast.MatchCase, stk *Context) any {
 		last = e.eval(stmt, stk)
 		if _, ok := last.(*Return); ok {
 			return last
-		} else if last == BREAK || last == NEXT {
-			return last
+		}
+		if e.state == BREAK || e.state == NEXT {
+			return nil
 		}
 	}
 	return last
@@ -1011,26 +1051,25 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 	var exp any
 	for _, stmt := range n.Statements {
 		exp = e.eval(stmt, stk)
-		// We stop execution only in 3 circumstances
-		// because of a return statement, break/next
-		// statement or because of an error due to "try"
-		if _, ok := exp.(*Return); ok {
+		switch e.state {
+		case BREAK, NEXT, ERROR:
+			return nil
+		}
+		// Handle function call results (unwrap *Return to get value)
+		if ret, ok := exp.(*Return); ok {
 			switch stmt.(type) {
 			case *ast.TryExpression:
-				if e.err != nil {
-					return &Return{}
+				if e.state == ERROR {
+					return nil
 				}
-				exp = unwrapFunctionResult(exp, 0)
+				exp = unwrapFunctionResult(ret, 0)
 			case *ast.FunctionCallExpression:
-				exp = unwrapFunctionResult(exp, 0)
+				exp = unwrapFunctionResult(ret, 0)
 			case *ast.CatchExpression:
-				exp = unwrapFunctionResult(exp, 0)
+				exp = unwrapFunctionResult(ret, 0)
 			default:
-				// For return statements, if/match with returns etc. we propagate
 				return exp
 			}
-		} else if exp == BREAK || exp == NEXT {
-			return exp
 		}
 	}
 	return exp
@@ -1039,13 +1078,14 @@ func (e *Evaluator) evalBlockStatement(n *ast.BlockStatement, stk *Context) any 
 func (e *Evaluator) evalKeywordStatement(n *ast.KeywordStatement) any {
 	switch n.Token.Type {
 	case token.BREAK:
-		return BREAK
+		e.state = BREAK
+		return nil
 	case token.NEXT:
-		return NEXT
+		e.state = NEXT
+		return nil
 	default:
-		e.addError(n, fmt.Errorf("unknown keyword %s", n.Token.Literal))
+		panic("this is a compiler error please report")
 	}
-	return nil
 }
 
 func (e *Evaluator) evalReturnStatement(n *ast.ReturnStatement, stk *Context) any {
@@ -1285,7 +1325,7 @@ func (e *Evaluator) evalPrefixBitwiseNot(v any) (any, error) {
 func (e *Evaluator) evalPrefixOptional(v any) any {
 	if opt, ok := v.(Optional); ok {
 		if !opt.isValid {
-			e.err = &Error{descriptor: errForceUnwrapNull, Err: "runtime.force_unwrap_null"}
+			e.setError(&Error{descriptor: errForceUnwrapNull, Err: "runtime.force_unwrap_null"})
 			return nil
 		}
 		return opt.value
@@ -2090,14 +2130,15 @@ func (e *Evaluator) evalTryExpression(n *ast.TryExpression, ctx *Context) any {
 func (e *Evaluator) evalCatchExpression(n *ast.CatchExpression, ctx *Context) any {
 	result := e.eval(n.Left, ctx)
 
-	if e.err != nil {
+	if e.state == ERROR {
 		// We save the caught error so it is accessible
 		// within catch block and clear it globally to
 		// avoid premature return. the catch block can
 		// either set a default, return something else
 		// or raise the error causing it to be propagated
-		caughtErr := e.err
-		e.err = nil
+		caughtErr := e.stateVar
+		e.stateVar = nil
+		e.state = NONE
 		ctx.Set(n.Ident.Value, caughtErr)
 
 		catchResult := e.evalBlockStatement(n.Block, ctx)
@@ -2110,12 +2151,8 @@ func (e *Evaluator) evalCatchExpression(n *ast.CatchExpression, ctx *Context) an
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {
 	// Evaluate the error expression to get the actual error value/name
 	errVal := e.eval(n.Error, ctx)
-
-	err, ok := errVal.(*Error)
-	if !ok {
-		panic("this is a compiler error. please report")
-	}
-	e.err = err
+	assertType[*Error](errVal)
+	e.setError(errVal.(*Error))
 
 	return &Return{Values: []any{}}
 }
@@ -2267,13 +2304,13 @@ func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 
 	if !cond {
 		msg := e.eval(args[1], ctx)
-		if e.err != nil {
-			// avoid overwritting error when evaluating args[1]
+		// avoid overwritting error when evaluating args[1]
+		if e.state == ERROR {
 			return nil
 		}
 		msg = unwrapFunctionResult(msg, 0)
 		typeDesc := generateTypeDescriptor("std.assert")
-		e.err = &Error{descriptor: typeDesc, Err: msg.(string)}
+		e.setError(&Error{descriptor: typeDesc, Err: msg.(string)})
 	}
 	return nil
 }
@@ -2353,7 +2390,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 		if valArr, ok := val.([]any); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
 				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 				return &Return{Values: []any{}}
 			}
 			newArr = make([]any, len(arr))
@@ -2364,7 +2401,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 		} else if valArr, ok := val.([]uint8); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
 				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 				return &Return{Values: []any{}}
 			}
 			newArr = make([]any, len(arr))
@@ -2375,7 +2412,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 		} else {
 			if idx < 0 || idx >= int64(len(arr)) {
 				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 				return &Return{Values: []any{}}
 			}
 			newArr = make([]any, len(arr))
@@ -2386,7 +2423,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 		if valArr, ok := val.([]uint8); ok {
 			if idx < 0 || idx+int64(len(valArr)) > int64(len(arr)) {
 				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 				return &Return{Values: []any{}}
 			}
 			newArr = make([]uint8, len(arr))
@@ -2397,7 +2434,7 @@ func (e *Evaluator) evalPut(args []ast.Expression, ctx *Context) any {
 		} else {
 			if idx < 0 || idx >= int64(len(arr)) {
 				debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-				e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+				e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 				return &Return{Values: []any{}}
 			}
 			newArr = make([]uint8, len(arr))
@@ -2428,22 +2465,22 @@ func (e *Evaluator) evalGet(args []ast.Expression, ctx *Context) any {
 	switch arr := arr.(type) {
 	case []any:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			debugPrintf("[DEBUG] at %d idx:%d\n", args[0].Pos().Line(), idx)
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case []uint8:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			debugPrintf("[DEBUG] at %d idx:%d\n", args[0].Pos().Line(), idx)
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
 	case string:
 		if idx < 0 || idx >= int64(len(arr)) {
-			debugPrintf("[DEBUG] at %d arr:%v, idx:%d\n", args[0].Pos().Line(), arr, idx)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			debugPrintf("[DEBUG] at %d idx:%d\n", args[0].Pos().Line(), idx)
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		result = arr[idx]
@@ -2471,7 +2508,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
 			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
@@ -2481,7 +2518,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
 			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
@@ -2491,7 +2528,7 @@ func (e *Evaluator) evalSlice(args []ast.Expression, ctx *Context) any {
 		}
 		if start < 0 || end > int64(len(arr)) || start > end {
 			debugPrintf("[DEBUG] at %d runtime.index_out_of_bounds, arr:%v, start:%d end:%d\n", args[0].Pos().Line(), arr, start, end)
-			e.err = &Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"}
+			e.setError(&Error{descriptor: errDescIndexOutOfBounds, Err: "runtime.index_out_of_bounds"})
 			return &Return{Values: []any{}}
 		}
 		newArr = arr[start:end]
@@ -2689,6 +2726,11 @@ func (e *Evaluator) evalToAny(v any) *Any {
 	}
 }
 
+func (e *Evaluator) setError(err *Error) {
+	e.state = ERROR
+	e.stateVar = err
+}
+
 // converts an Error to a string representation
 func (e *Error) String() string {
 	var b strings.Builder
@@ -2797,5 +2839,12 @@ func valueToString(v any) string {
 func debugPrintf(format string, args ...any) {
 	if isDebug {
 		fmt.Printf(format, args...)
+	}
+}
+func assertType[T any](t any) {
+	if _, ok := t.(T); !ok {
+		var zero T
+		rsn := fmt.Sprintf("expected expression to be of type: %T, but got %T", zero, t)
+		panic(rsn)
 	}
 }
