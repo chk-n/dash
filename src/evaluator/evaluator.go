@@ -2284,10 +2284,13 @@ func (e *Evaluator) evalMake(args []ast.Expression, stk *Context) any {
 func (e *Evaluator) evalAssert(args []ast.Expression, ctx *Context) any {
 	var cond bool
 	val := e.eval(args[0], ctx)
-	if ret, ok := val.(*Return); ok {
-		cond = ret.Values[0].(bool)
-	} else {
-		cond = val.(bool)
+	switch v := val.(type) {
+	case *Return:
+		cond = v.Values[0].(bool)
+	case bool:
+		cond = v
+	default:
+		panic("this is a compiler error. please report")
 	}
 
 	if !cond {
