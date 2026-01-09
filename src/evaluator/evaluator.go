@@ -1115,23 +1115,34 @@ func (e *Evaluator) evalLibraryAccess(libCtx *Context, right ast.Expression, exp
 	case *ast.FunctionCallExpression:
 		name := right.TokenLiteral()
 
-		// Check if it's a type cast: lib.Type(value)
+		// Check if it's a type cast: lib.type(value)
 		if _, ok := libCtx.GetType(name); ok {
 			res := e.eval(right.Arguments[0], stk)
-			// Check if it's a union type (including imported unions)
+			res = unwrapFunctionResult(res, 0)
+
 			// Use exprType from the DotExpression since right.T may be nil
-			isUnion := false
-			if _, ok := exprType.(*types.Union); ok {
-				isUnion = true
-			} else if imported, ok := exprType.(*types.ImportedNamed); ok {
-				if _, ok := imported.Typ.(*types.Union); ok {
-					isUnion = true
-				}
+			targetType := exprType
+
+			// Unwrap ImportedNamed to get the actual type
+			if imported, ok := targetType.(*types.ImportedNamed); ok {
+				targetType = imported.Typ
 			}
-			if isUnion {
+
+			if definition, ok := targetType.(*types.Definition); ok {
+				underlyingType := types.GetUnderlyingType(definition)
+
+				switch t := underlyingType.(type) {
+				case *types.Int:
+					res = e.evalIntCast(t, res)
+				case *types.Byte:
+					res = e.evalByteCast(res)
+				case *types.Char:
+					res = e.evalCharCast(res)
+				}
+			} else if _, ok := targetType.(*types.Union); ok {
+				// Handle union type descriptor
 				argType := right.Arguments[0].Type()
 				argType = types.StripMultiType(argType)
-				// Use argType (the variant type) for descriptor, not exprType (the union type)
 				typeName := normaliseTypeDescriptorName(argType, libCtx.libPath, e)
 				descriptor := generateTypeDescriptor(typeName)
 
