@@ -303,6 +303,12 @@ fn test_parse_type_statement()! {
     try assert_canonical_lib("lib a type x a[string]")
     try assert_canonical_lib("lib a type x a[string,i64]")
 
+    try assert_canonical_lib("lib a type x fn()")
+    try assert_canonical_lib("lib a type x fn(i32)")
+    try assert_canonical_lib("lib a type x fn()i32")
+    try assert_canonical_lib("lib a type x fn(i32)i32")
+    try assert_canonical_lib("lib a type x fn(u8,u8)(u8,u8)")
+    try assert_canonical_lib("lib a type x fn(a,b,c,d,e)(a,b,c,d,e)")    
     // // TODO: add map type
 
     try assert_canonical_lib("lib a type x y")
@@ -416,6 +422,8 @@ fn test_parse_function_statement()! {
     try assert_canonical_lib("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
     try assert_canonical_lib("lib a fn abc(a string,b i64)")
     try assert_canonical_lib("lib a fn abc(a mut<[]abc>)")
+    try assert_canonical_lib("lib a fn abc(f fn(i32)(i32,i32),x i32)")
+    try assert_canonical_lib("lib a fn abc(g fn(i32)i32,y i32)")
 
     // NOTE: these issues will be caught by semsis
     try assert_canonical_lib("lib a fn abc(a)")

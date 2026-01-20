@@ -170,6 +170,7 @@ pub enum tag {
     optional_type
     mutable_type
     pointer_type
+    fn_type
 
     // only for usage within 'ast' lib
     pub
@@ -725,6 +726,30 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
     case tag.pointer_type:
         buf = append(buf, '*')
         buf = try to_string(a, data.x, buf)
+
+    case tag.fn_type:
+        buf = append(buf, []byte("fn"))
+        buf = append(buf, '(')
+        let params = try get(a.extras, data.x)
+        if params != NULL_IDX {
+            buf = try to_string(a, params, buf)
+        }
+        buf = append(buf, ')')
+        let rets = try get(a.extras, data.x+1)
+        if rets != NULL_IDX {
+            // check if single return or multiple returns
+            let rets_node = try get(a.nodes, rets)
+            let num_rets = rets_node.data.y - rets_node.data.x
+            if num_rets == 1 {
+                // single return: no parentheses
+                buf = try to_string(a, rets, buf)
+            } else {
+                // multiple returns: with parentheses
+                buf = append(buf, '(')
+                buf = try to_string(a, rets, buf)
+                buf = append(buf, ')')
+            }
+        }
 
     case tag.return_stmt:
         let src_idx = try get(a.tkns, node.token).start

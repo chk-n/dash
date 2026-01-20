@@ -1476,6 +1476,8 @@ fn parse_type_literal(p parser)! parser, ast.index {
             try parse_pointer_type(p)
         case lexer.tag.MUT_TYPE:
             try parse_mutable_type(p)
+        case lexer.tag.FN:
+            try parse_function_type(p)
         case lexer.tag.IDENT:
             try parse_expression(p, precedence.ltg)
         case _:
@@ -1613,6 +1615,118 @@ fn parse_mutable_type(p parser)! parser, ast.index {
     })
 
     return p, typ
+}
+
+fn parse_function_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.FN), "expected 'fn'")
+
+    let op_tkn = p.tkn_i
+    // consume 'fn'
+    var p = next_token(p)
+
+    if !is_tag(p, lexer.tag.LPAREN) {
+        p = try add_error(p, expected_parenthesis{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+    // consume '('
+    p = next_token(p)
+
+    // parse parameter types (could be empty)
+    var params = ast.NULL_IDX
+    if !is_tag(p, lexer.tag.RPAREN) {
+        p, params = try parse_function_type_list(p, lexer.tag.RPAREN)
+        if params == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
+    }
+
+    if !is_tag(p, lexer.tag.RPAREN) {
+        p = try add_error(p, expected_parenthesis{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+    // consume ')'
+    p = next_token(p)
+
+    // parse optional return types
+    // - if next is '(', parse multiple returns: fn(i32)(i32,i32)
+    // - if next is type literal, parse single return: fn(i32)i32
+    // - otherwise, no returns: fn(i32)
+    var rets = ast.NULL_IDX
+    if is_tag(p, lexer.tag.LPAREN) {
+        // multiple returns (wrapped in parentheses)
+        // consume '('
+        p = next_token(p)
+
+        // parse return types (could be empty)
+        if !is_tag(p, lexer.tag.RPAREN) {
+            p, rets = try parse_function_type_list(p, lexer.tag.RPAREN)
+            if rets == ast.NULL_IDX {
+                return p, ast.NULL_IDX
+            }
+        }
+
+        if !is_tag(p, lexer.tag.RPAREN) {
+            p = try add_error(p, expected_parenthesis{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+        // consume ')'
+        p = next_token(p)
+    } else if is_type_literal(p) {
+        // single return (no parentheses)
+        p, let ret_type = try parse_type_literal(p)
+        if ret_type == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
+        // wrap single return in fn_ret_list
+        let extra = [ret_type]
+        p, rets = try add_extra(p, ast.tag.fn_ret_list, ast.NULL_TKN, extra)
+    }
+
+    // store [params, rets] in extras
+    let extra = [params, rets]
+    p, let fn_typ = try add_extra(p, ast.tag.fn_type, op_tkn, extra)
+
+    return p, fn_typ
+}
+
+// parse_function_type_list parses comma-separated type literals until
+// the end token (RPAREN) is reached. This is used for both parameter
+// types and return types in function type signatures.
+fn parse_function_type_list(p parser, end lexer.tag)! parser, ast.index {
+    var p = p
+    var extra = try make([]ast.index, 0, 2)
+
+    for !is_tag(p, end) && !is_tag(p, lexer.tag.EOF) {
+        if !is_type_literal(p) {
+            p = try add_error(p, expected_type{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+
+        p, let typ = try parse_type_literal(p)
+        if typ == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
+        extra = try append(extra, typ)
+
+        if is_tag(p, end) || is_tag(p, lexer.tag.EOF) {
+            break
+        }
+
+        if !is_tag(p, lexer.tag.COMMA) {
+            p = try add_error(p, expected_comma{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+
+        // consume ','
+        p = next_token(p)
+    }
+
+    if len(extra) == 0 {
+        return p, ast.NULL_IDX
+    }
+
+    p, let types = try add_extra(p, ast.tag.fn_ret_list, ast.NULL_TKN, extra)
+    return p, types
 }
 
 fn parse_literal(p parser)! parser, ast.index {
@@ -2036,7 +2150,7 @@ fn is_type_literal(p parser) bool {
              lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
-             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE, lexer.tag.MUL: true
+             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE, lexer.tag.MUL, lexer.tag.FN: true
         case lexer.tag.LBRACE: maybe_column_type(p)
         case _: false
     }
