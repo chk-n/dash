@@ -99,13 +99,22 @@ pub fn parse(src []byte, m mode)! *ast.ast {
     }
 }
 
+// skip_eol skips any EOL tokens at current position
+fn skip_eol(p parser) parser {
+    var p = p
+    for i64(p.tkn_i) < len(p.tkns) && current_tag(p) == lexer.tag.EOL {
+        p = parser{..p, tkn_i: p.tkn_i + 1}
+    }
+    return p
+}
+
 fn next_token(p parser) parser {
     var p = p
     if i64(p.tkn_i + 1) >= len(p.tkns) {
         return p
     }
     p = parser{..p, tkn_i: p.tkn_i + 1}
-    return p
+    return skip_eol(p)
 }
 
 fn parse_library(p parser)! parser, ast.index {
@@ -768,13 +777,13 @@ fn find_next_valid_block_token(p parser)! parser {
         // running loose until EOF
         case lexer.tag.LBRACE:
             p = next_token(p)
-            cnt++
+            cnt = cnt + 1
         case lexer.tag.RBRACE:
-            p = next_token(p)
             if cnt == 0 {
                 return p
             }
-            cnt--
+            p = next_token(p)
+            cnt = cnt - 1
         case _:
             p = next_token(p)
         }
@@ -784,6 +793,7 @@ fn find_next_valid_block_token(p parser)! parser {
 
 // parse_statement_in_block parses statements within a
 fn parse_statement_in_block(p parser)! parser, ast.index {
+    var p = skip_eol(p)
     let tag = current_tag(p)
     return match tag {
         case lexer.tag.IDENT:
@@ -1389,6 +1399,9 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
     case lexer.tag.LBRACE:
         return try parse_struct_literal(p)
     case lexer.tag.LBRACK:
+        if maybe_array_type(p) {
+            return try parse_type_literal(p)
+        }
         return try parse_array_literal(p)
     case lexer.tag.LPAREN:
         return try parse_paren_expression(p)
@@ -2045,6 +2058,42 @@ fn maybe_column_type(p parser) bool {
         return false
     }
     return true
+}
+
+// maybe_array_type checks if current '[' starts an array type
+// rather than an array literal. Handles nested arrays like [][]u32
+fn maybe_array_type(p parser) bool {
+    if current_tag(p) != lexer.tag.LBRACK {
+        return false
+    }
+
+    // Check if next token is ']'
+    if i64(p.tkn_i)+2 >= len(p.tkns) {
+        return false
+    }
+
+    let next_tkn = try get(p.tkns, p.tkn_i+1)
+    if next_tkn.tag != lexer.tag.RBRACK {
+        return false
+    }
+
+    let after_tkn = try get(p.tkns, p.tkn_i+2)
+
+    // dont use next_token as it skips EOL tag automatically
+    // if EOL, it's an empty array literal, not array type
+    if after_tkn.tag == lexer.tag.EOL {
+        return false
+    }
+
+    return match after_tkn.tag {
+        case lexer.tag.U8_TYPE, lexer.tag.U16_TYPE, lexer.tag.U32_TYPE, lexer.tag.U64_TYPE,
+             lexer.tag.I8_TYPE, lexer.tag.I16_TYPE, lexer.tag.I32_TYPE, lexer.tag.I64_TYPE,
+             lexer.tag.F32_TYPE, lexer.tag.F64_TYPE, lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
+             lexer.tag.CHAR_TYPE, lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
+             lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
+             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE, lexer.tag.MUL, lexer.tag.FN: true
+        case _: false
+    }
 }
 
 // is_scalar_type checks whether current token is a scalar type

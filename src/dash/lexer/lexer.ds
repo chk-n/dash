@@ -4,10 +4,13 @@ pub struct lexer {
     buf []byte
     idx u32
     skip_comments bool
+    // required to emit EOL
+    prev_tag tag           
+    saw_newline bool       
 }
 
 pub fn new(buf []byte, idx u32, skip_comments bool) *lexer {
-     return &lexer{buf: buf, idx: idx, skip_comments: skip_comments}   
+     return &lexer{buf: buf, idx: idx, skip_comments: skip_comments, prev_tag: tag.EOF, saw_newline: false}
 }
 
 pub fn next_tkn(l *lexer)! *lexer, token {
@@ -15,8 +18,15 @@ pub fn next_tkn(l *lexer)! *lexer, token {
 
     var l = try skip_whitespace(l)
 
+    // emit special token to help disambiguate empty array literals
+    // followed by a function call on newline
+    if l.prev_tag == tag.RBRACK && l.saw_newline {
+        let eol_tkn = token{tag: tag.EOL, start: l.idx, end: l.idx}
+        return &lexer{..l, prev_tag: tag.EOL, saw_newline: false}, eol_tkn
+    }
+
     if l.idx >= len_src(l) {
-        return l, tkn
+        return &lexer{..l, prev_tag: tag.EOF}, tkn
     }
 
     let ch = cur_ch(l)
@@ -120,7 +130,7 @@ pub fn next_tkn(l *lexer)! *lexer, token {
             return try read_number(l)
         }
     }
-    l = &lexer{..l, idx: tkn.end+1}
+    l = &lexer{..l, idx: tkn.end+1, prev_tag: tkn.tag}
     return l, tkn
 }
 
@@ -137,14 +147,18 @@ fn next_ch(l *lexer) *lexer {
 
 fn skip_whitespace(l *lexer)! *lexer {
     var idx = l.idx
+    var saw_nl = false
     for idx < len_src(l) {
         let ch = try get(l.buf, idx)
+        if ch == '\n' {
+            saw_nl = true
+        }
         if ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' {
             break
         }
         idx = idx + 1
     }
-    return &lexer{..l, idx: idx}
+    return &lexer{..l, idx: idx, saw_newline: saw_nl}
 }
 
 fn prev_ch(l *lexer)! byte {
@@ -191,7 +205,8 @@ fn read_string(l *lexer)! *lexer, token {
             break
         }
     }
-    return l, token{tag: tag.STRING, start: idx, end: l.idx-1}
+    let tkn = token{tag: tag.STRING, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
 }
 
 fn read_multi_string(l *lexer) *lexer, token {
@@ -222,22 +237,24 @@ fn read_char(l *lexer)! *lexer, token {
     // consume '
     l = next_ch(l)
 
-    return l, token{tag: tag.CHAR, start: idx, end: l.idx-1}
+    let tkn = token{tag: tag.CHAR, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
 }
    
 fn skip_comment(l *lexer)! *lexer {
     var l = l
 
-    // case: single line comment
+    // case: single line comment 
     if try peek_ch(l) == '/' {
      	for l.idx < len_src(l) {
             let ch = try cur_ch(l)
             if ch == '\n' {
+                l = &lexer{..l, saw_newline: true}
                 break
             }
             l = next_ch(l)
         }
-    // case: multi line comment
+    // case: multi line comment (we dont set saw_newline here)
     } else {
 	    for l.idx < len_src(l) {
             let ch1 = try cur_ch(l)
@@ -284,20 +301,23 @@ fn read_comment(l *lexer)! *lexer, token {
     }
 
     let typ = if cnt == 1 { tag.COMMENT } else { tag.ILLEGAL }
-  	return l, token{tag: typ, start: idx, end: l.idx-1}
+    let tkn = token{tag: typ, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
 }
 
 fn read_identifier(l *lexer)! *lexer, token {
     var l = l
     let idx = l.idx
-  	for l.idx < len_src(l) {
+    for l.idx < len_src(l) {
         let ch = try cur_ch(l)
         if !is_letter(ch) && !is_digit(ch) {
             break
         }
-		l = next_ch(l)
-	}
-   return l, token{tag: tag.IDENT, start: idx, end: l.idx-1}
+    	l = next_ch(l)
+    }
+    let tkn = token{tag: tag.IDENT, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
+
 }
  
 fn is_digit(ch byte) bool {
@@ -331,5 +351,5 @@ fn read_number(l *lexer)! *lexer, token {
     }
 
     let tkn = token{tag: typ, start: idx, end: l.idx-1}
-    return l, tkn
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
 }

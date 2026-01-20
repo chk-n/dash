@@ -64,6 +64,22 @@ fn test_parse_array_literal()! {
 }
 
 @test
+fn test_parse_array_type_cast()! {
+    try assert_canonical_exp("[]u32([1])")
+    try assert_canonical_exp("[]i64([1,2,3])")
+    try assert_canonical_exp("[]string([])")
+    try assert_canonical_exp("[][]u8([[1]])")
+    try assert_canonical_exp("[][]uint8()")
+    try assert_canonical_exp("[][][]i32(a)")
+    try assert_canonical_exp("[]bool([true,false])")
+
+    try assert_parse("lib a fn f() {let x = [] u8(1)}", "lib a fn f() {let x = []u8(1)}")
+    try assert_parse("lib a fn f() {let x = []\ntest(y)}", "lib a fn f() {let x = [] test(y)}")
+
+    try assert_error("lib a fn f() {let x = []\n i64(1)}", [unexpected_statement{i: 13}])
+}
+
+@test
 fn test_parse_identifiers()! {
     try assert_parse_exp("ab_", "ab_")
     try assert_parse_exp("__ab", "__ab")

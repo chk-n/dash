@@ -9,6 +9,7 @@ pub struct token {
 pub enum tag {
     ILLEGAL
     EOF
+    EOL       // end-of-line (not always emitted see lexer.ds)
     COMMENT    
        
     // single character tokens
