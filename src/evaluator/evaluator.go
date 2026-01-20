@@ -28,6 +28,8 @@ var isDebug = false
 
 // Global error type descriptors to avoid recomputation
 var (
+	// used when creating generic error e.g. raise error("")
+	errError                = generateTypeDescriptor("runtime.error")
 	errDescIndexOutOfBounds = generateTypeDescriptor("runtime.index_out_of_bounds")
 	errForceUnwrapNull      = generateTypeDescriptor("runtime.force_unwrap_null")
 )
@@ -2129,6 +2131,13 @@ func (e *Evaluator) evalCatchExpression(n *ast.CatchExpression, ctx *Context) an
 func (e *Evaluator) evalRaiseStatement(n *ast.RaiseStatement, ctx *Context) any {
 	// Evaluate the error expression to get the actual error value/name
 	errVal := e.eval(n.Error, ctx)
+
+	if strErr, ok := errVal.(string); ok {
+		errVal = &Error{
+			descriptor: errError,
+			Err:        strErr,
+		}
+	}
 	assertType[*Error](errVal)
 	e.setError(errVal.(*Error))
 
