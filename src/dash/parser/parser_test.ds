@@ -14,8 +14,8 @@ fn test_parse_scalar_literals()! {
     // TODO: add char literal
     try assert_parse_exp(`'h'`, `'h'`) 
 
-    try assert_parse_error("1_000_", [unexpected_token{i: 0}])
-    try assert_parse_error(`", world`, [unexpected_token{i: 0}])
+    try assert_error_exp("1_000_", [unexpected_token{i: 0}])
+    try assert_error_exp(`", world`, [unexpected_token{i: 0}])
 }
 
 @test
@@ -29,18 +29,18 @@ fn test_parse_struct_literal()! {
     try assert_canonical_exp("a[i64,b,string]{a:2}")
     try assert_canonical_exp("a[a.b.c,d.e]{a:2}")
 
-    try assert_parse_error("{", [expected_identifier{i: 1}])
-    try assert_parse_error("a{", [expected_identifier{i: 2}])
-    try assert_parse_error("{a", [expected_colon{i: 2}])
-    try assert_parse_error("{a:", [expected_expression{i: 3}])
-    try assert_parse_error("{a: 1", [expected_brace{i: 4}])
-    try assert_parse_error("{a: 1,", [expected_brace{i: 5}])
-    try assert_parse_error("{a: 1 b", [expected_comma{i: 4}])
-    try assert_parse_error("{a: 1, b", [expected_colon{i: 6}])
-    try assert_parse_error("{a: 1, b:", [expected_expression{i: 7}])
-    // try assert_parse_error("{}", [expected_identifier{i: 1}])
-    try assert_parse_error("{a:, b: 2}", [expected_expression{i: 3}])
-    try assert_parse_error("{a: 1, b:}", [expected_expression{i: 7}])
+    try assert_error_exp("{", [expected_brace{i: 1}])
+    try assert_error_exp("a{", [expected_brace{i: 2}])
+    try assert_error_exp("{a", [expected_colon{i: 2}])
+    try assert_error_exp("{a:", [expected_expression{i: 3}])
+    try assert_error_exp("{a: 1", [expected_brace{i: 4}])
+    try assert_error_exp("{a: 1,", [expected_brace{i: 5}])
+    try assert_error_exp("{a: 1 b", [expected_comma{i: 4}])
+    try assert_error_exp("{a: 1, b", [expected_colon{i: 6}])
+    try assert_error_exp("{a: 1, b:", [expected_expression{i: 7}])
+    // try assert_error_exp("{}", [expected_identifier{i: 1}])
+    try assert_error_exp("{a:, b: 2}", [expected_expression{i: 3}])
+    try assert_error_exp("{a: 1, b:}", [expected_expression{i: 7}])
 
     // note, empty type parameter list caught by index expression tests
 }
@@ -53,14 +53,14 @@ fn test_parse_array_literal()! {
     try assert_parse_exp("[1, b, call()]", "[1,b,call()]")
     try assert_parse_exp("[[1], [2,3]]", "[[1],[2,3]]")
     try assert_parse_exp("[[[[[1]]]]]", "[[[[[1]]]]]")
-    
-    try assert_parse_error("[", [expected_bracket{i: 1}])
-    try assert_parse_error("[a", [expected_bracket{i: 2}])
-    try assert_parse_error("[a,", [expected_bracket{i: 3}])
-    try assert_parse_error("[a,1", [expected_bracket{i: 4}])
-    try assert_parse_error("[a,1,", [expected_bracket{i: 5}])
-    try assert_parse_error("[a,,]", [expected_expression{i: 3}])
-    try assert_parse_error("[,1,]", [expected_expression{i: 1}])
+
+    try assert_error_exp("[", [expected_bracket{i: 1}])
+    try assert_error_exp("[a", [expected_bracket{i: 2}])
+    try assert_error_exp("[a,", [expected_bracket{i: 3}])
+    try assert_error_exp("[a,1", [expected_bracket{i: 4}])
+    try assert_error_exp("[a,1,", [expected_bracket{i: 5}])
+    try assert_error_exp("[a,,]", [expected_expression{i: 3}])
+    try assert_error_exp("[,1,]", [expected_expression{i: 1}])
 }
 
 @test
@@ -93,7 +93,7 @@ fn test_nested_literals()! {
     try assert_parse_exp("{arr: [func(), call(x)]}", "{arr:[func(),call(x)]}")
     try assert_parse_exp("[[1, 2], [3, 4]]", "[[1,2],[3,4]]")
     
-    try assert_parse_error("{a: [1, 2, b: 3}", [expected_comma{i: 9}])
+    try assert_error_exp("{a: [1, 2, b: 3}", [expected_comma{i: 9}])
 }
 
 @test
@@ -108,12 +108,12 @@ fn test_parse_prefix()! {
     try assert_parse_exp("*p", "*p")
     try assert_parse_exp("(((((((((1)))))))))", "1")
 
-    try assert_parse_error("(", [expected_expression{i: 1}])
-    try assert_parse_error("()", [expected_expression{i: 1}])
-    try assert_parse_error("(()", [expected_expression{i: 2}])
-    try assert_parse_error("(1", [expected_parenthesis{i: 2}])
-    try assert_parse_error("(1+", [expected_expression{i: 3}])
-    try assert_parse_error("(1+)", [expected_expression{i: 3}])
+    try assert_error_exp("(", [expected_expression{i: 1}])
+    try assert_error_exp("()", [expected_expression{i: 1}])
+    try assert_error_exp("(()", [expected_expression{i: 2}])
+    try assert_error_exp("(1", [expected_parenthesis{i: 2}])
+    try assert_error_exp("(1+", [expected_expression{i: 3}])
+    try assert_error_exp("(1+)", [expected_expression{i: 3}])
 }
 
 @test
@@ -146,8 +146,8 @@ fn test_parse_infix()! {
     // optional infix
     try assert_parse_exp("x??1", "(x ?? 1)")
     
-    try assert_parse_error("1 + 1_", [unexpected_token{i: 2}])
-    try assert_parse_error("1+", [expected_expression{i: 2}])
+    try assert_error_exp("1 + 1_", [unexpected_token{i: 2}])
+    try assert_error_exp("1+", [expected_expression{i: 2}])
 }
 
 @test
@@ -167,13 +167,13 @@ fn test_call_expression()! {
     try assert_canonical_exp("a[string,i64]()")
     try assert_canonical_exp("a[u8,u16,u32]()")
 
-    try assert_parse_error("a(", [expected_expression{i: 2}])
-    try assert_parse_error("a(b", [expected_parenthesis{i: 3}])
-    try assert_parse_error("a(b,", [expected_parenthesis{i: 4}])
-    try assert_parse_error("a(b,,", [expected_expression{i: 4}])
-    try assert_parse_error("a(b,c,", [expected_parenthesis{i: 6}])
-    try assert_parse_error("a(b,,)", [expected_expression{i: 4}])
-    try assert_parse_error("a(,)", [expected_expression{i: 2}])
+    try assert_error_exp("a(", [expected_expression{i: 2}])
+    try assert_error_exp("a(b", [expected_parenthesis{i: 3}])
+    try assert_error_exp("a(b,", [expected_parenthesis{i: 4}])
+    try assert_error_exp("a(b,,", [expected_expression{i: 4}])
+    try assert_error_exp("a(b,c,", [expected_parenthesis{i: 6}])
+    try assert_error_exp("a(b,,)", [expected_expression{i: 4}])
+    try assert_error_exp("a(,)", [expected_expression{i: 2}])
 
     // note, empty type parameter list caught by index expression tests
  }
@@ -184,8 +184,8 @@ fn test_dot_expression()! {
     try assert_parse_exp("a.b.c.d.e.f", "a.b.c.d.e.f")
     try assert_parse_exp("a.b().c", "a.b().c")
     
-    try assert_parse_error("a.", [expected_expression{i: 2}])
-    try assert_parse_error("a.b.", [expected_expression{i: 4}])
+    try assert_error_exp("a.", [expected_expression{i: 2}])
+    try assert_error_exp("a.b.", [expected_expression{i: 4}])
 }
 
 
@@ -690,7 +690,7 @@ fn assert_error(input string, want_errs []error)! {
     }
 }
 
-fn assert_parse_error(input string, want_errs []error)! {
+fn assert_error_exp(input string, want_errs []error)! {
     let a = try parse([]byte(input), mode.exp)
 
     if len(a.errs) == 0 {
