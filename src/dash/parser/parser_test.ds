@@ -131,7 +131,7 @@ fn test_parse_infix()! {
     try assert_parse_exp("1&&1", "(1 && 1)")
     try assert_parse_exp("1^1", "(1 ^ 1)")
     try assert_parse_exp("1&1", "(1 & 1)")
-    try assert_parse_exp("1&^1", "(1 &^ 1)")
+    try assert_parse_exp("1& ~1", "(1 & ~1)")
     try assert_parse_exp("1<<1", "(1 << 1)")
     try assert_parse_exp("1>>1", "(1 >> 1)")
     // boolean infix

@@ -112,7 +112,7 @@ pub enum tag {
     struct_lit
     anon_struct_lit
     array_lit
-    null_unwrap
+    optional_unwrap
     address_of
     value_of
     // number ops
@@ -125,17 +125,16 @@ pub enum tag {
     incr
     decr
     // binary ops
-    negate_byte
-    or
-    xor
-    and
-    andnot
+    bnot
+    bor 
+    xor 
+    band 
     lsh
     rsh
+    // boolean ops
     lor
     land
-    // boolean ops
-    negate_bool
+    lnot
     eq
     neq
     gt
@@ -143,7 +142,7 @@ pub enum tag {
     lt
     lte
     // optional ops
-    null_coalesce
+    optional_coalesce
     
     try_expr
     catch_expr
@@ -208,9 +207,9 @@ pub fn literal_to_tag(t lexer.tag)! tag {
 pub fn prefix_to_tag(t lexer.tag)! tag {
     return match t {
         case lexer.tag.SUB: tag.negate_num
-        case lexer.tag.LNOT: tag.negate_bool
-        case lexer.tag.NOT: tag.negate_byte
-        case lexer.tag.QMARK: tag.null_unwrap
+        case lexer.tag.LNOT: tag.lnot
+        case lexer.tag.NOT: tag.bnot
+        case lexer.tag.QMARK: tag.optional_unwrap
         case lexer.tag.AND: tag.address_of
         case lexer.tag.MUL: tag.value_of
         case _: raise unexpected_tag
@@ -224,12 +223,11 @@ pub fn infix_to_tag(t lexer.tag)! tag {
         case lexer.tag.MUL: tag.mul
         case lexer.tag.DIV: tag.div
         case lexer.tag.MOD: tag.mod
-        case lexer.tag.OR: tag.or
+        case lexer.tag.OR: tag.bor
         case lexer.tag.LOR: tag.lor
         case lexer.tag.LAND: tag.land
         case lexer.tag.XOR: tag.xor
-        case lexer.tag.AND: tag.and
-        case lexer.tag.ANDNOT: tag.andnot
+        case lexer.tag.AND: tag.band
         case lexer.tag.LSH: tag.lsh
         case lexer.tag.RSH: tag.rsh
         case lexer.tag.LT:  tag.lt
@@ -240,7 +238,7 @@ pub fn infix_to_tag(t lexer.tag)! tag {
         case lexer.tag.NEQ: tag.neq
         case lexer.tag.DOT: tag.dot
         case lexer.tag.ASSGN: tag.assignment
-        case lexer.tag.QQMARK: tag.null_coalesce
+        case lexer.tag.QQMARK: tag.optional_coalesce
         case _: raise unexpected_tag
     }
 }
@@ -613,8 +611,8 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         }
         buf = append(buf, ']')
 
-    case tag.negate_num, tag.negate_bool,
-        tag.negate_byte, tag.null_unwrap,
+    case tag.negate_num, tag.lnot,
+        tag.bnot, tag.optional_unwrap,
         tag.address_of, tag.value_of:
         let src_idx = try get(a.tkns, node.token).start
         let op = try get(a.src, src_idx)
@@ -622,10 +620,10 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = try to_string(a, data.x, buf)
 
     case tag.add, tag.sub, tag.mul,
-        tag.div, tag.mod, tag.or, tag.lor, tag.land,
-        tag.xor, tag.and, tag.andnot, tag.lsh, tag.rsh,
+        tag.div, tag.mod, tag.bor, tag.lor, tag.land,
+        tag.xor, tag.band, tag.lsh, tag.rsh,
         tag.lt, tag.gt, tag.lte, tag.gte, tag.eq, tag.neq,
-        tag.null_coalesce:
+        tag.optional_coalesce:
         buf = append(buf, '(')
 
         buf = try to_string(a, data.x, buf)
@@ -776,9 +774,10 @@ fn get_fixed_token(src []byte, idx source_index, t tag)! []byte {
              tag.i16_type, tag.i32_type, tag.i64_type,
              tag.int_type, tag.f32_type, tag.f64_type: 3
         case tag.if_stmt, tag.incr, tag.decr,
-             tag.null_coalesce, tag.u8_type, tag.i8_type: 2
+             tag.optional_coalesce, tag.u8_type, tag.i8_type: 2
         case tag.fn_def, tag.fn_err_def, tag.fn_gen_def, tag.fn_gen_err_def,
-             tag.lor, tag.land, tag.andnot,
+             tag.fn_type,
+             tag.lor, tag.land,
              tag.lsh, tag.rsh,
              tag.lte, tag.gte,
              tag.eq, tag.neq: 2

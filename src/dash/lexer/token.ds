@@ -49,7 +49,6 @@ pub enum tag {
     LT         // <
     LAND       // &&
     AND        // &
-    ANDNOT     // &^
     DIV        // /
     QMARK      // ?
     QQMARK     // ??

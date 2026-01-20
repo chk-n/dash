@@ -28,7 +28,6 @@ fn test_next_token()! {
         {"||", tag.LOR},
         {"!", tag.LNOT},
         {"|>", tag.PIPE},
-        {"&^", tag.ANDNOT},
         {"?", tag.QMARK},
         {"??", tag.QQMARK},
         // delimiters
