@@ -28,7 +28,9 @@ fn test_none_literal()! {
 
 @test
 fn test_parse_struct_literal()! {
+    try assert_canonical_exp("a{}")
     try assert_parse_exp("a{b: 2}", "a{b:2}")
+    try assert_canonical_exp("{}")
     try assert_parse_exp("{a: 1}", "{a:1}")
     try assert_parse_exp("{a: 1, b: false}", "{a:1,b:false}")
     try assert_parse_exp("{a: {b: 2}, c: 4}", "{a:{b:2},c:4}")

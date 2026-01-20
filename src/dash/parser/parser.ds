@@ -1752,7 +1752,7 @@ fn parse_struct_literal(p parser)! parser, ast.index {
     var extra = try make([]ast.index, 0, 4)
 
     // parse "ident: exp," combination
-    for !is_tag(p, lexer.tag.EOF) {
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
         p, let ident = try parse_literal(p)
         // TODO: assert ident is lexer.tag.IDENT
         if !is_tag(p, lexer.tag.COLON) {
@@ -1779,10 +1779,7 @@ fn parse_struct_literal(p parser)! parser, ast.index {
         p = next_token(p)
     }
 
-    if len(extra) == 0 {
-        p = try add_error(p, expected_identifier{i: p.tkn_i})
-        return p, ast.NULL_IDX
-    } else if !is_tag(p, lexer.tag.RBRACE) {
+    if !is_tag(p, lexer.tag.RBRACE) {
         p = try add_error(p, expected_brace{i: p.tkn_i})
         return p, ast.NULL_IDX
     }
