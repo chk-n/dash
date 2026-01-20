@@ -92,6 +92,7 @@ fn test_next_token()! {
         {"defer", tag.DEFER},
         {"return", tag.RETURN},
         {"raise", tag.RAISE},
+        {"none", tag.NONE},
     ]
 
     for i = 0; i < len(tests); i++ {

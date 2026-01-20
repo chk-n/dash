@@ -62,6 +62,7 @@ pub enum tag {
     MULTI_STRING // `xyz`
     TRUE       // true
     FALSE      // false
+    NONE       // none
     CHAR
 
     // type literals
@@ -169,7 +170,8 @@ let keywords = [
     {"any", tag.ANY_TYPE},
     {"error", tag.ERROR},
     {"true", tag.TRUE},
-    {"false", tag.FALSE}
+    {"false", tag.FALSE},
+    {"none", tag.NONE}
 ]
 
 pub fn get_tag_by_keyword(k string) tag {

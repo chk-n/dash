@@ -41,7 +41,7 @@ enum context {
 enum precedence {
     none
     assgn
-    null_coalesce
+    optional_coalesce
     // bitwise or and logical or
     or
     xor
@@ -56,7 +56,7 @@ enum precedence {
     add_sub
     mul_div
     mod
-    // null_coalesce
+    // optional_coalesce
     // e.g. '*a', '!b'
     prefix
     dot
@@ -1394,7 +1394,7 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
         return try parse_identifier_postfix(p)
     case lexer.tag.INT, lexer.tag.FLOAT,
          lexer.tag.STRING, lexer.tag.TRUE, lexer.tag.FALSE,
-         lexer.tag.CHAR:
+         lexer.tag.NONE, lexer.tag.CHAR:
         return try parse_literal(p)
     case lexer.tag.LBRACE:
         return try parse_struct_literal(p)
@@ -2151,7 +2151,7 @@ fn get_precedence(p parser) precedence {
     let tag = current_tag(p)
     match tag {
     case lexer.tag.QQMARK:
-        return precedence.null_coalesce
+        return precedence.optional_coalesce
     case lexer.tag.ASSGN:
         return precedence.assgn
     case lexer.tag.OR, lexer.tag.LOR: 

@@ -19,6 +19,14 @@ fn test_parse_scalar_literals()! {
 }
 
 @test
+fn test_none_literal()! {
+    try assert_canonical_exp("none")
+    try assert_canonical_lib("lib a fn f() {let s = a{x:none}}")
+    try assert_canonical_lib("lib a fn f() {g(none)}")
+    try assert_canonical_lib("lib a fn f() {return none}")
+}
+
+@test
 fn test_parse_struct_literal()! {
     try assert_parse_exp("a{b: 2}", "a{b:2}")
     try assert_parse_exp("{a: 1}", "{a:1}")
