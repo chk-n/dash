@@ -446,6 +446,11 @@ func TestForStatement(t *testing.T) {
 			want:  "for (x < 0) { }",
 		},
 		{
+			name:  "boolean, dot notation",
+			input: "for some_lib.x { }",
+			want:  "for some_lib.x { }",
+		},
+		{
 			name:  "function condition",
 			input: "for has_more() { }",
 			want:  "for has_more() { }",

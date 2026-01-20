@@ -1013,6 +1013,14 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 		stmt.Condition = a
 		stmt.Block = p.parseBlockStatement()
 		return stmt
+	case *ast.DotExpression:
+		stmt.Condition = a
+		stmt.Block = p.parseBlockStatement()
+		return stmt
+	case *ast.Identifier:
+		stmt.Condition = a
+		stmt.Block = p.parseBlockStatement()
+		return stmt
 	}
 	// name := &ast.Identifier{Token: tkn, Value: assign.Left.String()}
 	if !p.curTokenIs(token.SEMI) {
@@ -1311,7 +1319,7 @@ func (p *Parser) parseIdentifierStructLiteralOrFunctionCall() ast.Expression {
 	} else if p.peekTokenIs(token.DOT) {
 		p.nextToken()
 		exp := p.parseDotExpression(ident)
-		if p.context == IF_ELSE || p.context == MATCH {
+		if p.context == IF_ELSE || p.context == MATCH || p.context == FOR_LOOP {
 			return exp
 		}
 		if p.curTokenIs(token.LBRACE) {
