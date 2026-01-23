@@ -754,7 +754,7 @@ fn parse_block_statement(p parser)! parser, ast.index {
         return p, ast.NULL_IDX
     }
     p = next_token(p)
-    p, let blk = try add_extra(p, ast.tag.block_stmt, ast.NULL_TKN, extra)
+    p, let blk = try add_extra(p, ast.tag.block_stmt, op_tkn, extra)
     return p, blk
 }
 
