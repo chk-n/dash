@@ -1081,7 +1081,44 @@ fn parse_for_statement(p parser)! parser, ast.index {
         p, cond = try add_extra(p, ast.tag.for_classic_cond, ast.NULL_TKN, extra)
         
     } else if is_tag(p, lexer.tag.IN) {
-        raise unimplemented
+        tag = ast.tag.for_range
+        p = next_token(p)
+
+        p = parser{..p, ctx: context.brace}
+        p, let iterable = try parse_expression(p, precedence.none)
+        p = parser{..p, ctx: context.none}
+        if iterable == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
+
+        var extra = [exp, iterable]
+        p, cond = try add_extra(p, ast.tag.for_range_cond, ast.NULL_TKN, extra)
+
+    } else if is_tag(p, lexer.tag.COMMA) {
+        tag = ast.tag.for_range
+        p = next_token(p)
+
+        if !is_tag(p, lexer.tag.IDENT) {
+            p = try add_error(p, expected_identifier{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+        p, let second_var = try parse_literal(p)
+
+        if !is_tag(p, lexer.tag.IN) {
+            p = try add_error(p, expected_in{i: p.tkn_i})
+            return p, ast.NULL_IDX
+        }
+        p = next_token(p)
+
+        p = parser{..p, ctx: context.brace}
+        p, let iterable = try parse_expression(p, precedence.none)
+        p = parser{..p, ctx: context.none}
+        if iterable == ast.NULL_IDX {
+            return p, ast.NULL_IDX
+        }
+
+        var extra = [exp, second_var, iterable]
+        p, cond = try add_extra(p, ast.tag.for_range2_cond, ast.NULL_TKN, extra)
     } 
         
     if cond == ast.NULL_IDX {

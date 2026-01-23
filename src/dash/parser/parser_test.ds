@@ -508,27 +508,39 @@ fn test_parse_if_statement()! {
 }
 
 @test
+@test
 fn test_parse_for_statement()! {
     try assert_canonical_lib("lib a fn a() {for {}}")
     try assert_canonical_lib("lib a fn a() {for b {}}")
     try assert_canonical_lib("lib a fn a() {for (b > 2) {}}")
+    try assert_canonical_lib("lib a fn a() {for (a <= b) {}}")
     try assert_canonical_lib("lib a fn a() {for b() {}}")
     try assert_canonical_lib("lib a fn a() {for i = 0;(i < len());i++ {}}")
     try assert_canonical_lib("lib a fn a() {for i = 0;(i < len());i = (i + 3) {}}")
-    // TODO: we still need to add support for partial classic loops
-    // try assert_canonical_lib("lib a fn a() {for i < len(); i++ {}}")
-    // try assert_canonical_lib("lib a fn a() {for a in arr {}}")
-    // try assert_canonical_lib("lib a fn a() {for a,b in arr {}}")
+
+    try assert_canonical_lib("lib a fn a() {for x in arr {}}")
+    try assert_canonical_lib("lib a fn a() {for _ in arr {}}")
+    try assert_canonical_lib("lib a fn a() {for i,x in arr {}}")
+    try assert_canonical_lib("lib a fn a() {for _,x in arr {}}")
+    try assert_canonical_lib("lib a fn a() {for i,_ in arr {}}")
+    try assert_canonical_lib("lib a fn a() {for x in get_items() {}}")
+    try assert_canonical_lib("lib a fn a() {for x in obj.items {}}")
+    try assert_canonical_lib("lib a fn a() {for x in a.b.c {}}")
+    try assert_canonical_lib("lib a fn a() {for x in obj.get_items() {}}")
+    try assert_canonical_lib("lib a fn a() {for i,x in obj.get_items() {}}")
 
     try assert_error("lib a fn a() { for }", [expected_expression{i: 8}])
     try assert_error("lib a fn a() { for { }", [expected_brace{i: 10}])
     try assert_error("lib a fn a() { for b }", [expected_brace{i: 9}])
     try assert_error("lib a fn a() { for b > 2) {}}", [expected_brace{i: 11}])
     try assert_error("lib a fn a() { for b { }", [expected_brace{i: 11}])
-    // try assert_error("lib a fn a() { for b, }", [expected_identifier{i: 12}])
-    // try assert_error("lib a fn a() { for b,c }", [expected_in{i: 13}])
-    // try assert_error("lib a fn a() { for b,c in }", [expected_expression{i: 14}])
-    // try assert_error("lib a fn a() { for b,c in d }", [expected_brace{i: 15}])
+    try assert_error("lib a fn a() { for x,y {} }", [expected_in{i: 11}])
+    try assert_error("lib a fn a() { for x in {} }", [expected_brace{i: 12}])
+    try assert_error("lib a fn a() { for x,y in {} }", [expected_brace{i: 14}])
+    try assert_error("lib a fn a() { for x in arr { }", [expected_brace{i: 13}])
+    try assert_error("lib a fn a() { for x,y in arr { }", [expected_brace{i: 15}])
+    try assert_error("lib a fn a() { for x, in arr {} }", [expected_identifier{i: 10}])
+    try assert_error("lib a fn a() { for x, {} }", [expected_identifier{i: 10}])
 }
 
 @test

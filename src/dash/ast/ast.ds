@@ -512,6 +512,21 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         if incr != NULL_IDX {
             buf = try to_string(a, incr, buf)
         }
+    case tag.for_range_cond:
+        let var_idx = try get(a.extras, data.x)
+        buf = try to_string(a, var_idx, buf)
+        buf = append(buf, []byte(" in "))
+        let iter_idx = try get(a.extras, data.x+1)
+        buf = try to_string(a, iter_idx, buf)
+    case tag.for_range2_cond:
+        let var1_idx = try get(a.extras, data.x)
+        buf = try to_string(a, var1_idx, buf)
+        buf = append(buf, ',')
+        let var2_idx = try get(a.extras, data.x+1)
+        buf = try to_string(a, var2_idx, buf)
+        buf = append(buf, []byte(" in "))
+        let iter_idx = try get(a.extras, data.x+2)
+        buf = try to_string(a, iter_idx, buf)
     case tag.match_stmt:
         let src_idx = try get(a.tkns, node.token).start
         let kw = try get_fixed_token(a.src, src_idx, node.tag)
