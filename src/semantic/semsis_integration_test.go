@@ -210,6 +210,25 @@ func TestImportLibrary(t *testing.T) {
 			`,
 			want: "lib two let d one.decl = one.decl{x i64: 1} let v one.value = one.value(d)",
 		},
+		{
+			name: "try imported function in infix expression",
+			input: `
+				lib one
+				pub fn is_false() !bool {
+					return false
+				}
+				--
+				lib two
+				fn test() i64 {
+					let b = true
+					if !try one.is_false() && b {
+						return 1
+					}
+					return 0
+				}
+			`,
+			want: "lib two fn test() i64 { let b bool = true if (!try one.is_false() && b) { return 1 } return 0 }",
+		},
 	}
 
 	for _, tt := range tests {

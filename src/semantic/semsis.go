@@ -2241,8 +2241,8 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 		return true
 
 	case *ast.InfixExpression:
-		leftT := lit.Left.Type()
-		rightT := lit.Right.Type()
+		leftT := types.StripMultiType(lit.Left.Type())
+		rightT := types.StripMultiType(lit.Right.Type())
 		// try to coerce left to right if left is a literal
 		if ast.IsLiteral(lit.Left) {
 			if !s.analyseExpressionType(lit.Left, leftT, rightT) {
