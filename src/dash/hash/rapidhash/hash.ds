@@ -26,7 +26,7 @@ pub fn nano(k []u8, seed u64)! u64 {
                 b = try read32(k_last, 0)
             }
         } else if n > 0 {
-            a = try (u64(get(k,0)) << 45) | u64(get(k, n-1))
+            a = try (u64(get(k,0))<<45 | u64(get(k, n-1)))
             b = try u64(get(k, n>>1))
         }
     } else {
@@ -81,15 +81,15 @@ fn mum(a, b u64) u64, u64 {
 }
 
 fn read64(k []u8, offset u64)! u64 {
-    return try u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
+    return try (u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
         u64(get(k, offset+2))<<16 | u64(get(k, offset+3))<<24 |
         u64(get(k, offset+4))<<32 | u64(get(k, offset+5))<<40 |
-        u64(get(k, offset+6))<<48 | u64(get(k, offset+7))<<56
+        u64(get(k, offset+6))<<48 | u64(get(k, offset+7))<<56)
 }
 
 fn read32(k []u8, offset u64)! u64 {    
-    return try u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
-        u64(get(k, offset+2))<<16 | u64(get(k, offset+3))<<24
+    return try (u64(get(k, offset)) | u64(get(k, offset+1))<<8 |
+        u64(get(k, offset+2))<<16 | u64(get(k, offset+3))<<24)
 }
 
 // mul64 returns 128bit product of x and y in the form:

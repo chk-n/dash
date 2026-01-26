@@ -281,7 +281,7 @@ func TestCharOperations(t *testing.T) {
 		{
 			name:  "string byte and char",
 			input: `let s = "12" let n = try get(s,0) - '0'`,
-			want:  `lib main pub fn main() { let s string = "12" let n byte = try (get(s,0) - '0') }`,
+			want:  `lib main pub fn main() { let s string = "12" let n byte = (try get(s,0) - '0') }`,
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1048,7 +1048,17 @@ func TestTypeCast(t *testing.T) {
 		{
 			name:  "casting array access",
 			input: `let s = "12" let n = i64(try get(s,0) - '0')`,
-			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64(try (get(s,0) - '0')) }`,
+			want:  `lib main pub fn main() { let s string = "12" let n i64 = i64((try get(s,0) - '0')) }`,
+		},
+		{
+			name:  "try grouped expression",
+			input: `let s = "12" let n = try (u64(get(s,0)) + u64(get(s,1)))`,
+			want:  `lib main pub fn main() { let s string = "12" let n u64 = try (u64(get(s,0)) + u64(get(s,1))) }`,
+		},
+		{
+			name:   "try without parens requires each get to be tried",
+			input:  `let s = "12" let n = try u64(get(s,0)) | u64(get(s,1))`,
+			errors: []string{"error-prone function 'get' must be wrapped in 'try'"},
 		},
 		{
 			name:  "error type cast",

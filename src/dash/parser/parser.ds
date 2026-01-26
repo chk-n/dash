@@ -2130,8 +2130,8 @@ fn parse_try_expression(p parser)! parser, ast.index {
     // consume 'try'
     var p = next_token(p)
 
-    // Parse the expression (which should be a function call)
-    p, let expr = try parse_expression(p, precedence.none)
+    // Use prefix precedence so try binds tightly to function calls
+    p, let expr = try parse_expression(p, precedence.prefix)
     if expr == ast.NULL_IDX {
         return p, ast.NULL_IDX
     }

@@ -1570,9 +1570,10 @@ func (p *Parser) parseTryExpression() ast.Expression {
 	exp := &ast.TryExpression{Token: p.curToken}
 	p.nextToken()
 
-	// Allow any expression after try (function calls, dot access, etc.)
-	// Use LOWEST precedence to capture the entire expression
-	exp.Right = p.parseExpression(LOWEST)
+	// Use CALL precedence so try binds tightly to function calls
+	// e.g. "try foo() && bar" parses as "(try foo()) && bar"
+	// Use explicit parens for compound expressions: "try (foo() && bar)"
+	exp.Right = p.parseExpression(CALL)
 	return exp
 }
 

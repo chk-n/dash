@@ -930,8 +930,8 @@ func TestTryCatchExpression(t *testing.T) {
 		},
 		{
 			name:  "try with comparison expression",
-			input: "try true == get()",
-			want:  "try (true == get())",
+			input: "true == try get()",
+			want:  "(true == try get())",
 		},
 	}
 
