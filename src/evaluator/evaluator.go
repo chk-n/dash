@@ -685,7 +685,11 @@ func (e *Evaluator) evalAssignmentStatement(n *ast.AssignmentStatement, ctx *Con
 	for i, val := range n.Values {
 		switch val.Type().(type) {
 		case *types.Multi:
-			res := e.eval(val, ctx).(*Return)
+			ret := e.eval(val, ctx)
+			if e.state == ERROR {
+				return nil
+			}
+			res := ret.(*Return)
 			for j := range len(res.Values) {
 				setOrUpdateForAssignment(n.Declerations[i+j], n.VarNameAt(i+j), res.Values[j], ctx)
 			}
@@ -744,6 +748,9 @@ func (e *Evaluator) evalIfElseExpression(n *ast.IfElseExpression, stk *Context) 
 			return e.eval(c.Block, stk)
 		}
 		val := e.eval(c.Condition, stk)
+		if e.state == ERROR {
+			return val
+		}
 		var cond bool
 		if res, ok := val.(*Return); ok {
 			cond = res.Values[0].(bool)
