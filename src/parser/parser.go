@@ -124,6 +124,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.NULL, p.parseNullLiteral)
 	p.registerPrefix(token.FUNCTION, p.parseFunctionExpression)
 	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.RAW_STRING, p.parseRawStringLiteral)
 	p.registerPrefix(token.WILDCARD, p.parseWildcardLiteral)
 	p.registerPrefix(token.CHAR, p.parseCharacterLiteral)
 	// p.registerPrefix(token.BYTE, p.parseByteLiteral)
@@ -1676,6 +1677,12 @@ func (p *Parser) parseStringLiteral() ast.Expression {
 		lit.Token.Literal = processedValue
 	}
 
+	p.nextToken()
+	return lit
+}
+
+func (p *Parser) parseRawStringLiteral() ast.Expression {
+	lit := &ast.StringLiteral{Token: p.curToken}
 	p.nextToken()
 	return lit
 }

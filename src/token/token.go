@@ -40,6 +40,7 @@ const (
 	HEX
 	FLOAT
 	STRING
+	RAW_STRING
 	BOOL
 	BYTE
 	NULL

@@ -67,7 +67,7 @@ func (l *Lexer) NextToken() token.Token {
 		tok.Type = token.STRING
 		tok.Literal = l.readString()
 	case '`':
-		tok.Type = token.STRING
+		tok.Type = token.RAW_STRING
 		tok.Literal = l.readMultilineString()
 	case '\'':
 		tok.Type = token.CHAR
