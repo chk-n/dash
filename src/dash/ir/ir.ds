@@ -1,0 +1,852 @@
+lib ir
+
+use "dash/intern"
+use "dash/convert"
+
+pub let NULL_IDX = index(4_294_967_295)
+pub let NULL_INST = inst{tag: tag.noop, x: NULL_IDX, y: NULL_IDX}
+
+// IR consists of loosly coupled blocks containing sequential instructions
+// which are ordered from left to right. the ir has the following invariants:
+// 1. instruction x can not reference instruction y if index(x) <= index(y)
+// 2. instruction x can only reference instruction y if x is in a block 'bx'
+// dominated by block 'by' in which instruction y is located
+pub struct ir {   
+    ins    []inst
+    extra  []u32
+    errs   []error
+}
+
+// index points to an instruction
+// in the ir.ins array.
+pub type index u32
+
+pub struct inst {
+    tag   tag
+
+    // depending on context x and y may point
+    // to instruction or to interned type/value
+    x   u32
+    y   u32
+}
+
+pub enum tag {
+    // init is a special block that lives outside of normal
+    // function blocks and contains all global variables and
+    // their initialisation instructions. the block scope is
+    // transparent allowing instructions in functions to
+    // reference global instructions. init blocks are executed
+    // before main function
+    // x is interned library path + "init"
+    // y is NULL_IDX
+    init
+    // defines a named global variable that can be referenced
+    // from another library
+    // x = interned fully-qualified name (e.g., "mylib.counter")
+    // y = instruction index of the value (const, alloca, etc.)
+    global_def
+    // func attribute encodes additional information
+    // within a u32 bitmap about how a function should
+    // be compiled (e.g. external, always_inline,
+    // no_inline, c_call_conv). this instruction is
+    // always stored after a func instruction
+    func_attribute
+    // func is a special block
+    // x is interned function name
+    // y is NULL_IDX
+    func
+    // x is fqn of the block (intern.index)
+    // y is NULL_IDX (block args defined via block_arg instructions)
+    block
+
+    // block_arg: Block argument definition (appears after block instruction)
+    // x=type (intern.index), y=NULL_IDX
+    // Position is implicit from order after block instruction
+    // Creates an IR value that can be referenced by other instructions
+    block_arg
+    
+    // x is intern.index pointing to a ident
+    // y is intern.index pointing to a type
+    arg
+
+    // x is constant in intern.pool
+    // y is a type (intern.index)
+    const
+
+    // poison creates a poison value of the given type
+    // it's illegal to read this value and will get propagated during optimisations
+    // x is the type (intern.index)
+    // y is NULL_IDX
+    poison
+
+    // x is index to extras containing two fields
+    // - constant in intern.pool
+    // - alignment
+    // y is a type in indern.pool
+    const_array
+
+    // external reference to a global variable or function from another
+    // library. the instruction returns a pointer to that variable or
+    // function
+    // x is interned fully-qualified name (e.g. "dash/semsis.a")
+    // y is interned type
+    extern_ref
+
+    // For binary arithemtic operations both
+    // x and y point to instructions array
+    // where both are of the same type.
+    // The returned value is of the same type
+    add, sub, mul, div, mod
+    band, bor, xor, lsh, rsh
+    // x points to instruction
+    // y is type in intern.pool
+    neg
+    // x points to instruction
+    // y is type in intern.pool
+    bnot
+    
+    // comparison
+    // x and y point to instructions array
+    // type is always bool
+    eq,  neq
+    lt,  gt, lte, gte
+    land, lor,
+    // x points to instruction
+    // y is type in intern.pool
+    lnot
+
+    // memory
+    // x is pointer
+    // y is type
+    load
+    // x is pointer
+    // y is value
+    store
+    // alloca allocates a single slot for storage
+    // x is type (intern.index)
+    // y is alignment (intern.index pointing to const)
+    alloca
+    // alloca_array allocates multiple slots for storage
+    // extras contains 3 values:
+    // - array_type (intern.index) 
+    // - element_count (ir.index pointing to const or instruction)
+    // - alignment (intern.index pointing to const)
+    // x points to extras start
+    // y points to extras end
+    alloca_array
+    // // gev short for get_element_value returns the
+    // // value stored at the index of an aggregate
+    // // data structure
+    // // x is type of field
+    // // y is index to extra containing two elements;
+    // // first element is instruction e.g. pointer of
+    // // struct and second is the index
+    // gev
+
+    // gep short for get_element_pointer returns a pointer
+    // to a value in an aggregate data structure
+    // x is index to extra containing two elements;
+    // first element is instruction e.g. pointer to
+    // struct and second is the index
+    // y is type of field
+    gep
+    
+    // conditional branch
+    // x is condition instruction index (ir.index)
+    // y points to extra array:
+    //   [then_fqn, then_count, then_args..., else_fqn, else_count, else_args...]
+    // Example no args:   [then_fqn, 0, else_fqn, 0]
+    // Example with args: [then_fqn, 2, %a, %b, else_fqn, 1, %c]
+    br
+
+    // unconditional jump
+    // x is interned block FQN (intern.index)
+    // y is NULL_IDX (no args) OR y→extras[count, arg1, arg2, ...] (with args)
+    jmp
+
+    // select: conditional value selection (like LLVM select or ternary operator)
+    // x is condition (ir.index, must be bool)
+    // y points to extra array: [true_val, false_val]
+    // Returns true_val if cond is true, else false_val
+    // Result type is inferred from true_val
+    select
+
+    // x points to extra array: [fn_ref, count, arg1, arg2, ...]
+    // y is intern.index pointing to return type (struct for multi-return)
+    call
+
+    switch
+
+    // x points to instructions array
+    // y is empty
+    ret_1
+    // x and y are indices to instructions
+    ret_2
+    // x and y point to sublist in extras
+    ret_n
+
+
+    memset
+    memcpy
+
+    // x is a reference to an instruction
+    // y is intern.index pointing to a type
+    cast
+    // bitcast reinterprets bits without changing them
+    // used for pointer type conversions (e.g., *[i32] to *[]u8)
+    // x is a reference to an instruction
+    // y is intern.index pointing to target type
+    bitcast
+
+    unreachable
+    noop   
+}
+
+pub fn new() *ir {
+    return &ir{
+        ins:   [],
+        extra: [],
+        errs:  [],
+    }
+}
+
+// pub fn compact(l *ir)! *ir {
+//     // TODO: iterate over ins and count how many non NULL_INS
+//     // TODO: allocate new array of NULL_INS
+//     // TODO: copy over instructions with values from extra array
+//     //
+//     // now ins and extra compacted
+//     return l
+// }
+
+pub fn get_type(l *ir, idx index)! intern.index {
+    let inst = try get(l.ins, idx)
+
+    match inst.tag {
+    case tag.arg, tag.const, tag.const_array, tag.call, tag.cast, tag.bitcast,
+         tag.gep, tag.load, tag.bnot, tag.lnot:
+        return intern.index(inst.y)
+
+    case tag.eq, tag.neq, tag.lt, tag.gt,
+         tag.lte, tag.gte, tag.land, tag.lor:
+        return intern.BOOL_TYPE_IDX
+
+    case tag.block_arg, tag.alloca, tag.poison:
+        return intern.index(inst.x)
+        
+    // alloca_array - array type stored in extras
+    case tag.alloca_array:
+        let type_idx = try get(l.extra, inst.x)
+        return intern.index(type_idx)
+
+    // recursively look up type
+    case tag.add, tag.sub, tag.mul, tag.div, tag.mod,
+         tag.band, tag.bor, tag.xor, tag.lsh, tag.rsh,
+         tag.neg:
+        return try get_type(l, index(inst.x))
+
+    case tag.select:
+        let true_val_idx = index(try get(l.extra, inst.y))
+        return try get_type(l, true_val_idx)
+
+    // non-expression instructions have no type
+    case tag.func, tag.block, tag.br, tag.jmp,
+         tag.store, tag.ret_1, tag.ret_2, tag.ret_n,
+         tag.unreachable, tag.noop,
+         tag.switch, tag.memset, tag.memcpy:
+        raise error("Cannot get type of non-expression instruction")
+
+    case _:
+        raise error("Unknown instruction tag")
+    }
+}
+
+pub fn is_const(l *ir, idx index)! bool {
+    let inst = try get(l.ins, idx)
+    // NOTE: should we consider tag.poison as a constant?
+    return inst.tag == tag.const
+}
+
+pub fn to_string(l *ir, ip *intern.pool, idx index, buf string)! string {
+    if idx == NULL_IDX {
+        return buf
+    }
+
+    // IR functions dont keep track which blocks belong to
+    // them within instruction, this information is implicitely
+    // stored based on the position of the block within instructions
+    // array. lets say 'i' points to a function and 'j' points to
+    // the next function. all blocks within range (i, j) excluding
+    // i and j belong to function i.
+    var buf = buf
+    var i = 0
+
+    // Forward iteration through instructions
+    // Root nodes can be init, func, or block
+    for i < len(l.ins) {
+        let inst = try get(l.ins, i)
+        i = i + 1
+
+        // format block header
+        match inst.tag {
+        case tag.init:
+            // <fqn>:
+            //     %0 = ...
+            //     %1 = ...
+
+            let name_idx = intern.index(inst.x)
+            buf = try append(buf, try intern.get_string(ip, name_idx))
+            buf = try append(buf, ":\n")
+
+        case tag.func:
+            // fn <fqn>:
+            //     %0 = ...
+            //     jmp(%N)
+
+            buf = try append(buf, "fn ")
+            let name_idx = intern.index(inst.x)
+            buf = try append(buf, try intern.get_string(ip, name_idx))
+            buf = try append(buf, ":\n")
+
+        case tag.block:
+            //   <block_fqn>:
+            //     %X = block_arg(T)
+            //     ...
+
+            let block_fqn = intern.index(inst.x)
+            let fqn_str = try intern.get_string(ip, block_fqn)
+            buf = try append(buf, "  ")
+            buf = try append(buf, fqn_str)
+            buf = try append(buf, ":\n")
+
+        case _:
+            // TODO: compiler error
+            next
+        }
+
+
+        // format instructions until next init/func/block
+        for i < len(l.ins) {
+            let next_inst = try get(l.ins, i)
+
+            if next_inst.tag == tag.init || next_inst.tag == tag.func || next_inst.tag == tag.block {
+                break
+            }
+
+            buf = try append(buf, "    ")
+            buf = try format_inst(l, ip, index(u32(i)), buf)
+            buf = try append(buf, "\n")
+            i = i + 1
+        }
+    }
+
+    return buf
+}
+
+fn tag_to_op_name(t tag) string {
+    return match t {
+        case tag.add: "add"
+        case tag.sub: "sub"
+        case tag.mul: "mul"
+        case tag.div: "div"
+        case tag.mod: "mod"
+        case tag.band: "band"
+        case tag.bor: "bor"
+        case tag.xor: "xor"
+        case tag.lsh: "lsh"
+        case tag.rsh: "rsh"
+        case tag.eq: "eq"
+        case tag.neq: "neq"
+        case tag.lt: "lt"
+        case tag.gt: "gt"
+        case tag.lte: "lte"
+        case tag.gte: "gte"
+        case tag.land: "land"
+        case tag.lor: "lor"
+        case _: "unknown"
+    }
+}
+
+pub fn format_inst(l *ir, ip *intern.pool, idx index, buf string)! string {
+    var buf = buf
+    let inst = try get(l.ins, idx)
+    match inst.tag {
+    case tag.add, tag.sub, tag.mul, tag.div, tag.mod,
+         tag.band, tag.bor, tag.xor, tag.lsh, tag.rsh,
+         tag.eq, tag.neq, tag.lt, tag.gt, tag.lte, tag.gte,
+         tag.land, tag.lor:
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, tag_to_op_name(inst.tag))
+        buf = try append(buf, '(')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.y))
+        buf = try append(buf, ')')
+
+    case tag.arg:
+        // %0 = arg("name", type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "arg(")
+        let name_idx = intern.index(inst.x)
+        buf = try append(buf, try intern.get_string(ip, name_idx))
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.const:
+        // %0 = const(%value, type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "const(")
+        let const_idx = intern.index(inst.x)
+        buf = try format_const(ip, const_idx, buf)
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.poison:
+        // %0 = poison(T)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "poison(")
+        buf = try format_type(ip, intern.index(inst.x), buf)
+        buf = try append(buf, ')')
+
+    case tag.const_array:
+        // %0 = const_array(intern_idx, alignment, type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "const_array(")
+        // x points to extras: [intern_idx, alignment]
+        let ca_intern_idx = intern.index(try get(l.extra, inst.x))
+        let ca_align_const_idx = intern.index(try get(l.extra, inst.x + 1))
+        buf = try format_const(ip, ca_intern_idx, buf)
+        buf = try append(buf, ',')
+        buf = try format_const(ip, ca_align_const_idx, buf)
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.block_arg:
+        // %n = block_arg(type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = block_arg(")
+        buf = try format_type(ip, intern.index(inst.x), buf)
+        buf = try append(buf, ')')
+
+    case tag.br:
+        // br(%cond, then_block(args...), else_block(args...))
+        buf = try append(buf, "br(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+
+        // then branch: [then_fqn, then_count, then_args...]
+        var extra_pos = inst.y
+        let then_fqn = intern.index(try get(l.extra, extra_pos))
+        buf = try append(buf, try intern.get_string(ip, then_fqn))
+        extra_pos = extra_pos + 1
+        let then_count = try get(l.extra, extra_pos)
+        extra_pos = extra_pos + 1
+        if then_count > 0 {
+            buf = try append(buf, '(')
+            for j = u32(0); j < then_count; j++ {
+                if j > 0 {
+                    buf = try append(buf, ',')
+                }
+                let arg_idx = try get(l.extra, extra_pos + j)
+                buf = try append(buf, '%')
+                buf = try append(buf, try convert.to_string(arg_idx))
+            }
+            buf = try append(buf, ')')
+            extra_pos = extra_pos + then_count
+        }
+
+        buf = try append(buf, ',')
+
+        // else branch: [else_fqn, else_count, else_args...]
+        let else_fqn = intern.index(try get(l.extra, extra_pos))
+        buf = try append(buf, try intern.get_string(ip, else_fqn))
+        extra_pos = extra_pos + 1
+        let else_count = try get(l.extra, extra_pos)
+        extra_pos = extra_pos + 1
+        if else_count > 0 {
+            buf = try append(buf, '(')
+            for j = u32(0); j < else_count; j++ {
+                if j > 0 {
+                    buf = try append(buf, ',')
+                }
+                let arg_idx = try get(l.extra, extra_pos + j)
+                buf = try append(buf, '%')
+                buf = try append(buf, try convert.to_string(arg_idx))
+            }
+            buf = try append(buf, ')')
+        }
+        buf = try append(buf, ')')
+
+    case tag.jmp:
+        // jmp(block_fqn) or jmp(block_fqn(args...))
+        buf = try append(buf, "jmp(")
+        let block_fqn = intern.index(inst.x)
+        buf = try append(buf, try intern.get_string(ip, block_fqn))
+        // Check for arguments: y→extras[count, arg1, arg2, ...]
+        if inst.y != u32(NULL_IDX) {
+            let arg_count = try get(l.extra, inst.y)
+            if arg_count > 0 {
+                buf = try append(buf, '(')
+                for j = u32(0); j < arg_count; j++ {
+                    if j > 0 {
+                        buf = try append(buf, ',')
+                    }
+                    let arg_idx = try get(l.extra, inst.y + 1 + j)
+                    buf = try append(buf, '%')
+                    buf = try append(buf, try convert.to_string(arg_idx))
+                }
+                buf = try append(buf, ')')
+            }
+        }
+        buf = try append(buf, ')')
+
+    case tag.alloca:
+        // %0 = alloca(type, alignment)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "alloca(")
+        // x is type, y is alignment
+        let type_idx = intern.index(inst.x)
+        let align_const_idx = intern.index(inst.y)
+        buf = try format_type(ip, type_idx, buf)
+        buf = try append(buf, ',')
+        buf = try format_const(ip, align_const_idx, buf)
+        buf = try append(buf, ')')
+
+    case tag.alloca_array:
+        // %0 = alloca_array(array_type, %element_count, alignment)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "alloca_array(")
+        // extras: [array_type, element_count_idx, align_const_idx]
+        let type_idx = intern.index(try get(l.extra, inst.x))
+        let elem_count_idx = index(try get(l.extra, inst.x + 1))
+        let align_const_idx = intern.index(try get(l.extra, inst.x + 2))
+        buf = try format_type(ip, type_idx, buf)
+        buf = try append(buf, ',')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(elem_count_idx))
+        buf = try append(buf, ',')
+        buf = try format_const(ip, align_const_idx, buf)
+        buf = try append(buf, ')')
+
+    case tag.gep:
+        // %0 = gep(%ptr, field_idx, field_type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "gep(")
+        // x points to extra containing [ptr_inst_idx, field_idx]
+        let ptr_inst_idx = index(try get(l.extra, inst.x))
+        let field_idx = try get(l.extra, inst.x + 1)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(ptr_inst_idx))
+        buf = try append(buf, ',')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(field_idx))
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.store:
+        // store(%ptr, %val)
+        buf = try append(buf, "store(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.y))
+        buf = try append(buf, ')')
+    case tag.cast:
+        // %0 = cast(%1,u8)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "cast(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+    case tag.bitcast:
+        // %0 = bitcast(%1,*[]u8)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "bitcast(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.ret_1:
+        // ret_1(%val)
+        buf = try append(buf, "ret_1(")
+        if inst.x != u32(NULL_IDX) {
+            buf = try append(buf, '%')
+            buf = try append(buf, try convert.to_string(inst.x))
+        }
+        buf = try append(buf, ')')
+
+    case tag.load:
+        // %0 = load(%ptr, type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "load(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.extern_ref:
+        // %0 = extern_ref(dash/semsis.func)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "extern_ref(")
+        buf = try format_const(ip, intern.index(inst.x), buf)
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+        
+    case tag.call:
+        // %0 = call(%fn_ref, args..., return_type)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "call(")
+        // x points to extras: [fn_ref, count, arg1, arg2, ...]
+        let fn_ref = index(try get(l.extra, inst.x))
+        let arg_count = try get(l.extra, inst.x + 1)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(fn_ref))
+        for j = u32(0); j < arg_count; j++ {
+            buf = try append(buf, ',')
+            let arg_idx = index(try get(l.extra, inst.x + 2 + j))
+            buf = try append(buf, '%')
+            buf = try append(buf, try convert.to_string(arg_idx))
+        }
+        buf = try append(buf, ',')
+        buf = try format_type(ip, intern.index(inst.y), buf)
+        buf = try append(buf, ')')
+
+    case tag.select:
+        // %0 = select(%cond, %true_val, %false_val)
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "select(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ',')
+        // y points to extras: [true_val, false_val]
+        let true_idx = index(try get(l.extra, inst.y))
+        let false_idx = index(try get(l.extra, inst.y + 1))
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(true_idx))
+        buf = try append(buf, ',')
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(false_idx))
+        buf = try append(buf, ')')
+
+    case tag.bnot:
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "bnot(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ')')
+
+    case tag.lnot:
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "lnot(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ')')
+
+    case tag.neg:
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(idx))
+        buf = try append(buf, " = ")
+        buf = try append(buf, "neg(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+        buf = try append(buf, ')')
+
+    case _:
+
+    }
+
+    return buf
+}
+
+// format_type formats a type from the intern pool
+pub fn format_type(ip *intern.pool, idx intern.index, buf string)! string {
+    if idx == intern.NULL_IDX {
+        return try append(buf, "null")
+    }
+
+    let item = try intern.lookup(ip, idx)
+    var buf = buf
+
+    match item.tag {
+    case intern.tag.u8_type:
+        buf = try append(buf, "u8")
+    case intern.tag.u16_type:
+        buf = try append(buf, "u16")
+    case intern.tag.u32_type:
+        buf = try append(buf, "u32")
+    case intern.tag.u64_type:
+        buf = try append(buf, "u64")
+    case intern.tag.i8_type:
+        buf = try append(buf, "i8")
+    case intern.tag.i16_type:
+        buf = try append(buf, "i16")
+    case intern.tag.i32_type:
+        buf = try append(buf, "i32")
+    case intern.tag.i64_type:
+        buf = try append(buf, "i64")
+    case intern.tag.f32_type:
+        buf = try append(buf, "f32")
+    case intern.tag.f64_type:
+        buf = try append(buf, "f64")
+    case intern.tag.bool_type:
+        buf = try append(buf, "bool")
+    case intern.tag.char_type:
+        buf = try append(buf, "char")
+    case intern.tag.pointer_type:
+        buf = try append(buf, '*')
+        buf = try format_type(ip, intern.index(item.x), buf)
+    case intern.tag.array_type:
+        buf = try append(buf, "[]")
+        buf = try format_type(ip, intern.index(item.x), buf)
+    case intern.tag.slot_type:
+        buf = try append(buf, "slot[")
+        buf = try format_type(ip, intern.index(item.x), buf)
+        buf = try append(buf, ']')
+    case intern.tag.struct_type:
+        let fields = try intern.get_struct_fields(ip, idx)
+        if fields != null {
+            buf = try append(buf, '[')
+            let field_types = ?fields
+
+            for i = 0; i < len(field_types); i = i + 1 {
+                if i > 0 {
+                    buf = try append(buf, ',')
+                }
+                let field_type = try get(field_types, i)
+                buf = try format_type(ip, field_type, buf)
+            }
+            buf = try append(buf, ']')
+        } else {
+            // TODO: this should not happen in properly analysed code
+            // If no fields registered, fall back to name
+            let name = try intern.get_string(ip, intern.index(item.x))
+            buf = try append(buf, name)
+        }
+    case intern.tag.anon_struct_type:
+        let field_types = try intern.get_anon_struct_fields(ip, idx)
+        buf = try append(buf, '[')
+        for i = 0; i < len(field_types); i = i + 1 {
+            if i > 0 {
+                buf = try append(buf, ',')
+            }
+            let field_type = try get(field_types, i)
+            buf = try format_type(ip, field_type, buf)
+        }
+        buf = try append(buf, ']')
+    case intern.tag.struct_generic_type,
+         intern.tag.enum_type,
+         intern.tag.generic_type, intern.tag.function_type,
+         intern.tag.function_error_type, intern.tag.function_generic_type,
+         intern.tag.function_generic_error_type:
+        let name = try intern.get_string(ip, intern.index(item.x))
+        buf = try append(buf, name)
+    case intern.tag.const_string:
+        // for string constants we show the actual string
+        let s = try intern.get_string(ip, idx)
+        buf = try append(buf, '"')
+        buf = try append(buf, s)
+        buf = try append(buf, '"')
+    case intern.tag.return_type:
+            buf = try append(buf, '[')
+            let cnt = try intern.get_return_type_count(ip, idx)
+            for i = u32(0); i < cnt; i = i + 1 {
+                if i > 0 {
+                    buf = try append(buf, ',')
+                }
+                let return_type = try intern.get_return_type_at(ip, idx, i)
+                buf = try format_type(ip, return_type, buf)
+            }
+            buf = try append(buf, ']')
+    case _:
+        buf = try append(buf, "unknown_type(")
+        buf = try append(buf, try convert.to_string(u32(item.tag)))
+        buf = try append(buf, ')')
+    }
+
+    return buf
+}
+
+// format_const formats a constant value from the intern pool
+fn format_const(ip *intern.pool, idx intern.index, buf string)! string {
+    let item = try intern.lookup(ip, idx)
+    var buf = buf
+
+    match item.tag {
+    case intern.tag.const_u32:
+        let val = try intern.get_u32(ip, idx)
+        buf = try append(buf, try convert.to_string(val))
+    case intern.tag.const_u64:
+        let val = try intern.get_u64(ip, idx)
+        buf = try append(buf, try convert.to_string(val))
+    case intern.tag.const_f32, intern.tag.const_f64:
+        // TODO: proper float formatting
+        buf = try append(buf, try convert.to_string(item.x))
+    case intern.tag.const_true:
+        buf = try append(buf, "true")
+    case intern.tag.const_false:
+        buf = try append(buf, "false")
+    case intern.tag.const_null:
+        buf = try append(buf, "null")
+    case intern.tag.const_char:
+        let val = item.x
+        buf = try append(buf, try convert.to_string(val))
+    case intern.tag.const_string:
+        let s = try intern.get_string(ip, idx)
+        buf = try append(buf, '"')
+        buf = try append(buf, s)
+        buf = try append(buf, '"')
+    case _:
+        buf = try append(buf, "unknown_const(")
+        buf = try append(buf, try convert.to_string(u32(item.tag)))
+        buf = try append(buf, ')')
+    }
+
+    return buf
+}
