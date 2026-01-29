@@ -7,6 +7,7 @@ fn test_base()! {
         {"", "."},
         {"/", "/"},
         {"///", "/"},
+        {".", "."},
         {"lib", "lib"},
         {"/lib", "lib"},
         {"lib/", "lib"},
@@ -19,6 +20,7 @@ fn test_base()! {
         {"a/b/c/d/e/f/g/h", "h"},
         {"path/file-name_2", "file-name_2"},
         {"path/my file", "my file"},
+        {"/home/.bashrc", ".bashrc"},
     ]
 
     for i = 0; i < len(tests); i++ {
