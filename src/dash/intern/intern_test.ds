@@ -1,0 +1,505 @@
+lib intern
+
+@test
+fn test_default_types_initialised()! {
+    let p = new()
+
+    let expected_len = len(primitive_types) + len(default_constants)
+    try assert(len(p.items) == expected_len, "expected primitive types + default constants")
+
+    let first = try get(p.items, 0)
+    try assert(first.tag == tag.u8_type, "first item should be u8_type")
+    try assert(index(first.x) == NULL_IDX, "first item should have NULL_IDX")
+}
+
+@test
+fn test_default_constants_initialised()! {
+    let p = new()
+
+    let initial_len = len(primitive_types)
+    let expected_len = initial_len + len(default_constants)
+
+    try assert(len(p.items) == expected_len, "pool should have primitive types + default constants")
+}
+
+@test
+fn test_make_primitive_type()! {
+    let p = new()
+
+    let p2, let idx = try make_primitive_type(p, tag.u32_type)
+
+    try assert(idx != NULL_IDX, "index should not be NULL_IDX")
+
+    let item = try get(p2.items, idx)
+    try assert(item.tag == tag.u32_type, "item should be u32_type")
+    try assert(index(item.x) == NULL_IDX, "item should have NULL_IDX")
+}
+
+@test
+fn test_primitive_type_deduplication()! {
+    let p = new()
+
+    let p2, let idx1 = try make_primitive_type(p, tag.i64_type)
+    let p3, let idx2 = try make_primitive_type(p2, tag.i64_type)
+
+    try assert(idx1 == idx2, "duplicate primitive types should return same index")
+    try assert(len(p3.items) == len(p2.items), "pool should not grow for duplicates")
+}
+
+@test
+fn test_primitive_types_already_duplicated()! {
+    let p = new()
+    let initial_len = len(p.items)
+
+    let p2, let idx = try make_primitive_type(p, tag.u8_type)
+
+    try assert(idx == 0, "u8_type should be at index 0")
+    try assert(len(p2.items) == initial_len, "pool should not grow for default items")
+}
+
+@test
+fn test_make_pointer_type()! {
+    let p = new()
+
+    let p2, let inner_idx = try make_primitive_type(p, tag.i32_type)
+    let p3, let ptr_idx = try make_pointer_type(p2, inner_idx)
+
+    let item = try get(p3.items, ptr_idx)
+    try assert(item.tag == tag.pointer_type, "should be pointer_type")
+    try assert(index(item.x) == inner_idx, "should reference inner type")
+}
+
+@test
+fn test_make_array_type()! {
+    let p = new()
+
+    let p2, let elem_idx = try make_primitive_type(p, tag.f64_type)
+    let p3, let arr_idx = try make_array_type(p2, elem_idx)
+
+    let item = try get(p3.items, arr_idx)
+    try assert(item.tag == tag.array_type, "should be array_type")
+    try assert(index(item.x) == elem_idx, "should reference element type")
+}
+
+@test
+fn test_make_enum_type()! {
+    let p = new()
+
+    let p2, let name_idx = try intern_string(p, "color")
+    let p3, let enum_idx = try make_enum_type(p2, name_idx)
+
+    let item = try get(p3.items, enum_idx)
+    try assert(item.tag == tag.enum_type, "should be enum_type")
+    try assert(index(item.x) == name_idx, "should reference name index")
+}
+
+@test
+fn test_make_struct_type()! {
+    let p = new()
+
+    let p2, let name_idx = try intern_string(p, "person")
+    let p3, let struct_idx = try make_struct_type(p2, name_idx)
+
+    let item = try get(p3.items, struct_idx)
+    try assert(item.tag == tag.struct_type, "should be struct_type")
+    try assert(index(item.x) == name_idx, "should reference name index")
+}
+
+@test
+fn test_make_generic_type()! {
+    let p = new()
+
+    let p2, let name_idx = try intern_string(p, "T")
+    let p3, let gen_idx = try make_generic_type(p2, name_idx)
+
+    let item = try get(p3.items, gen_idx)
+    try assert(item.tag == tag.generic_type, "should be generic_type")
+    try assert(index(item.x) == name_idx, "should reference name index")
+}
+
+@test
+fn test_make_function_type()! {
+    let p = new()
+
+    let p2, let name_idx = try intern_string(p, "fn(i32) i32")
+    let p3, let fn_idx = try make_function_type(p2, name_idx)
+
+    let item = try get(p3.items, fn_idx)
+    try assert(item.tag == tag.function_type, "should be function_type")
+    try assert(index(item.x) == name_idx, "should reference name index")
+}
+
+@test
+fn test_make_function_error_type()! {
+    let p = new()
+
+    let p2, let name_idx = try intern_string(p, "fn(i32)! i32")
+    let p3, let fn_err_idx = try make_function_error_type(p2, name_idx)
+
+    let item = try get(p3.items, fn_err_idx)
+    try assert(item.tag == tag.function_error_type, "should be function_error_type")
+    try assert(index(item.x) == name_idx, "should reference name index")
+}
+
+@test
+fn test_named_type_deduplication()! {
+    let p = new()
+
+    let p2, let name_idx1 = try intern_string(p, "user")
+    let p3, let struct_idx1 = try make_struct_type(p2, name_idx1)
+
+    let p4, let name_idx2 = try intern_string(p3, "user")
+    let p5, let struct_idx2 = try make_struct_type(p4, name_idx2)
+
+    try assert(name_idx1 == name_idx2, "same string should return same index")
+    try assert(struct_idx1 == struct_idx2, "same struct type should return same index")
+}
+
+@test
+fn test_intern_string()! {
+    let p = new()
+
+    let p2, let idx = try intern_string(p, "hello")
+
+    try assert(idx != NULL_IDX, "should return valid index")
+    try assert(len(p2.strings) > len(p.strings), "strings should grow")
+}
+
+@test
+fn test_string_deduplication()! {
+    let p = new()
+
+    let p2, let idx1 = try intern_string(p, "test")
+    let p3, let idx2 = try intern_string(p2, "test")
+
+    try assert(idx1 == idx2, "same string should return same index")
+    try assert(len(p3.strings) == len(p2.strings), "strings should not grow for duplicates")
+}
+
+@test
+fn test_string_different_strings()! {
+    let p = new()
+
+    let p2, let idx1 = try intern_string(p, "foo")
+    let p3, let idx2 = try intern_string(p2, "bar")
+
+    try assert(idx1 != idx2, "different strings should return different indices")
+    try assert(len(p3.strings) > len(p2.strings), "strings should grow")
+}
+
+@test
+fn test_string_empty()! {
+    let p = new()
+
+    let p2, let idx = try intern_string(p, "")
+
+    try assert(idx != NULL_IDX, "empty string should return valid index")
+}
+
+@test
+fn test_default_constant_deduplication()! {
+    var p = new()
+    let initial_len = len(p.items)
+
+    p, let idx_0 = try make_const_u32(p, 0)
+    p, let idx_1 = try make_const_u32(p, 1)
+    p, let idx_2 = try make_const_u32(p, 2)
+
+    try assert(len(p.items) == initial_len, "pool should not grow for default constants")
+}
+
+@test
+fn test_make_const_u32()! {
+    var p = new()
+    p, let idx = try make_const_u32(p, 42)
+
+    try assert(idx != NULL_IDX, "should return valid index")
+    let item = try get(p.items, idx)
+    try assert(item.tag == tag.const_u32, "should be const_u32")
+    try assert(item.x == 42, "should store value 42")
+}
+
+@test
+fn test_make_const_u64()! {
+    var p = new()
+    p, let idx = try make_const_u64(p, 0x123456789ABCDEF0)
+
+    try assert(idx != NULL_IDX, "should return valid index")
+    let item = try get(p.items, idx)
+    try assert(item.tag == tag.const_u64, "should be const_u64")
+}
+
+@test
+fn test_make_const_bool()! {
+    var p = new()
+
+    p, let true_idx = try make_const_bool(p, true)
+
+    try assert(true_idx != NULL_IDX, "should return valid index")
+    let item1 = try get(p.items, true_idx)
+    try assert(item1.tag == tag.const_true, "should be const_true")
+    try assert(item1.x == 1, "true should be stored as 1")
+    
+    p, let false_idx = try make_const_bool(p, false)
+
+    try assert(false_idx != NULL_IDX, "should return valid index")
+    let item2 = try get(p.items, false_idx)
+    try assert(item2.tag == tag.const_false, "should be const_false")
+    try assert(item2.x == 0, "false should be stored as 0")
+}
+
+@test
+fn test_is_integer()! {
+    var p = new()
+
+    p, let u8_idx = try make_primitive_type(p, tag.u8_type)
+    try assert(try is_integer(p, u8_idx), "u8_type should be integer")
+
+    p, let u16_idx = try make_primitive_type(p, tag.u16_type)
+    try assert(try is_integer(p, u16_idx), "u16_type should be integer")
+
+    p, let u32_idx = try make_primitive_type(p, tag.u32_type)
+    try assert(try is_integer(p, u32_idx), "u32_type should be integer")
+
+    p, let u64_idx = try make_primitive_type(p, tag.u64_type)
+    try assert(try is_integer(p, u64_idx), "u64_type should be integer")
+
+    p, let i8_idx = try make_primitive_type(p, tag.i8_type)
+    try assert(try is_integer(p, i8_idx), "i8_type should be integer")
+
+    p, let i16_idx = try make_primitive_type(p, tag.i16_type)
+    try assert(try is_integer(p, i16_idx), "i16_type should be integer")
+
+    p, let i32_idx = try make_primitive_type(p, tag.i32_type)
+    try assert(try is_integer(p, i32_idx), "i32_type should be integer")
+
+    p, let i64_idx = try make_primitive_type(p, tag.i64_type)
+    try assert(try is_integer(p, i64_idx), "i64_type should be integer")
+
+    p, let bool_idx = try make_primitive_type(p, tag.bool_type)
+    try assert(!try is_integer(p, bool_idx), "bool should not be integer")
+
+    p, let ptr_idx = try make_pointer_type(p, u32_idx)
+    try assert(!try is_integer(p, ptr_idx), "pointer should not be integer")
+}
+
+@test
+fn test_is_pointer()! {
+    var p = new()
+
+    p, let inner_idx = try make_primitive_type(p, tag.i32_type)
+    p, let ptr_idx = try make_pointer_type(p, inner_idx)
+
+    try assert(try is_pointer(p, ptr_idx), "should be pointer")
+    try assert(!try is_pointer(p, inner_idx), "i32 should not be pointer")
+
+    p, let bool_idx = try make_primitive_type(p, tag.bool_type)
+    try assert(!try is_pointer(p, bool_idx), "bool should not be pointer")
+}
+
+@test
+fn test_is_bool()! {
+    var p = new()
+
+    p, let bool_idx = try make_primitive_type(p, tag.bool_type)
+
+    try assert(try is_bool(p, bool_idx), "should be bool")
+
+    p, let i32_idx = try make_primitive_type(p, tag.i32_type)
+    try assert(!try is_bool(p, i32_idx), "i32 should not be bool")
+}
+
+@test
+fn test_is_function()! {
+    var p = new()
+
+    p, let name_idx = try intern_string(p, "fn")
+    p, let fn_idx = try make_function_type(p, name_idx)
+    try assert(try is_function(p, fn_idx), "should be function_type")
+
+    p, let name_idx2 = try intern_string(p, "fn_err")
+    p, let fn_err_idx = try make_function_error_type(p, name_idx2)
+    try assert(try is_function(p, fn_err_idx), "should be function_error_type")
+
+    p, let name_idx3 = try intern_string(p, "fn_gen")
+    p, let fn_gen_idx = try make_function_generic_type(p, name_idx3)
+    try assert(try is_function(p, fn_gen_idx), "should be function_generic_type")
+
+    p, let name_idx4 = try intern_string(p, "fn_gen_err")
+    p, let fn_gen_err_idx = try make_function_generic_error_type(p, name_idx4)
+    try assert(try is_function(p, fn_gen_err_idx), "should be function_generic_error_type")
+
+    p, let i32_idx = try make_primitive_type(p, tag.i32_type)
+    try assert(!try is_function(p, i32_idx), "i32 should not be function")
+}
+
+@test
+fn test_get_u32()! {
+    var p = new()
+
+    p, let idx_max = try make_const_u32(p, ~u32(0))
+    let val_max = try get_u32(p, idx_max)
+    try assert(val_max == ~u32(0), "should retrieve max u32")
+
+    p, let idx_zero = try make_const_u32(p, 0)
+    let val_zero = try get_u32(p, idx_zero)
+    try assert(val_zero == 0, "should retrieve 0")
+}
+
+@test
+fn test_get_u64()! {
+    var p = new()
+
+    p, let idx_max = try make_const_u64(p, ~u64(0))
+    let val_max = try get_u64(p, idx_max)
+    try assert(val_max == ~u64(0), "should retrieve max u64")
+
+    p, let idx_zero = try make_const_u64(p, 0)
+    let val_zero = try get_u64(p, idx_zero)
+    try assert(val_zero == 0, "should retrieve 0")
+}
+
+@test
+fn test_get_bool()! {
+    var p = new()
+
+    p, let true_idx = try make_const_bool(p, true)
+    let true_val = try get_bool(p, true_idx)
+    try assert(true_val == true, "should retrieve true")
+
+    p, let false_idx = try make_const_bool(p, false)
+    let false_val = try get_bool(p, false_idx)
+    try assert(false_val == false, "should retrieve false")
+}
+
+@test
+fn test_make_struct_fields()! {
+    var p = new()
+
+    p, let name_idx = try intern_string(p, "my_struct")
+    p, let struct_idx = try make_struct_type(p, name_idx)
+
+    p, let field1 = try make_primitive_type(p, tag.i32_type)
+    p, let field2 = try make_primitive_type(p, tag.u64_type)
+    p, let field3 = try make_primitive_type(p, tag.bool_type)
+
+    let field_types = [field1, field2, field3]
+
+    p, let fields_idx = try make_struct_fields(p, struct_idx, field_types)
+
+    try assert(fields_idx != NULL_IDX, "should return valid fields index")
+
+    let retrieved = try get_struct_fields(p, struct_idx)
+    try assert(retrieved != null, "should find struct fields")
+
+    let fields = ?retrieved
+    try assert(len(fields) == 3, "should have 3 fields")
+    try assert(try get(fields, 0) == field1, "field 1 should match")
+    try assert(try get(fields, 1) == field2, "field 2 should match")
+    try assert(try get(fields, 2) == field3, "field 3 should match")
+}
+
+@test
+fn test_make_struct_fields_deduplication()! {
+    var p = new()
+
+    p, let name_idx = try intern_string(p, "foo")
+    p, let struct_idx = try make_struct_type(p, name_idx)
+
+    p, let type1 = try make_primitive_type(p, tag.u32_type)
+    let types = [type1]
+
+    p, let idx1 = try make_struct_fields(p, struct_idx, types)
+    let len_after_first = len(p.extra)
+
+    p, let idx2 = try make_struct_fields(p, struct_idx, types)
+    let len_after_second = len(p.extra)
+
+    try assert(idx1 == idx2, "should return same index for same struct")
+    try assert(len_after_second == len_after_first, "extras should not grow")
+}
+
+@test
+fn test_get_struct_fields_not_set()! {
+    var p = new()
+
+    p, let name_idx = try intern_string(p, "empty_struct")
+    p, let struct_idx = try make_struct_type(p, name_idx)
+
+    let result = try get_struct_fields(p, struct_idx)
+    try assert(result == null, "should return null for struct without fields")
+}
+
+@test
+fn test_make_struct_fields_empty_array()! {
+    var p = new()
+
+    p, let name_idx = try intern_string(p, "empty")
+    p, let struct_idx = try make_struct_type(p, name_idx)
+
+    let empty_types = try make([]index, 0, 0)
+    p, let fields_idx = try make_struct_fields(p, struct_idx, empty_types)
+
+    let retrieved = try get_struct_fields(p, struct_idx)
+    try assert(retrieved != null, "should return non-null for empty fields")
+    try assert(len(?retrieved) == 0, "should have 0 fields")
+}
+
+@test
+fn test_make_return_type()! {
+    var p = new()
+
+    p, let type1 = try make_primitive_type(p, tag.u32_type)
+    p, let type2 = try make_primitive_type(p, tag.u64_type)
+    let types = [type1, type2]
+
+    p, let ret_idx = try make_return_type(p, types)
+
+    try assert(ret_idx != NULL_IDX, "should return valid index")
+    try assert(try is_return_type(p, ret_idx), "should be return_type")
+
+    let count = try get_return_type_count(p, ret_idx)
+    try assert(count == 2, "should have 2 types")
+
+    let t1 = try get_return_type_at(p, ret_idx, 0)
+    try assert(t1 == type1, "type 0 should match")
+
+    let t2 = try get_return_type_at(p, ret_idx, 1)
+    try assert(t2 == type2, "type 1 should match")
+}
+
+@test
+fn test_return_type_deduplication()! {
+    var p = new()
+
+    p, let type1 = try make_primitive_type(p, tag.i32_type)
+    p, let type2 = try make_primitive_type(p, tag.bool_type)
+    let types = [type1, type2]
+
+    p, let idx1 = try make_return_type(p, types)
+    let len_after_first = len(p.extra)
+
+    p, let idx2 = try make_return_type(p, types)
+    let len_after_second = len(p.extra)
+
+    try assert(idx1 == idx2, "should return same index for same types")
+    try assert(len_after_second == len_after_first, "extras should not grow")
+}
+
+@test
+fn test_return_type_single()! {
+    var p = new()
+
+    p, let type1 = try make_primitive_type(p, tag.u64_type)
+    let types = [type1]
+
+    p, let ret_idx = try make_return_type(p, types)
+
+    try assert(try is_return_type(p, ret_idx), "should be return_type")
+
+    let count = try get_return_type_count(p, ret_idx)
+    try assert(count == 1, "should have 1 type")
+
+    let t1 = try get_return_type_at(p, ret_idx, 0)
+    try assert(t1 == type1, "type 0 should match")
+}

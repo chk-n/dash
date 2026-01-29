@@ -1,0 +1,700 @@
+// pool.ds interns types at the IR level. this means (high level) semantic
+// types such as any, string, array, optional, error dont exist.
+lib intern
+
+use "dash/map"
+use "dash/convert"
+use "dash/hash/rapidhash"
+
+pub error string_contains_null{str string}
+
+// handles deduplicating types and strings
+pub struct pool {
+    items       []item
+    items_map   map.map[u64, index]
+    strings     []byte
+    extra       []index
+}
+
+// index points to items array
+pub type index u32
+
+pub let NULL_IDX = index(4_294_967_295)
+
+// primitive type indices (initialised in order by init function)
+pub let U8_TYPE_IDX = index(0)
+pub let U16_TYPE_IDX = index(1)
+pub let U32_TYPE_IDX = index(2)
+pub let U64_TYPE_IDX = index(3)
+pub let I8_TYPE_IDX = index(4)
+pub let I16_TYPE_IDX = index(5)
+pub let I32_TYPE_IDX = index(6)
+pub let I64_TYPE_IDX = index(7)
+pub let CHAR_TYPE_IDX = index(8)
+pub let F32_TYPE_IDX = index(9)
+pub let F64_TYPE_IDX = index(10)
+pub let BOOL_TYPE_IDX = index(11)
+
+struct item {
+    tag tag
+    x   u32
+}
+
+pub enum tag {
+    const_u32
+    const_u64
+    const_char
+    const_f32
+    const_f64
+    const_false
+    const_true
+    const_string
+    const_null
+
+    u8_type
+    u16_type
+    u32_type
+    u64_type
+    i8_type
+    i16_type
+    i32_type
+    i64_type
+    char_type
+    f32_type
+    f64_type
+    bool_type
+
+    pointer_type
+    array_type
+    // x points to extra with 2 elements
+    // first is index to interned name and
+    // second is index to types
+    struct_type
+    // x points to extras: [count, type1, type2, ...]
+    // hashed by field types for deduplication (no name)
+    anon_struct_type
+    struct_generic_type
+    enum_type
+    generic_type
+    function_type
+    function_error_type
+    function_generic_type
+    function_generic_error_type
+    // x points to extras with field data, hashed by struct type index
+    struct_field
+    // x points to extras: [count, type1, type2, ...]
+    // hashed by the types themselves for deduplication
+    return_type
+    // x points to extras with signature data, hashed by function type index
+    // Extras layout: [fn_type, param_count, p1, p2, ..., ret_count, r1, r2, ...]
+    function_signature
+    // slot_type: reinterpretable storage of size T
+    // x is the inner type index (e.g., u64 for a 64-bit slot)
+    slot_type
+}
+
+// do not change the order of the items
+let primitive_types = [
+    item{tag: tag.u8_type, x: NULL_IDX},
+    item{tag: tag.u16_type, x: NULL_IDX},
+    item{tag: tag.u32_type, x: NULL_IDX},
+    item{tag: tag.u64_type, x: NULL_IDX},
+    item{tag: tag.i8_type, x: NULL_IDX},
+    item{tag: tag.i16_type, x: NULL_IDX},
+    item{tag: tag.i32_type, x: NULL_IDX},
+    item{tag: tag.i64_type, x: NULL_IDX},
+    item{tag: tag.char_type, x: NULL_IDX},
+    item{tag: tag.f32_type, x: NULL_IDX},
+    item{tag: tag.f64_type, x: NULL_IDX},
+    item{tag: tag.bool_type, x: NULL_IDX},
+]
+
+// default constant values
+let default_constants = [
+    item{tag: tag.const_true, x: 1},
+    item{tag: tag.const_false, x: 0},
+    item{tag: tag.const_null, x: 0},
+    item{tag: tag.const_u32, x: 0},
+    item{tag: tag.const_u32, x: 1},
+    item{tag: tag.const_u32, x: 2},
+]
+
+pub fn new() *pool {
+    var p = &pool{
+        items: [],
+        items_map: map.new[u64, index](),
+        strings: [],
+        extra: [],
+    }
+    p = init(p)
+    return p
+}
+
+pub fn make_primitive_type(p *pool, t tag)! *pool, index {   
+    let i = item{tag: t, x: NULL_IDX}
+    return try intern(p, i)
+}
+
+pub fn make_pointer_type(p *pool, inner index)! *pool, index {
+    let i = item{tag: tag.pointer_type, x: inner}
+    return try intern(p, i)
+}
+
+pub fn make_array_type(p *pool, inner index)! *pool, index {
+    let i = item{tag: tag.array_type, x: inner}
+    return try intern(p, i)
+}
+
+pub fn make_slot_type(p *pool, inner index)! *pool, index {
+    let i = item{tag: tag.slot_type, x: inner}
+    return try intern(p, i)
+}
+
+pub fn make_enum_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.enum_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_struct_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.struct_type, x: name}
+    return try intern(p, i)
+}
+
+// make_struct_fields stores field type information for a struct type, using custom
+// hashing strategy to make the fields queryable
+pub fn make_struct_fields(p *pool, typ index, types []index)! *pool, index {
+    // Hash based on struct type index for lookup
+    let h = try hash_by_type_index(tag.struct_field, typ)
+    let existing = try map.get_val(p.items_map, h)
+    if existing != null {
+        return p, ?existing
+    }
+
+    // store metadata in extras: [typ, field_count, type1, type2, ...]
+    let extras_start = index(u32(len(p.extra)))
+    var extra = try append(p.extra, typ)  
+    let field_count = u32(len(types))
+    extra = try append(extra, index(field_count))  
+    for i = 0; i < len(types); i = i + 1 {
+        let field_type = try get(types, i)
+        extra = try append(extra, field_type)
+    }
+
+    var p = &pool{..p, extra: extra}
+
+    let field_item = item{tag: tag.struct_field, x: u32(extras_start)}
+    let item_idx = index(u32(len(p.items)))
+    let items = try append(p.items, field_item)
+    let m = try map.insert(p.items_map, h, item_idx)
+
+    return &pool{..p, items: items, items_map: m}, item_idx
+}
+
+// make_anon_struct_type creates or returns an anonymous struct type identified by its field types.
+// Unlike named structs, anonymous structs are deduplicated by their field types.
+pub fn make_anon_struct_type(p *pool, field_types []index)! *pool, index {
+    // hash based on field types for deduplication
+    var hash_input = try make([]u8, 0, len(field_types) * 4 + 1)
+    hash_input = try append(hash_input, u8(tag.anon_struct_type))
+    for i = 0; i < len(field_types); i++ {
+        let t = try get(field_types, i)
+        let bytes = try convert.to_u8_array(u32(t))
+        hash_input = try append(hash_input, bytes)
+    }
+    let h = try rapidhash.nano(hash_input, 0)
+
+    let existing = try map.get_val(p.items_map, h)
+    if existing != null {
+        return p, ?existing
+    }
+
+    // store in extras: [count, type1, type2, ...]
+    let extras_start = index(u32(len(p.extra)))
+    var extra = try append(p.extra, index(u32(len(field_types))))
+    for i = 0; i < len(field_types); i++ {
+        let t = try get(field_types, i)
+        extra = try append(extra, t)
+    }
+
+    var p = &pool{..p, extra: extra}
+
+    let struct_item = item{tag: tag.anon_struct_type, x: u32(extras_start)}
+    let item_idx = index(u32(len(p.items)))
+    let items = try append(p.items, struct_item)
+    let m = try map.insert(p.items_map, h, item_idx)
+
+    return &pool{..p, items: items, items_map: m}, item_idx
+}
+
+// make_return_type creates or retrieves a return_type from the pool.
+pub fn make_return_type(p *pool, types []index)! *pool, index {
+    // hash based on the types for deduplication
+    var hash_input = try make([]u8, 0, len(types) * 4 + 1)
+    hash_input = try append(hash_input, u8(tag.return_type))
+    for i = 0; i < len(types); i++ {
+        let t = try get(types, i)
+        let bytes = try convert.to_u8_array(u32(t))
+        hash_input = try append(hash_input, bytes)
+    }
+    let h = try rapidhash.nano(hash_input, 0)
+
+    let existing = try map.get_val(p.items_map, h)
+    if existing != null {
+        return p, ?existing
+    }
+
+    // Store in extras: [count, type1, type2, ...]
+    let extras_start = index(u32(len(p.extra)))
+    var extra = try append(p.extra, index(u32(len(types))))
+    for i = 0; i < len(types); i++ {
+        let t = try get(types, i)
+        extra = try append(extra, t)
+    }
+
+    var p = &pool{..p, extra: extra}
+
+    let ret_item = item{tag: tag.return_type, x: u32(extras_start)}
+    let item_idx = index(u32(len(p.items)))
+    let items = try append(p.items, ret_item)
+    let m = try map.insert(p.items_map, h, item_idx)
+
+    return &pool{..p, items: items, items_map: m}, item_idx
+}
+
+pub fn is_return_type(p *pool, idx index)! bool {
+    if idx == NULL_IDX { return false }
+    let item = try get(p.items, idx)
+    return item.tag == tag.return_type
+}
+
+// get_return_type_count returns the number of types in a return_type
+pub fn get_return_type_count(p *pool, idx index)! u32 {
+    let item = try get(p.items, idx)
+    if item.tag != tag.return_type {
+        return 0
+    }
+    let count = try get(p.extra, item.x)
+    return u32(count)
+}
+
+// get_return_type_at returns the type at a specific index in a return_type
+pub fn get_return_type_at(p *pool, idx index, pos u32)! index {
+    let item = try get(p.items, idx)
+    if item.tag != tag.return_type {
+        return NULL_IDX
+    }
+    // extras: [count, type1, type2, ...]
+    // so we add 1 to skip count
+    return try get(p.extra, item.x + 1 + pos)
+}
+
+// make_function_signature stores param and return type information for a function.
+pub fn make_function_signature(p *pool, fn_type index, params []index, returns []index)! *pool, index {
+    let h = try hash_by_type_index(tag.function_signature, fn_type)
+    let existing = try map.get_val(p.items_map, h)
+    if existing != null {
+        return p, ?existing
+    }
+
+    // store metadata in extras: [fn_type, param_count, p1, ..., ret_count, r1, ...]
+    let extras_start = index(u32(len(p.extra)))
+    var extra = try append(p.extra, fn_type)  
+
+    let param_count = u32(len(params))
+    extra = try append(extra, index(param_count))
+    for i = 0; i < len(params); i = i + 1 {
+        let param_type = try get(params, i)
+        extra = try append(extra, param_type)
+    }
+
+    let ret_count = u32(len(returns))
+    extra = try append(extra, index(ret_count))
+    for i = 0; i < len(returns); i = i + 1 {
+        let ret_type = try get(returns, i)
+        extra = try append(extra, ret_type)
+    }
+
+    var p = &pool{..p, extra: extra}
+
+    let sig_item = item{tag: tag.function_signature, x: u32(extras_start)}
+    let item_idx = index(u32(len(p.items)))
+    let items = try append(p.items, sig_item)
+    let m = try map.insert(p.items_map, h, item_idx)
+
+    return &pool{..p, items: items, items_map: m}, item_idx
+}
+
+// get_function_signature retrieves param and return types for a function.
+pub fn get_function_signature(p *pool, fn_type index)! ?[]index, ?[]index {
+    let h = try hash_by_type_index(tag.function_signature, fn_type)
+    let item_idx = try map.get_val(p.items_map, h)
+    if item_idx == null {
+        return null, null
+    }
+
+    let sig_item = try get(p.items, ?item_idx)
+    let extras_start = sig_item.x
+
+    // extras layout: [fn_type, param_count, p1, ..., ret_count, r1, ...]
+    let stored_fn_type = try get(p.extra, index(extras_start))
+    try assert(stored_fn_type == fn_type, "function type mismatch")
+
+    let param_count_idx = try get(p.extra, index(u32(extras_start) + 1))
+    let param_count = u32(param_count_idx)
+    var params = try make([]index, 0, param_count)
+    for i = u32(0); i < param_count; i = i + 1 {
+        let offset = u32(extras_start) + 2 + i
+        let param_type = try get(p.extra, index(offset))
+        params = try append(params, param_type)
+    }
+
+    let ret_count_offset = u32(extras_start) + 2 + param_count
+    let ret_count_idx = try get(p.extra, index(ret_count_offset))
+    let ret_count = u32(ret_count_idx)
+    var returns = try make([]index, 0, ret_count)
+    for i = u32(0); i < ret_count; i = i + 1 {
+        let offset = ret_count_offset + 1 + i
+        let ret_type = try get(p.extra, index(offset))
+        returns = try append(returns, ret_type)
+    }
+
+    return params, returns
+}
+
+pub fn make_struct_generic_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.struct_generic_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_generic_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.generic_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_function_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.function_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_function_error_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.function_error_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_function_generic_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.function_generic_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_function_generic_error_type(p *pool, name index)! *pool, index {
+    let i = item{tag: tag.function_generic_error_type, x: name}
+    return try intern(p, i)
+}
+
+pub fn make_const_u32(p *pool, v u32)! *pool, index {
+    let i = item{tag: tag.const_u32, x: v}
+    return try intern(p, i)
+}
+
+pub fn make_const_char(p *pool, v char)! *pool, index {
+    let i = item{tag: tag.const_char, x: u32(v)}
+    return try intern(p, i)
+}
+
+pub fn make_const_u64(p *pool, v u64)! *pool, index {
+    let high = u32(v >> 32)
+    let low = u32(v)
+
+    let h = try hash_const_u64(v)
+    let res = try map.get_val(p.items_map, h)
+    if res != null {
+        return p, ?res
+    }
+
+    var p = p
+    p, let high_idx = try make_const_u32(p, high)
+    p, let low_idx = try make_const_u32(p, low)
+
+    let extra_idx = index(u32(len(p.extra)))
+    var extra = try append(p.extra, high_idx)
+    extra = try append(extra, low_idx)
+    p = &pool{..p, extra: extra}
+
+    let i = item{tag: tag.const_u64, x: u32(extra_idx)}
+    let idx = index(u32(len(p.items)))
+    let items = try append(p.items, i)
+    let m = try map.insert(p.items_map, h, idx)
+
+    return &pool{..p, items: items, items_map: m}, idx
+}
+
+pub fn make_const_bool(p *pool, v bool)! *pool, index {
+    let i = if v {
+        item{tag: tag.const_true, x: 1}
+    } else {
+        item{tag: tag.const_false, x: 0}
+    }
+    return try intern(p, i)
+}
+
+pub fn make_const_null(p *pool)! *pool, index {
+    let i = item{tag: tag.const_null, x: 0}
+    return try intern(p, i)
+}
+
+pub fn intern(p *pool, i item)! *pool, index {
+    let h = try hash_item(i)
+    let res = try map.get_val(p.items_map, h)
+    if res != null {
+        return p, ?res
+    }
+
+    let idx = index(u32(len(p.items)))
+    let items = try append(p.items, i)
+    let m = try map.insert(p.items_map, h, idx)
+
+    return &pool{..p,
+        items:     items,
+        items_map: m,
+    }, idx
+}
+
+pub fn intern_string(p *pool, v string)! *pool, index {
+    try validate_string(v)
+
+    let h = try rapidhash.nano([]u8(v), 0)
+    let res = try map.get_val(p.items_map, h)
+    if res != null {
+        return p, ?res
+    }
+
+    let str_idx = index(u32(len(p.strings)))
+    let i = item{tag: tag.const_string, x: str_idx}
+    var strings = try append(p.strings, []byte(v))
+    strings = try append(strings, byte(0))
+
+    let idx = index(u32(len(p.items)))
+    let items = try append(p.items, i)
+    let m = try map.insert(p.items_map, h, idx)
+
+    return &pool{..p,
+        items:     items,
+        strings:   strings,
+        items_map: m,
+    }, idx
+}
+
+pub fn get_u32(p *pool, idx index)! u32 {
+    let item = try get(p.items, idx)
+    try assert(item.tag == tag.const_u32, "expected const_u32")
+    return item.x
+}
+
+pub fn get_u64(p *pool, idx index)! u64 {
+    let item = try get(p.items, idx)
+    try assert(item.tag == tag.const_u64, "expected const_u64")
+    let extra_idx = item.x
+    let high_idx = try get(p.extra, extra_idx)
+    let low_idx = try get(p.extra, extra_idx + 1)
+    let high_item = try get(p.items, high_idx)
+    let low_item = try get(p.items, low_idx)
+    return (u64(high_item.x) << 32) | u64(low_item.x)
+}
+
+pub fn get_bool(p *pool, idx index)! bool {
+    let item = try get(p.items, idx)
+    match item.tag {
+    case tag.const_true:
+        return true
+    case tag.const_false:
+        return false
+    case _:
+        try assert(false, "expected const_true or const_false")
+        return false
+    }
+}
+
+pub fn get_string(p *pool, idx index) string {
+    let start = try get(p.items, idx).x
+    var end = start
+    for end < u32(len(p.strings)) {
+        let ch = try get(p.strings, end)
+        if ch == 0 {
+            break
+        }
+        end = end + 1
+    }
+    return try string(slice(p.strings, start, end))
+}
+
+pub fn is_integer(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    // TODO: optimise by looking at default items e..g index less than X
+    let item = try get(p.items, idx)
+    match item.tag {
+    case tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+         tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type:
+        return true
+    case _:
+        return false
+    }
+}
+
+pub fn is_char(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    let item = try get(p.items, idx)
+    return item.tag == tag.char_type
+}
+
+pub fn is_pointer(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    let item = try get(p.items, idx)
+    return item.tag == tag.pointer_type
+}
+
+pub fn is_bool(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    // TODO: optimise by looking at default items e..g index less than X
+    let item = try get(p.items, idx)
+    return item.tag == tag.bool_type
+}
+
+pub fn is_float(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    let item = try get(p.items, idx)
+    match item.tag {
+    case tag.f32_type, tag.f64_type:
+        return true
+    case _:
+        return false
+    }
+}
+
+pub fn is_function(p *pool, idx index)! bool {
+    if idx == NULL_IDX {
+        return false
+    }
+    let item = try get(p.items, idx)
+    match item.tag {
+    case tag.function_type, tag.function_error_type,
+         tag.function_generic_type, tag.function_generic_error_type:
+        return true
+    case _:
+        return false
+    }
+}
+
+pub fn lookup(p *pool, idx index)! item {
+    return try get(p.items, idx)
+}
+
+// TODO: explore using iterator instead of returning array directly
+// get_struct_fields retrieves the field type indices for a struct type.
+pub fn get_struct_fields(p *pool, typ index)! ?[]index {
+    let h = try hash_by_type_index(tag.struct_field, typ)
+    let item_idx = try map.get_val(p.items_map, h)
+    if item_idx == null {
+        return null
+    }
+
+    let field_item = try get(p.items, ?item_idx)
+    let extras_start = field_item.x
+
+    // extras layout: [typ, field_count, type1, type2, ...]
+    let stored_typ = try get(p.extra, index(extras_start))
+    try assert(stored_typ == typ, "type mismatch")
+
+    let field_count_idx = try get(p.extra, index(u32(extras_start) + 1))
+    let field_count = u32(field_count_idx)
+
+    var result = try make([]index, 0, field_count)
+    for i = u32(0); i < field_count; i = i + 1 {
+        let offset = u32(extras_start) + 2 + i
+        let field_type = try get(p.extra, index(offset))
+        result = try append(result, field_type)
+    }
+
+    return result
+}
+
+// get_anon_struct_fields retrieves the field type indices for an anonymous struct type.
+pub fn get_anon_struct_fields(p *pool, typ index)! []index {
+    let item = try get(p.items, typ)
+    if item.tag != tag.anon_struct_type {
+        raise error("not an anon_struct_type")
+    }
+
+    let extras_start = item.x
+
+    // extras layout: [count, type1, type2, ...]
+    let field_count_idx = try get(p.extra, index(extras_start))
+    let field_count = u32(field_count_idx)
+
+    var result = try make([]index, 0, field_count)
+    for i = u32(0); i < field_count; i = i + 1 {
+        let offset = extras_start + 1 + i
+        let field_type = try get(p.extra, index(offset))
+        result = try append(result, field_type)
+    }
+
+    return result
+}
+
+fn validate_string(s string)! {
+    // let bytes = []u8(s)
+    for i = 0; i < len(s); i = i + 1 {
+        let b = try get(s, i)
+        if b == byte(0) {
+            raise string_contains_null{str: s}
+        }
+    }
+}
+
+// initialise pool with default items
+fn init(p *pool) *pool {
+    var p = p
+    for i = 0; i < len(primitive_types); i = i + 1 {
+        let pt = try get(primitive_types, i)
+        p, let _ = try intern(p, pt)
+    }
+    for i = 0; i < len(default_constants); i = i + 1 {
+        let dc = try get(default_constants, i)
+        p, let _ = try intern(p, dc)
+    }
+    return p
+}
+
+fn hash_const_u64(v u64)! u64 {
+    let k1 = u8(tag.const_u64)
+    let k2 = try convert.to_u8_array(v)
+    let k = append(k2, k1)
+    return try rapidhash.nano(k, 0)
+}
+
+fn hash_item(i item)! u64 {
+    let k1 = u8(i.tag)
+    let k2 = try convert.to_u8_array(i.x)
+    let k = append(k2, k1)
+    return try rapidhash.nano(k, 0)
+}
+
+// Custom hash strategy for lookups by type index.
+// Used for items that need to be queryable by their associated type
+// (e.g., struct fields queryable by struct type, function signatures by function type).
+// The tag is included in the hash to avoid collisions between different item types.
+fn hash_by_type_index(t tag, typ index)! u64 {
+    let k1 = u8(t)
+    let k2 = try convert.to_u8_array(u32(typ))
+    let k = append(k2, k1)
+    return try rapidhash.nano(k, 0)
+}
