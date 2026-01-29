@@ -816,6 +816,13 @@ fn parse_statement_in_block(p parser)! parser, ast.index {
             try parse_defer_statement(p)
         case lexer.tag.MATCH:
             try parse_match_statement(p)
+        // allow expressions as statements (for 'if' and 'match' expressions)
+        case lexer.tag.INT, lexer.tag.FLOAT, lexer.tag.STRING,
+             lexer.tag.TRUE, lexer.tag.FALSE, lexer.tag.NONE,
+             lexer.tag.CHAR, lexer.tag.LBRACK, lexer.tag.LBRACE,
+             lexer.tag.LPAREN, lexer.tag.SUB, lexer.tag.NOT, lexer.tag.LNOT,
+             lexer.tag.AND, lexer.tag.MUL:
+            try parse_expression_list(p, lexer.tag.RBRACE)
         case _:
             var p = try add_error(p, unexpected_statement{i: p.tkn_i})
             p = next_token(p)
@@ -888,15 +895,18 @@ fn parse_assignment_statement(p parser)! parser, ast.index {
 
     p, let decls = try add_extra(p, ast.tag.decl_list, ast.NULL_TKN, extra)
     
-    // parse expression list but break once
-    // no comma found
+    // parse expression list but break once no comma found
+    // Note: IF expressions are only allowed here (after =)
     var extra = try make([]ast.index, 0, 3)
     for !is_tag(p, lexer.tag.EOF) {
-        p, let node = try parse_expression(p, precedence.none)
+        var node = ast.NULL_IDX
+        if is_tag(p, lexer.tag.IF) {
+            p, node = try parse_if_statement(p)
+        } else {
+            p, node = try parse_expression(p, precedence.none)
+        }
         if node == ast.NULL_IDX {
             break
-            // TODO: return or continue?
-            // return p, node
         }
         extra = try append(extra, node)
         if is_tag(p, lexer.tag.COMMA) {
