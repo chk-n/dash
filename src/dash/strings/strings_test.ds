@@ -1,0 +1,115 @@
+lib strings
+
+
+@test
+fn test_equal()! {
+    let tests = [
+        {"", "", true},
+        {"a", "a", true},
+        {"hello", "hello", true},
+        {"hello ", "hello", false},
+        {"hello", "hello ", false},
+        {"", "a", false},
+        {"a", "", false},
+        {"abc", "abd", false},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try equal(tc.0, tc.1)
+        try assert(got == tc.2, "equal test failed for index " + string(i))
+    }
+}
+
+@test
+fn test_concat()! {
+    let tests = [
+        {"", "", ""},
+        {"a", "", "a"},
+        {"", "b", "b"},
+        {"hello", "world", "helloworld"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try concat(tc.0, tc.1)
+        try assert(try equal(got, tc.2), "concat test failed for index " + string(i))
+    }
+}
+
+@test
+fn test_contains()! {
+    let tests = [
+        {"", "", true},
+        {"", "a", false},
+        {"", "ab", false},
+
+        {"hello", "", true},
+        {"hello", "h", true},
+        {"hello", "he", true},
+        {"hello", "hel", true},
+        {"hello", "hell", true},
+        {"hello", "hello", true},
+        {"hello", "ell", true},
+        {"hello", "ello", true},
+        {"hello", "xyz", false},
+     ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try contains(tc.0, tc.1)
+        try assert(got == tc.2, "contains test failed for index " + string(i))
+    }
+}
+
+@test
+fn test_split()! {
+    // Test empty delimiter returns empty array
+    let empty_delim = try split("abc", "")
+    try assert(len(empty_delim) == 0, "empty delimiter should return empty array")
+
+    let tests = [
+        // {input, delimiter, [expected parts]}
+        {"", ",", [""]},
+        {"a,", ",", ["a", ""]},
+        {",a", ",", ["", "a"]},
+        {"a,,b", ",", ["a", "", "b"]},
+        {"a,b,c,d", ",", ["a", "b", "c", "d"]},
+        {",,,", ",", ["", "", "", ""]},
+        {"a b c", ",", ["a b c"]},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try split(tc.0, tc.1)
+        let want = tc.2
+
+        try assert(len(got) == len(want), "split count did not match for test " + string(i))
+
+        for j = 0; j < len(want); j++ {
+            let got_part = try get(got, j)
+            let want_part = try get(want, j)
+            try assert(got_part == want_part, "split part mismatch at index " + string(j) + " for test " + string(i))
+        }
+    }
+}
+
+@test
+fn test_trim()! {
+    let tests = [
+        {"", ""},
+        {"   ", ""},
+        {"hello", "hello"},
+        {"  hello", "hello"},
+        {"hello  ", "hello"},
+        {"  hello  ", "hello"},
+        {"\t\n\r ", ""},
+        {" \thello\n ", "hello"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try trim(tc.0)
+        try assert(got == tc.1, "trim test failed for index " + string(i))
+    }
+}

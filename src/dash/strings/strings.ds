@@ -1,0 +1,152 @@
+lib strings
+
+
+// equal compares two strings byte-by-byte for equality.
+pub fn equal(a, b string)! bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i = 0; i < len(a); i++ {
+        if try get(a, i) != try get(b, i) {
+            return false
+        }
+    }
+    return true
+}
+
+// concat joins two strings into a new string.
+pub fn concat(a, b string)! string {
+    var buf = try make([]byte, 0, len(a)+len(b))
+    buf = append(buf, []byte(a))
+    buf = append(buf, []byte(b))
+    return string(buf)
+}
+
+// contains checks if str contains substr as a substring.
+pub fn contains(str, substr string)! bool {
+    if len(substr) == 0 {
+        return true
+    }
+
+    // check each position in str
+    for i = 0; i <= len(str) - len(substr); i++ {
+        var found = true
+        for j = 0; j < len(substr); j++ {
+            let chi = try get(str, i + j)
+            let chj = try get(substr, j)
+            if chi != chj {
+                found = false
+                break
+            }
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+// split divides str into substrings separated by delimiter.
+pub fn split(str, delimiter string)! []string {
+    var parts = try make([]string, 0, 1)
+
+    if len(delimiter) == 0 {
+        return parts
+    }
+
+    if len(str) == 0 {
+        parts = append(parts, "")
+        return parts
+    }
+
+    var idx = 0
+    for {
+        if idx > len(str) {
+            break
+        }
+
+        if idx == len(str) {
+            // we are at the end, add empty string to
+            // handle case where delimeter is at end
+            parts = append(parts, "")
+            break
+        }
+
+        let rest = try slice(str, idx, -1)
+        let pos = try index_of(rest, delimiter)
+
+        if pos == -1 {
+            // no more delimiters, add the rest
+            parts = append(parts, rest)
+            break
+        }
+
+        // add the part before the delimiter
+        let part = try slice(rest, 0, pos)
+        parts = append(parts, part)
+        idx = idx + pos + len(delimiter)
+    }
+
+    return parts
+}
+
+// trim removes leading and trailing whitespace from str.
+pub fn trim(str string)! string {
+    if len(str) == 0 {
+        return str
+    }
+
+    // find first non-whitespace
+    var start = 0
+    for start < len(str) {
+        let ch = try get(str, start)
+        if !is_whitespace(ch) {
+            break
+        }
+        start = start + 1
+    }
+
+    // its all whitespace
+    if start == len(str) {
+        return ""
+    }
+
+    // find last non-whitespace
+    var end = len(str) - 1
+    for end >= start {
+        let ch = try get(str, end)
+        if !is_whitespace(ch) {
+            break
+        }
+        end = end - 1
+    }
+
+    return try slice(str, start, end + 1)
+}
+
+fn index_of(str, substr string)! i64 {
+    if len(substr) == 0 {
+        return -1
+    }
+
+    // check each position in str
+    for i = 0; i <= len(str) - len(substr); i++ {
+        var found = true
+        for j = 0; j < len(substr); j++ {
+            let chi = try get(str, i + j)
+            let chj = try get(substr, j)
+            if chi != chj {
+                found = false
+                break
+            }
+        }
+        if found {
+            return i
+        }
+    }
+    return -1
+}
+
+fn is_whitespace(ch byte) bool {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
+}
