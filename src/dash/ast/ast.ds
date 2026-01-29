@@ -656,11 +656,13 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = append(buf, ')')
 
     case tag.dot:
+        buf = append(buf, '(')
         buf = try to_string(a, data.x, buf)
         let src_idx = try get(a.tkns, node.token).start
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
         buf = try to_string(a, data.y, buf)
+        buf = append(buf, ')')
 
     case tag.call:
         buf = try to_string(a, data.x, buf)   
