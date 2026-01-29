@@ -181,11 +181,14 @@ fn test_bool()! {
 @test
 fn test_char()! {
     let tests = [
-        {`'a'`, tag.CHAR},        
-        {`'\n'`, tag.CHAR},       
-        {`'`, tag.ILLEGAL},                   
-        {`''`, tag.ILLEGAL},                   
-        {`'a`, tag.ILLEGAL},                   
+        {`'a'`, tag.CHAR},
+        {`'\n'`, tag.CHAR},
+        {`'\u41'`, tag.CHAR},
+        {`'\u00E4'`, tag.CHAR},
+        {`'\u0001F600'`, tag.CHAR},
+        {`'`, tag.ILLEGAL},
+        {`''`, tag.ILLEGAL},
+        {`'a`, tag.ILLEGAL},
     ]
     
     for i = 0; i < len(tests); i++ {

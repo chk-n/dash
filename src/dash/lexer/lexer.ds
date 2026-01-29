@@ -216,25 +216,37 @@ fn read_char(l *lexer)! *lexer, token {
     var l = l
     let idx = l.idx
 
-    // consume '
+    // consume opening '
     l = try next_ch(l)
+
+    if l.idx >= len_src(l) {
+        return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
+    }
+
     if try cur_ch(l) == '\\' {
+        l = next_ch(l)
+        if l.idx >= len_src(l) {
+            return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
+        }
+        if try cur_ch(l) == 'u' {
+            l = next_ch(l)
+            for l.idx < len_src(l) && try cur_ch(l) != '\'' {
+                l = next_ch(l)
+            }
+        } else {
+            l = next_ch(l)
+        }
+    } else {
+        // regular character
         l = next_ch(l)
     }
 
-    // TODO: handle unicode code point
-    // if l.buf[l.idx] == 'u' {
-        // l = next_ch(l)
-    // }
-
-    // consume character
-    l = next_ch(l)
-    if try cur_ch(l) != '\'' {
+    if l.idx >= len_src(l) || try cur_ch(l) != '\'' {
         return l, token{tag: tag.ILLEGAL, start: idx, end: l.idx-1}
     }
-    // consume '
-    l = next_ch(l)
 
+    // consume closing '
+    l = next_ch(l)
     let tkn = token{tag: tag.CHAR, start: idx, end: l.idx-1}
     return &lexer{..l, prev_tag: tkn.tag}, tkn
 }
