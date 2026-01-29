@@ -66,3 +66,238 @@ fn test_u64_to_u8_array()! {
         }
     }
 }
+
+@test
+fn test_to_string_u8()! {
+    let cases = []u8([0, 255])
+    let expected = ["0", "255"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_u8 result to match")
+    }
+}
+
+@test
+fn test_to_string_u16()! {
+    let cases = []u16([0, 65535])
+    let expected = ["0", "65535"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_u16 result to match")
+    }
+}
+
+@test
+fn test_to_string_u32()! {
+    let cases = []u32([0, 4294967295])
+    let expected = ["0", "4294967295"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_u32 result to match")
+    }
+}
+
+@test
+fn test_to_string_u64()! {
+    let cases = []u64([0, 1, 99, 100, 9999, 10000, 999999, 1000000, ~u64(0)])
+    let expected = ["0", "1", "99", "100", "9999", "10000", "999999", "1000000", "18446744073709551615"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_u64 result to match")
+    }
+}
+
+@test
+fn test_to_string_i8()! {
+    let cases = []i8([-128, 127])
+    let expected = ["-128", "127"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_i8 result to match")
+    }
+}
+
+@test
+fn test_to_string_i16()! {
+    let cases = []i16([-32768, 32767])
+    let expected = ["-32768", "32767"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_i16 result to match")
+    }
+}
+
+@test
+fn test_to_string_i32()! {
+    let cases = []i32([-2147483648, 2147483647])
+    let expected = ["-2147483648", "2147483647"]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_i32 result to match")
+    }
+}
+
+@test
+fn test_to_string_i64()! {
+    let cases = []i64([
+        -9223372036854775808, -1000000, -100, -1,
+        0, 1, 99, 100, 10000, 1000000, 9223372036854775807
+    ])
+    let expected = [
+        "-9223372036854775808", "-1000000", "-100", "-1",
+        "0", "1", "99", "100", "10000", "1000000", "9223372036854775807"
+    ]
+
+    for i = 0; i < len(cases); i++ {
+        let x = try get(cases, i)
+        let want = try get(expected, i)
+        let got = try to_string(x)
+        try assert(got == want, "expected to_string_i64 result to match")
+    }
+}
+
+@test
+fn test_parse_u64()! {
+    // base 0
+    try assert(parse_u64("0xFF", 0) == 255, "auto detect hex")
+    try assert(parse_u64("0b1111", 0) == 15, "auto detect binary")
+    try assert(parse_u64("0X10", 0) == 16, "uppercase hex prefix")
+    try assert(parse_u64("0B10", 0) == 2, "uppercase binary prefix")
+    try assert(parse_u64("1234", 0) == 1234, "uppercase binary prefix")
+    // base 2
+    try assert(parse_u64("0", 2) == 0, "binary with prefix")
+    try assert(parse_u64("1111", 2) == 15, "binary with prefix")
+    try assert(parse_u64(
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        2
+    ) == ~u64(0), "max u64 in binary")
+    // base 10
+    try assert(parse_u64("0", 10) == 0, "decimal zero")
+    try assert(parse_u64("1", 10) == 1, "decimal one")
+    try assert(parse_u64("9", 10) == 9, "decimal nine")
+    try assert(parse_u64("255", 10) == 255, "decimal explicit")
+    try assert(parse_u64("456789", 10) == 456789, "decimal large")
+    try assert(parse_u64("000000000000000000000000001", 10) == 1, "uppercase binary prefix")
+    try assert(parse_u64("18446744073709551615", 10) == ~u64(0), "decimal max")
+    // base 16
+    try assert(parse_u64("0", 16) == 0, "hex with prefix")
+    try assert(parse_u64("FF", 16) == 255, "hex with prefix")
+    try assert(parse_u64("FFFFFFFFFFFFFFFF", 16) == ~u64(0), "hex with prefix")
+    // base 36
+    try assert(parse_u64("z", 36) == 35, "z in base 36")
+    try assert(parse_u64("10", 36) == 36, "10 in base 36")
+    try assert(parse_u64("zz", 36) == 1295, "zz in base 36")
+    // short prefix strings
+    try assert(parse_u64("01", 0) == 1, "01 as decimal")
+    try assert(parse_u64("00", 0) == 0, "00 as decimal")
+
+    try assert(parse_u64("10_0", 0) == 100, "decimal nine")
+    try assert(parse_u64("10___0", 0) == 100, "decimal nine")
+    try assert(parse_u64("1_000_000_0", 0) == 1_000_000_0, "decimal nine")
+    // validate errors
+    try assert_error(fn()! { try parse_u64("", 0) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("-0", 10) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("_0", 0) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("0_", 0) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("0b", 2) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("0B", 2) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("0x", 16) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("0X", 16) }, syntax_error)
+    try assert_error(fn()! {
+        try parse_u64("11111111111111111111111111111111111111111111111111111111111111110", 2)
+    }, overflow_error)
+    try assert_error(fn()! { try parse_u64("18446744073709551616", 10) }, overflow_error)
+    try assert_error(fn()! { try parse_u64("FFFFFFFFFFFFFFFF0", 16) }, overflow_error)
+    try assert_error(fn()! { try parse_u64("0", 1) }, base_error)
+    try assert_error(fn()! { try parse_u64("0", 37) }, base_error)
+    // digit exceeds base
+    try assert_error(fn()! { try parse_u64("2", 2) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("a", 10) }, syntax_error)
+    try assert_error(fn()! { try parse_u64("g", 16) }, syntax_error)
+}
+
+@test
+fn test_parse_char()! {
+    try assert(parse_char(`'a'`) == 97, "a")
+    try assert(parse_char(`'Z'`) == 90, "Z")
+    try assert(parse_char(`'0'`) == 48, "0")
+    try assert(parse_char(`' '`) == 32, "space")
+    try assert(parse_char(`'"'`) == 0x22, "double-quote")
+    
+    // escapes characters
+    try assert(parse_char(`'\n'`) == 0x0A, "newline")
+    try assert(parse_char(`'\t'`) == 0x09, "tab")
+    try assert(parse_char(`'\r'`) == 0x0D, "carriage return")
+    try assert(parse_char(`'\a'`) == 0x07, "alert")
+    try assert(parse_char(`'\b'`) == 0x08, "backspace")
+    try assert(parse_char(`'\\'`) == 0x5C, "backslash")
+    try assert(parse_char(`'\''`) == 0x27, "single quote")
+    
+    // unicode
+    try assert(parse_char(`'\u41'`) == 0x41, "u41")
+    try assert(parse_char(`'\uFF'`) == 0xFF, "uFF")
+    try assert(parse_char(`'\u00E4'`) == 0x00E4, "u00E4")
+    try assert(parse_char(`'\u4E16'`) == 0x4E16, "u4E16")
+    try assert(parse_char(`'\u0001F600'`) == 0x1F600, "u0001F600")
+    try assert(parse_char(`'\u0010FFFD'`) == 0x10FFFD, "u0010FFFD")
+    try assert(parse_char(`'\uab'`) == 0xAB, "lowercase 2-digit")
+    try assert(parse_char(`'\uabcd'`) == 0xABCD, "lowercase 4-digit")
+    try assert(parse_char(`'\u0000abcd'`) == 0xABCD, "lowercase 8-digit")
+    try assert(parse_char(`'\uD7FF'`) == 0xD7FF, "just before surrogate range")
+    try assert(parse_char(`'\uE000'`) == 0xE000, "just after surrogate range")
+
+    // syntax errors
+    try assert_error(fn()! { try parse_char(`a'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'a`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`"a"`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'\na'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(``) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`''`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'ab'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'\x'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'\uGG'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'\u0'`) }, syntax_error)
+    try assert_error(fn()! { try parse_char(`'\u000'`) }, syntax_error)
+    // surrogates
+    try assert_error(fn()! { try parse_char(`'\uD800'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\uDFFF'`) }, invalid_codepoint)
+    // noncharacters
+    try assert_error(fn()! { try parse_char(`'\uFDD0'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\uFDEF'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\uFFFE'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\uFFFF'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\u0010FFFE'`) }, invalid_codepoint)
+    try assert_error(fn()! { try parse_char(`'\u0010FFFF'`) }, invalid_codepoint)
+    // exceeds max
+    try assert_error(fn()! { try parse_char(`'\u00110000'`) }, invalid_codepoint)
+}
+
+fn assert_error(f fn()!, err error)! {
+    var cnt = 0
+    f() catch e {
+        cnt = 1
+        try assert(e == err, "expected errors to match")
+    }
+    try assert(cnt == 1, "expected error")
+}

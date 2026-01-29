@@ -1,7 +1,10 @@
 lib convert
 
+use "dash/ascii"
+
 pub error unsupported_type{type string}
 
+// Converts an unsigned integer to big-endian byte representation.
 // TODO: set proper generic constraint
 pub fn to_u8_array[T any](x T)! []u8 {
     match x {
@@ -22,4 +25,307 @@ pub fn to_u8_array[T any](x T)! []u8 {
         return [x1, x2, x3, x4, x5, x6, x7, x8]
     }
     raise unsupported_type{type: ""}
+}
+
+pub error syntax_error
+pub error overflow_error
+pub error base_error
+pub error invalid_codepoint
+
+fn hex_val(ch byte)! u32 {
+    if '0' <= ch && ch <= '9' {
+        return u32(ch - '0')
+    }
+    if 'a' <= ch && ch <= 'f' {
+        return u32(ch - 'a' + 10)
+    }
+    if 'A' <= ch && ch <= 'F' {
+        return u32(ch - 'A' + 10)
+    }
+    raise syntax_error
+}
+
+fn parse_hex2(s string, off i64)! u32 {
+    let d0 = try hex_val(try get(s, off))
+    let d1 = try hex_val(try get(s, off + 1))
+    return (d0 << 4) | d1
+}
+
+fn parse_hex4(s string, off i64)! u32 {
+    let d0 = try hex_val(try get(s, off))
+    let d1 = try hex_val(try get(s, off + 1))
+    let d2 = try hex_val(try get(s, off + 2))
+    let d3 = try hex_val(try get(s, off + 3))
+    return (d0 << 12) | (d1 << 8) | (d2 << 4) | d3
+}
+
+fn parse_hex8(s string, off i64)! u32 {
+    let d0 = try hex_val(try get(s, off))
+    let d1 = try hex_val(try get(s, off + 1))
+    let d2 = try hex_val(try get(s, off + 2))
+    let d3 = try hex_val(try get(s, off + 3))
+    let d4 = try hex_val(try get(s, off + 4))
+    let d5 = try hex_val(try get(s, off + 5))
+    let d6 = try hex_val(try get(s, off + 6))
+    let d7 = try hex_val(try get(s, off + 7))
+    return (d0 << 28) | (d1 << 24) | (d2 << 20) | (d3 << 16) |
+           (d4 << 12) | (d5 << 8) | (d6 << 4) | d7
+}
+
+fn validate_codepoint(cp u32)! u32 {
+    if cp > 0x10FFFF {
+        raise invalid_codepoint
+    }
+    // Surrogates 0xD800-0xDFFF: subtraction wraps for cp < 0xD800
+    if (cp - 0xD800) < 0x800 {
+        raise invalid_codepoint
+    }
+    if cp >= 0xFDD0 && cp <= 0xFDEF {
+        raise invalid_codepoint
+    }
+    if (cp & 0xFFFE) == 0xFFFE {
+        raise invalid_codepoint
+    }
+    return cp
+}
+
+// Parses a character literal including escape sequences.
+// Accepts: 'x', '\n', '\t', '\r', '\a', '\b', '\\', '\''
+// Unicode escapes: '\uXX', '\uXXXX', '\uXXXXXXXX'
+// Rejects surrogates (D800-DFFF) and noncharacters.
+pub fn parse_char(s string)! u32 {
+    if len(s) < 3 {
+        raise syntax_error
+    }
+    if try get(s, 0) != '\'' || try get(s, len(s) - 1) != '\'' {
+        raise syntax_error
+    }
+    let inner_len = len(s) - 2
+
+    if inner_len == 1 {
+        let ch = try get(s, 1)
+        if ch == '\\' {
+            raise syntax_error
+        }
+        return u32(ch)
+    }
+
+    if try get(s, 1) != '\\' {
+        raise syntax_error
+    }
+
+    let esc = try get(s, 2)
+
+    if esc != 'u' {
+        if inner_len != 2 {
+            raise syntax_error
+        }
+        return match esc {
+            case 'a':  u32(0x07)
+            case 'b':  u32(0x08)
+            case 'n':  u32(0x0A)
+            case 'r':  u32(0x0D)
+            case 't':  u32(0x09)
+            case '\'': u32(0x27)
+            case '\\': u32(0x5C)
+            case _: raise syntax_error
+        }
+    }
+
+    let hex_len = inner_len - 2
+    let cp = match hex_len {
+        case 2: try parse_hex2(s, 3)
+        case 4: try parse_hex4(s, 3)
+        case 8: try parse_hex8(s, 3)
+        case _: raise syntax_error
+    }
+    return try validate_codepoint(cp)
+}
+
+// Converts a string to u64 by parsing characters until the end
+// of the string ignoring any underscoes within number. If the
+// base is 0 a prefix is required to determine the base:
+//  - "0b" and "0B" becomes base 2
+//  - "0x" and "0X" becomes base 16
+//  - default is base 10
+//
+// Error conditions
+//  - Empty string raises syntax_error
+//  - Invalid characters raises syntax_error
+//  - Underscore infront and/or after number raises syntax_error
+//  - Number overflow raises overflow_error
+//  - Invalid base raises base_error
+pub fn parse_u64(s string, base u8)! u64 {
+    if s == "" {
+        raise syntax_error
+    }
+
+    var s = s
+    var base = base
+    if base == 0 {
+        base = 10
+        let ch0 = try get(s, 0)
+        if len(s) > 2 && ch0 == '0' {
+            let ch1 = try get(s, 1)
+            if ch1 == 'b' || ch1 == 'B' {
+                s = try slice(s, 2, -1)
+                base = 2
+            } else if ch1 == 'x' || ch1 == 'X' {
+                s = try slice(s, 2, -1)
+                base = 16
+            }            
+        }
+    } else if base < 2 || base > 36 {
+        raise base_error
+    }
+
+    if try get(s, 0) == '_' || try get(s, len(s)-1) == '_' {
+        raise syntax_error
+    }
+
+    var n = u64(0)
+    for i = 0; i < len(s); i++ {
+        let ch = try ascii.to_lower(u8(get(s, i)))
+        if ch == '_' { next }
+
+        let d = if '0' <= ch && ch <= '9' {
+            ch - '0'
+        } else if 'a' <= ch && ch <= 'z' {
+            ch - 'a' + 10
+        } else {
+            raise syntax_error
+        }
+        
+        if u64(d) >= u64(base) {
+            raise syntax_error
+        } else if n > (~u64(0) / u64(base)) {
+            raise overflow_error
+        }
+        
+        n = n * u64(base)
+        let n1 = n + u64(d)
+        if n1 < n {
+            raise overflow_error
+        } 
+        n = n1
+    }
+    return n
+}
+
+// Converts an integer to its decimal string representation.
+// TODO: set proper generic constraint
+pub fn to_string[T any](x T)! string {
+    return match x {
+        case i8: to_string_i8(x)
+        case i16: to_string_i16(x)
+        case i32: to_string_i32(x)
+        case i64: to_string_i64(x)
+        case u8: to_string_u8(x)
+        case u16: to_string_u16(x)
+        case u32: to_string_u32(x)
+        case u64: to_string_u64(x)
+        case _: raise unsupported_type{type: ""}
+    }
+}
+
+let radix_100 = "00010203040506070809101112131415161718192021222324" +
+                 "25262728293031323334353637383940414243444546474849" +
+                 "50515253545556575859606162636465666768697071727374" +
+                 "75767778798081828384858687888990919293949596979899"
+
+fn to_string_i8(x i8)! string {
+    var buf = try make([]byte, 4)
+    if x < 0 {
+        let abs_x = -u64(x)
+        buf, let idx = try unsigned_to_string(buf, abs_x)
+        buf = try put(buf, idx - 1, '-')
+        return try string(slice(buf, idx - 1, -1))
+    }
+    buf, let idx = try unsigned_to_string(buf, u64(i64(x)))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_i16(x i16)! string {
+    var buf = try make([]byte, 6)
+    if x < 0 {
+        let abs_x = -u64(x)
+        buf, let idx = try unsigned_to_string(buf, abs_x)
+        buf = try put(buf, idx - 1, '-')
+        return try string(slice(buf, idx - 1, -1))
+    }
+    buf, let idx = try unsigned_to_string(buf, u64(i16(x)))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_i32(x i32)! string {
+    var buf = try make([]byte, 11)
+    if x < 0 {
+        let abs_x = -u64(x)
+        buf, let idx = try unsigned_to_string(buf, abs_x)
+        buf = try put(buf, idx - 1, '-')
+        return try string(slice(buf, idx - 1, -1))
+    }
+    buf, let idx = try unsigned_to_string(buf, u64(i32(x)))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_i64(x i64)! string {
+    var buf = try make([]byte, 21)
+    if x < 0 {
+        let abs_x = -u64(x)
+        buf, let idx = try unsigned_to_string(buf, abs_x)
+        buf = try put(buf, idx - 1, '-')
+        return try string(slice(buf, idx - 1, -1))
+    }
+    buf, let idx = try unsigned_to_string(buf, u64(x))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_u8(x u8)! string {
+    var buf = try make([]byte, 3)
+    buf, let idx = try unsigned_to_string(buf, u64(x))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_u16(x u16)! string {
+    var buf = try make([]byte, 5)
+    buf, let idx = try unsigned_to_string(buf, u64(x))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_u32(x u32)! string {
+    var buf = try make([]byte, 10)
+    buf, let idx = try unsigned_to_string(buf, u64(x))
+    return try string(slice(buf, idx, -1))
+}
+
+fn to_string_u64(x u64)! string {
+    var buf = try make([]byte, 20)
+    buf, let idx = try unsigned_to_string(buf, x)
+    return try string(slice(buf, idx, -1))
+}
+
+// Fills buffer from the right using radix-100 lookup.
+fn unsigned_to_string(buf []byte, x u64)! []byte, i64 {
+    var x = x
+    var buf = buf
+    var idx = len(buf)
+
+    for x >= 100 {
+        idx = idx - 2
+        let i = x%100 * 2
+        buf = try put(buf, idx, []byte(slice(radix_100, i, i + 2)))
+        x = x / 100
+    }
+
+    if x < 10 {
+        idx = idx - 1
+        buf = try put(buf, idx, '0' + u8(x))
+    } else {
+        idx = idx - 2
+        let i = x%100 * 2
+        buf = try put(buf, idx, []byte(slice(radix_100, i, i + 2)))
+    }
+
+    return buf, idx
 }
