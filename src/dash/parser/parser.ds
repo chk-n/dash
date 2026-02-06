@@ -1920,8 +1920,11 @@ fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
         return try parse_struct_literal(p, prev)
     case lexer.tag.ADDADD, lexer.tag.SUBSUB:
         return try parse_increment_expression(p, prev)
+    // handle special infix operators
     case lexer.tag.CATCH:
         return try parse_catch_expression(p, prev)
+    case lexer.tag.ASSGN:
+        return try parse_infix_assignment(p, prev)
     case _:
     }
     
@@ -1940,6 +1943,37 @@ fn parse_infix_expression(p parser, prev ast.index)! parser, ast.index {
     })
 
     return p, exp
+}
+
+fn parse_infix_assignment(p parser, prev ast.index)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.ASSGN), "expected '='")
+
+    // Validate that prev is an identifier (not a complex expression like a.b or a[i])
+    let prev_node = try get(p.nodes, prev)
+    if prev_node.tag != ast.tag.ident {
+        var p = try add_error(p, expected_identifier{i: p.tkn_i})
+        return p, ast.NULL_IDX
+    }
+
+    let op_tkn = p.tkn_i
+    var p = next_token(p)
+
+    p, let decls = try add_extra(p, ast.tag.decl_list, ast.NULL_TKN, [prev])
+
+    p, let rhs = try parse_expression(p, precedence.assgn)
+    if rhs == ast.NULL_IDX {
+        return p, ast.NULL_IDX
+    }
+
+    p, let exps = try add_extra(p, ast.tag.expr_list, ast.NULL_TKN, [rhs])
+
+    p, let assign = try add_node(p, {
+        tag: ast.tag.assignment,
+        token: op_tkn,
+        data: {x: decls, y: exps},
+    })
+
+    return p, assign
 }
 
 fn parse_postfix_expression(p parser, prev ast.index)! parser, ast.index {
