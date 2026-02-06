@@ -1428,7 +1428,7 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
     match current_tag(p) {
     case lexer.tag.IDENT:
         return try parse_literal(p)
-    case lexer.tag.INT, lexer.tag.FLOAT,
+    case lexer.tag.INT, lexer.tag.HEX, lexer.tag.BIN, lexer.tag.FLOAT,
          lexer.tag.STRING, lexer.tag.TRUE, lexer.tag.FALSE,
          lexer.tag.NONE, lexer.tag.CHAR:
         return try parse_literal(p)

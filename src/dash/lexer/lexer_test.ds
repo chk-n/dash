@@ -160,6 +160,56 @@ fn test_number()! {
 }
 
 @test
+fn test_hex()! {
+    let tests = [
+        {"0xFF", tag.HEX, "0xFF"},
+        {"0xff", tag.HEX, "0xff"},
+        {"0XFF", tag.HEX, "0XFF"},
+        {"0x0", tag.HEX, "0x0"},
+        {"0xFF_FF", tag.HEX, "0xFF_FF"},
+        {"0xABCDEF", tag.HEX, "0xABCDEF"},
+        {"0x", tag.ILLEGAL, "0x"},
+        {"0x_FF", tag.ILLEGAL, "0x"},
+        {"0xFF_", tag.ILLEGAL, "0xFF_"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0, false)
+        let l, let tkn = try next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = try get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
+fn test_bin()! {
+    let tests = [
+        {"0b1010", tag.BIN, "0b1010"},
+        {"0B1010", tag.BIN, "0B1010"},
+        {"0b0", tag.BIN, "0b0"},
+        {"0b1010_1010", tag.BIN, "0b1010_1010"},
+        {"0b", tag.ILLEGAL, "0b"},
+        {"0b_1", tag.ILLEGAL, "0b"},
+        {"0b1_", tag.ILLEGAL, "0b1_"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let l = new([]byte(tc.0), 0, false)
+        let l, let tkn = try next_tkn(l)
+
+        try assert(tkn.tag == tc.1, "token type mismatch")
+
+        let lit = try get_literal(l, tkn)
+        try assert(lit == tc.2, "literal mismatch")
+    }
+}
+
+@test
 fn test_bool()! {
     let tests = [
         {"false", tag.FALSE, "false"},

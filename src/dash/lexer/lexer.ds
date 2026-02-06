@@ -334,12 +334,60 @@ fn is_digit(ch byte) bool {
     return ch == '_' || ('0' <= ch && ch <= '9')
 }
 
+fn is_hex_digit(ch byte) bool {
+    return ch == '_' || ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F')
+}
+
+fn is_bin_digit(ch byte) bool {
+    return ch == '_' || ch == '0' || ch == '1'
+}
+
+fn read_hex(l *lexer, idx u32)! *lexer, token {
+    var l = next_ch(l)
+    var typ = tag.HEX
+    if l.idx >= len_src(l) || !is_hex_digit(try cur_ch(l)) || try cur_ch(l) == '_' {
+        typ = tag.ILLEGAL
+    } else {
+        for l.idx < len_src(l) && is_hex_digit(try cur_ch(l)) {
+            l = next_ch(l)
+        }
+        if try prev_ch(l) == '_' { typ = tag.ILLEGAL }
+    }
+    let tkn = token{tag: typ, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
+}
+
+fn read_bin(l *lexer, idx u32)! *lexer, token {
+    var l = next_ch(l)
+    var typ = tag.BIN
+    if l.idx >= len_src(l) || !is_bin_digit(try cur_ch(l)) || try cur_ch(l) == '_' {
+        typ = tag.ILLEGAL
+    } else {
+        for l.idx < len_src(l) && is_bin_digit(try cur_ch(l)) {
+            l = next_ch(l)
+        }
+        if try prev_ch(l) == '_' { typ = tag.ILLEGAL }
+    }
+    let tkn = token{tag: typ, start: idx, end: l.idx-1}
+    return &lexer{..l, prev_tag: tkn.tag}, tkn
+}
+
 fn read_number(l *lexer)! *lexer, token {
     var l = l
     let idx = l.idx
     var typ = tag.INT
 
     l = next_ch(l)
+
+    if try get(l.buf, idx) == '0' && l.idx < len_src(l) {
+        let ch = try cur_ch(l)
+        if ch == 'x' || ch == 'X' {
+            return try read_hex(l, idx)
+        } else if ch == 'b' || ch == 'B' {
+            return try read_bin(l, idx)
+        }
+    }
+
     var cnt = 0
     for l.idx < len_src(l) && cnt <= 1 {
         let ch = try cur_ch(l)

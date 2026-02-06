@@ -57,6 +57,8 @@ pub enum tag {
     
     // literals
     INT        // 123
+    HEX        // 0xFF
+    BIN        // 0b1010
     FLOAT      // 0.314
     STRING       // "abc"
     MULTI_STRING // `xyz`

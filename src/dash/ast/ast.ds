@@ -104,6 +104,8 @@ pub enum tag {
     type_params
     ident
     int
+    hex
+    bin
     float
     string
     true_lit
@@ -180,6 +182,8 @@ pub fn literal_to_tag(t lexer.tag)! tag {
     return match t {
         case lexer.tag.IDENT: tag.ident
         case lexer.tag.INT:   tag.int
+        case lexer.tag.HEX:   tag.hex
+        case lexer.tag.BIN:   tag.bin
         case lexer.tag.FLOAT: tag.float
         case lexer.tag.STRING: tag.string
         case lexer.tag.TRUE: tag.true_lit
@@ -594,7 +598,7 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = append(buf, ' ')
         buf = try to_string(a, data.x, buf)
 
-    case tag.ident, tag.int, tag.float,
+    case tag.ident, tag.int, tag.hex, tag.bin, tag.float,
          tag.string, tag.true_lit, tag.false_lit, tag.none_lit, tag.char:
         let src_idx = try get(a.tkns, node.token).start
         let lit = try get_variable_token(a.src, src_idx)
