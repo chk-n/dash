@@ -1157,7 +1157,7 @@ fn parse_return_statement(p parser)! parser, ast.index {
     var p = next_token(p)
     
     // handle empty return
-    if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) {
+    if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) || is_tag(p, lexer.tag.CASE) {
         p, let stmt = try add_node(p, {
             tag: ast.tag.return_stmt,
             token: op_tkn,
@@ -1169,14 +1169,14 @@ fn parse_return_statement(p parser)! parser, ast.index {
     // to avoid allocating indexes to extra?
 
     var extra = try make([]ast.index, 0, 2)
-    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) {
+    for !is_tag(p, lexer.tag.RBRACE) && !is_tag(p, lexer.tag.EOF) && !is_tag(p, lexer.tag.CASE) {
         p, let node = try parse_expression(p, precedence.none)
         if node == ast.NULL_IDX {
             return p, ast.NULL_IDX
         }
         extra = try append(extra, node)
-        
-        if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) {
+
+        if is_tag(p, lexer.tag.RBRACE) || is_tag(p, lexer.tag.EOF) || is_tag(p, lexer.tag.CASE) {
             break
         }
         if !is_tag(p, lexer.tag.COMMA) {
