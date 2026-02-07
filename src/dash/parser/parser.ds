@@ -2164,7 +2164,11 @@ fn parse_try_expression(p parser)! parser, ast.index {
         return p, ast.NULL_IDX
     }
 
-    // TODO: validate expr is DOT wtih CALL or CALL
+    let expr_node = try get(p.nodes, expr)
+    if expr_node.tag != ast.tag.call {
+        p = try add_error(p, expected_call_after_try{i: op_tkn})
+        return p, ast.NULL_IDX
+    }
 
     p, let try_exp = try add_node(p, {
         tag: ast.tag.try_expr,

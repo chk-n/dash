@@ -107,6 +107,10 @@ error unexpected_eof {
     want lexer.tag
 }
 
+error expected_call_after_try {
+    i ast.token_index
+}
+
 error unimplemented
 
 error parser_error {

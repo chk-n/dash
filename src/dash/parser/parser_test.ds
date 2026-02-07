@@ -588,8 +588,8 @@ fn test_parse_try_expression()! {
     try assert_parse("lib a fn a() {b == try x()}", "lib a fn a() {(b == try x())}")
     try assert_parse("lib a fn a() {!try x() && b}", "lib a fn a() {(!try x() && b)}")
 
-    try assert_canonical_lib("lib a fn a() {try (x() && y())}")
-    try assert_canonical_lib("lib a fn a() {try (u64(x()) | u64(y()))}")
+    try assert_error("lib a fn a() {try (x() && y())}", [expected_call_after_try{i: 7}])
+    try assert_error("lib a fn a() {try x}", [expected_call_after_try{i: 7}])
 
     try assert_error("lib a fn a() {try}", [expected_expression{i: 8}])
 }
