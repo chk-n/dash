@@ -35,6 +35,24 @@ pub let F32_TYPE_IDX = index(9)
 pub let F64_TYPE_IDX = index(10)
 pub let BOOL_TYPE_IDX = index(11)
 
+// builtin function name indices (initialised in order by init function)
+pub let BUILTIN_PUT_IDX = index(18)
+pub let BUILTIN_GET_IDX = index(19)
+pub let BUILTIN_APPEND_IDX = index(20)
+pub let BUILTIN_SLICE_IDX = index(21)
+pub let BUILTIN_LEN_IDX = index(22)
+pub let BUILTIN_CAP_IDX = index(23)
+pub let BUILTIN_SIZE_IDX = index(24)
+pub let BUILTIN_MAKE_IDX = index(25)
+pub let BUILTIN_VALIDATE_IDX = index(26)
+pub let BUILTIN_PRINTLN_IDX = index(27)
+pub let BUILTIN_ASSERT_IDX = index(28)
+pub let BUILTIN_PANIC_IDX = index(29)
+
+pub fn is_builtin(idx index) bool {
+    return idx >= BUILTIN_PUT_IDX && idx <= BUILTIN_PANIC_IDX
+}
+
 struct item {
     tag tag
     x   u32
@@ -117,6 +135,13 @@ let default_constants = [
     item{tag: tag.const_u32, x: 0},
     item{tag: tag.const_u32, x: 1},
     item{tag: tag.const_u32, x: 2},
+]
+
+// do not change the order of the names
+let builtin_names = [
+    "put", "get", "append", "slice",
+    "len", "cap", "size", "make",
+    "validate", "println", "assert", "panic",
 ]
 
 pub fn new() *pool {
@@ -670,6 +695,10 @@ fn init(p *pool) *pool {
     for i = 0; i < len(default_constants); i = i + 1 {
         let dc = try get(default_constants, i)
         p, let _ = try intern(p, dc)
+    }
+    for i = 0; i < len(builtin_names); i = i + 1 {
+        let name = try get(builtin_names, i)
+        p, let _ = try intern_string(p, name)
     }
     return p
 }
