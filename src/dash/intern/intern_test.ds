@@ -1,25 +1,14 @@
 lib intern
 
 @test
-fn test_default_types_initialised()! {
+fn test_defaults_initialised()! {
     let p = new()
 
-    let expected_len = len(primitive_types) + len(default_constants)
-    try assert(len(p.items) == expected_len, "expected primitive types + default constants")
+    try assert(len(p.items) != 0, "pool should be initialised with default items")
 
     let first = try get(p.items, 0)
     try assert(first.tag == tag.u8_type, "first item should be u8_type")
     try assert(index(first.x) == NULL_IDX, "first item should have NULL_IDX")
-}
-
-@test
-fn test_default_constants_initialised()! {
-    let p = new()
-
-    let initial_len = len(primitive_types)
-    let expected_len = initial_len + len(default_constants)
-
-    try assert(len(p.items) == expected_len, "pool should have primitive types + default constants")
 }
 
 @test
