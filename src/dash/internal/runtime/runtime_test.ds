@@ -1,0 +1,38 @@
+lib runtime
+
+
+@test
+fn test_string_compare()! {
+    let tests = [
+        {"", "", true},
+        {"a", "a", true},
+        {"hello", "hello", true},
+        {"hello ", "hello", false},
+        {"hello", "hello ", false},
+        {"", "a", false},
+        {"a", "", false},
+        {"abc", "abd", false},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try string_compare(tc.0, tc.1)
+        try assert(got == tc.2, "string_compare test failed for index " + string(i))
+    }
+}
+
+@test
+fn test_string_concat()! {
+    let tests = [
+        {"", "", ""},
+        {"a", "", "a"},
+        {"", "b", "b"},
+        {"hello", "world", "helloworld"},
+    ]
+
+    for i = 0; i < len(tests); i++ {
+        let tc = try get(tests, i)
+        let got = try string_concat(tc.0, tc.1)
+        try assert(try string_compare(got, tc.2), "string_concat test failed for index " + string(i))
+    }
+}

@@ -1,0 +1,55 @@
+lib unsafe
+
+// read_u64 reads a u64 value from the given memory address.
+//
+// Compiler intrinsic. Codegen will emit a 64-bit memory load:
+//   - x86-64: mov rax, [rdi]
+//   - aarch64: ldr x0, [x0]
+//
+// Passing an invalid address will cause a hardware fault.
+pub fn read_u64(addr u64) u64
+
+// read_u32 reads a u32 value from the given memory address.
+//
+// Compiler intrinsic. Codegen will emit a 32-bit memory load:
+//   - x86-64: mov eax, [rdi]
+//   - aarch64: ldr w0, [x0]
+//
+// Passing an invalid address will cause a hardware fault.
+pub fn read_u32(addr u64) u32
+
+// read_ptr_as_string interprets a pointer at the given address as a string.
+//
+// Compiler intrinsic. Codegen will load the string header (length + data
+// pointer) from the address and return it as a string value.
+pub fn read_ptr_as_string(addr u64) string
+
+// cast_ptr reinterprets a u64 address as a pointer to T.
+//
+// Compiler intrinsic. Codegen will emit a bitcast from
+// integer to pointer type. No memory access is performed.
+//
+// Passing an invalid address and dereferencing the result
+// will cause a hardware fault.
+pub fn cast_ptr[T many](addr u64) *T
+
+// Writes `value` to field number `field` of the struct pointed to by `ptr`.
+// The compiler knows the field's offset, size, and alignment from the type.
+// This is a compiler intrinsic that lowers to a correctly-sized store
+// at the correct offset.
+pub fn write_field[T many, F many](ptr *T, field u32, value F)
+
+// ptr_to_u64 reinterprets a pointer as a u64 address.
+//
+// Compiler intrinsic. Codegen will emit a bitcast from pointer to
+// integer type. No memory access is performed.
+pub fn ptr_to_u64[T many](ptr *T) u64
+
+// write_u64 stores a 64-bit value to the given memory address.
+//
+// Compiler intrinsic. Codegen will emit a 64-bit memory store:
+//   - x86-64: mov [rdi], rsi
+//   - aarch64: str x1, [x0]
+//
+// Passing an invalid address will cause a hardware fault.
+pub fn write_u64(addr u64, val u64)

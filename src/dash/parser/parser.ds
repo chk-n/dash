@@ -1447,7 +1447,8 @@ fn parse_prefix_expression(p parser)! parser, ast.index {
         return try parse_paren_expression(p)
     case lexer.tag.SUB, lexer.tag.NOT,
         lexer.tag.LNOT, lexer.tag.QMARK,
-        lexer.tag.AND, lexer.tag.MUL:
+        lexer.tag.AND, lexer.tag.MUL,
+        lexer.tag.XOR:
         return try parse_negate_expression(p)
     case lexer.tag.TRY:
         return try parse_try_expression(p)
@@ -1481,8 +1482,10 @@ fn parse_type_literal(p parser)! parser, ast.index {
             try parse_optional_type(p)
         case lexer.tag.MUL:
             try parse_pointer_type(p)
-        case lexer.tag.MUT_TYPE:
-            try parse_mutable_type(p)
+        case lexer.tag.XOR:
+            try parse_readonly_type(p)
+        case lexer.tag.MEMORY_TYPE:
+            try parse_memory_type(p)
         case lexer.tag.FN:
             try parse_function_type(p)
         case lexer.tag.IDENT:
@@ -1574,6 +1577,23 @@ fn parse_optional_type(p parser)! parser, ast.index {
     return p, typ
 }
 
+fn parse_readonly_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.XOR), "expected '^'")
+
+    let op_tkn = p.tkn_i
+    var p = next_token(p)
+
+    p, let typ = try parse_type_literal(p)
+
+    p, let typ = try add_node(p, {
+        tag: ast.tag.readonly_type,
+        token: op_tkn,
+        data: {x: typ, y: ast.NULL_IDX}
+    })
+
+    return p, typ
+}
+
 fn parse_pointer_type(p parser)! parser, ast.index {
     try assert(is_tag(p, lexer.tag.MUL), "expected '*'")
 
@@ -1592,15 +1612,15 @@ fn parse_pointer_type(p parser)! parser, ast.index {
     return p, typ
 }
 
-fn parse_mutable_type(p parser)! parser, ast.index {
-    try assert(is_tag(p, lexer.tag.MUT_TYPE), "expected 'mut'")
-    
+fn parse_memory_type(p parser)! parser, ast.index {
+    try assert(is_tag(p, lexer.tag.MEMORY_TYPE), "expected 'memory'")
+
     let op_tkn = p.tkn_i
-    // consume 'mut'
+    // consume 'memory'
     var p = next_token(p)
 
-    if !is_tag(p, lexer.tag.LT) {
-        p = try add_error(p, expected_angle_bracket{i: p.tkn_i})
+    if !is_tag(p, lexer.tag.LBRACK) {
+        p = try add_error(p, expected_bracket{i: p.tkn_i})
         return p, ast.NULL_IDX
     }
     p = next_token(p)
@@ -1610,13 +1630,14 @@ fn parse_mutable_type(p parser)! parser, ast.index {
         return p, ast.NULL_IDX
     }
 
-    if !is_tag(p, lexer.tag.GT) {
-        p = try add_error(p, expected_angle_bracket{i: p.tkn_i})
+    if !is_tag(p, lexer.tag.RBRACK) {
+        p = try add_error(p, expected_bracket{i: p.tkn_i})
         return p, ast.NULL_IDX
-    }    p = next_token(p)
+    }
+    p = next_token(p)
 
     p, let typ = try add_node(p, {
-        tag: ast.tag.mutable_type,
+        tag: ast.tag.memory_type,
         token: op_tkn,
         data: {x: typ, y: ast.NULL_IDX}
     })
@@ -2079,7 +2100,12 @@ fn parse_bracket_expression(p parser, prev ast.index)! parser, ast.index {
     let tag = ast.tag.type_params
     // TODO: check current token is not ]
     // parse at least one identifier or type
-    p, var node = try parse_expression(p, precedence.none)
+    var node = ast.NULL_IDX
+    if is_type_literal(p) {
+        p, node = try parse_type_literal(p)
+    } else {
+        p, node = try parse_expression(p, precedence.none)
+    }
     if node == ast.NULL_IDX {
         return p, ast.NULL_IDX
     }
@@ -2220,7 +2246,7 @@ fn is_type_literal(p parser) bool {
              lexer.tag.CHAR_TYPE,
              lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
-             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE, lexer.tag.MUL, lexer.tag.FN: true
+             lexer.tag.MEMORY_TYPE, lexer.tag.MANY_TYPE, lexer.tag.MUL, lexer.tag.XOR, lexer.tag.FN: true
         case lexer.tag.LBRACE: maybe_column_type(p)
         case _: false
     }
@@ -2275,7 +2301,7 @@ fn maybe_array_type(p parser) bool {
              lexer.tag.F32_TYPE, lexer.tag.F64_TYPE, lexer.tag.INT_TYPE, lexer.tag.FLOAT_TYPE,
              lexer.tag.CHAR_TYPE, lexer.tag.STRING_TYPE, lexer.tag.BOOL_TYPE, lexer.tag.ERROR,
              lexer.tag.LBRACK, lexer.tag.IDENT, lexer.tag.QMARK,
-             lexer.tag.MUT_TYPE, lexer.tag.ANY_TYPE, lexer.tag.MUL, lexer.tag.FN: true
+             lexer.tag.MEMORY_TYPE, lexer.tag.MANY_TYPE, lexer.tag.MUL, lexer.tag.XOR, lexer.tag.FN: true
         case _: false
     }
 }
@@ -2378,7 +2404,8 @@ fn is_prefix(p parser) bool {
     match tag {
     case lexer.tag.SUB, lexer.tag.NOT,
         lexer.tag.LNOT, lexer.tag.QMARK,
-        lexer.tag.AND, lexer.tag.MUL: 
+        lexer.tag.AND, lexer.tag.MUL,
+        lexer.tag.XOR:
         return true
     case _:
         return false

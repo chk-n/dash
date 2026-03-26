@@ -1,0 +1,451 @@
+lib semsis
+
+use "dash/ast"
+use "dash/intern"
+use "dash/types"
+
+pub error library_name_mismatch {
+    declared string
+    expected string
+    pos ast.index
+}
+
+pub error library_not_found {
+    name string
+    pos  ast.index
+}
+
+pub error duplicate_import {
+    pos ast.index
+}
+
+pub error type_not_found {
+    name string
+    pos  ast.index
+}
+
+pub error identifier_not_found {
+    pos  ast.index
+}
+
+pub error not_projectable {
+    type_idx types.index
+    pos      ast.index
+}
+
+pub error parameter_missing_type {
+    name string
+    pos  ast.index
+}
+
+pub error identifier_redeclared {
+    pos ast.index
+}
+
+pub error assignment_count_mismatch {
+    var_cnt u32
+    val_cnt u32
+    pos     ast.index
+}
+
+pub error not_reassignable {
+    pos ast.index
+}
+
+pub error cannot_assign_to_type {
+    got  types.index
+    want types.index
+    pos  ast.index
+}
+
+pub error invalid_integer {
+    pos ast.index
+}
+
+pub error invalid_binary {
+    pos ast.index
+}
+
+pub error invalid_hexadecimal {
+    pos ast.index
+}
+
+pub error invalid_char {
+    pos ast.index
+}
+
+pub error illegal_operator_use {
+    type_idx types.index
+    pos      ast.index
+}
+
+pub error invalid_prefix_operator {
+    pos ast.index
+}
+
+pub error invalid_infix_operator {
+    pos ast.index
+}
+
+pub error invalid_postfix_operator {
+    pos ast.index
+}
+
+pub error invalid_try_use {
+    type_idx types.index
+    pos      ast.index
+}
+
+pub error catch_on_non_fallible {
+    pos ast.index
+}
+
+pub error type_mismatch {
+    got types.index
+    want types.index
+    pos ast.index
+}
+
+pub error condition_not_bool {
+    got types.index
+    pos ast.index
+}
+
+pub error too_many_arguments {
+    expected u16
+    found    u16
+    pos      ast.index
+}
+
+pub error too_few_arguments {
+    expected u16
+    found    u16
+    pos      ast.index
+}
+
+pub error type_in_expression {
+    pos ast.index
+}
+
+pub error struct_not_found {
+    name intern.index
+    pos  ast.index
+}
+
+pub error type_expected {
+    pos ast.index
+}
+
+pub error not_a_struct {
+    type_idx types.index
+    pos      ast.index
+}
+
+pub error struct_unknown_field {
+    typ        types.index
+    field_name intern.index
+    pos        ast.index
+}
+
+pub error struct_duplicate_field {
+    field_name intern.index
+    pos        ast.index
+}
+
+pub error struct_missing_field {
+    typ        types.index
+    field_name intern.index
+    pos        ast.index
+}
+
+pub error empty_array_literal {
+    pos ast.index
+}
+
+pub error array_element_type_mismatch {
+    expected types.index
+    got      types.index
+    pos      ast.index
+}
+
+pub error return_count_mismatch {
+    expected u32
+    found    u32
+    pos      ast.index
+}
+
+pub error missing_return {
+    pos ast.index
+}
+
+pub error calling_non_function {
+    pos ast.index
+}
+
+pub error non_value_in_expression {
+    pos ast.index
+}
+
+pub error multi_value_in_expression {
+    pos ast.index
+}
+
+pub error none_used_with_non_optional {
+    pos ast.index
+}
+
+pub error illegal_force_unwrap {
+    pos ast.index
+}
+
+pub error force_unwrap_in_non_fallible {
+    pos ast.index
+}
+
+// optional coalesce cant be used if rhs optional
+pub error optional_coalesce_rhs_optional {
+    pos ast.index
+}
+
+pub error none_used_in_coalesce {
+    pos ast.index
+}
+
+pub error if_expr_missing_else {
+    pos ast.index
+}
+
+pub error if_expr_no_value {
+    pos ast.index
+}
+
+pub error not_an_expression {
+    pos ast.index
+}
+
+pub error break_outside_loop {
+    pos ast.index
+}
+
+pub error next_outside_loop {
+    pos ast.index
+}
+
+pub error keyword_not_last_instruction {
+    pos ast.index
+}
+
+pub error type_not_in_union {
+    pos            ast.index
+    type_idx       types.index
+    union_type_idx types.index
+}
+
+pub error ambiguous_union_construction {
+    pos         ast.index
+    from_type   types.index
+    union_type  types.index
+    match_count u32
+}
+
+pub error illegal_union_to_union {
+    pos  ast.index
+    from types.index
+    to   types.index
+}
+
+pub error illegal_union_extraction {
+    pos        ast.index
+    union_type types.index
+    member     types.index
+}
+
+pub error enum_unknown_variant {
+    enum_type types.index
+    variant   intern.index
+    pos       ast.index
+}
+
+pub error invalid_type_def_underlying {
+    type_name intern.index
+    pos       ast.index
+}
+
+pub error cannot_cast_to_type_def {
+    type_def_type types.index
+    from_type     types.index
+    pos           ast.index
+}
+
+pub error match_non_exhaustive {
+    scrutinee_type types.index
+    pos            ast.index
+}
+
+pub error match_duplicate_case {
+    value u32
+    pos   ast.index
+}
+
+pub error match_invalid_scrutinee {
+    scrutinee_type types.index
+    pos            ast.index
+}
+
+pub error match_case_type_mismatch {
+    expected types.index
+    got      types.index
+    pos      ast.index
+}
+
+pub error match_case_type_not_in_union {
+    case_type  types.index
+    union_type types.index
+    pos        ast.index
+}
+
+pub error raise_in_non_fallible {
+    pos ast.index
+}
+
+pub error fallible_call_without_try {
+    pos ast.index
+}
+
+pub error defer_not_call {
+    pos ast.index
+}
+
+pub error type_parameter_count_mismatch {
+    expected u16
+    found    u16
+    pos      ast.index
+}
+
+pub error not_a_generic_function {
+    pos ast.index
+}
+
+pub error make_invalid_type_argument {
+    pos ast.index
+}
+
+pub error make_invalid_size_argument {
+    pos ast.index
+}
+
+pub error linear_element_reference {
+    pos ast.index
+}
+
+pub error linear_cast_to_many {
+    pos ast.index
+}
+
+pub error linear_consumed_already {
+    name intern.index
+    pos  ast.index
+}
+
+pub error linear_readonly_stored {
+    pos ast.index
+}
+
+pub error readonly_non_linear {
+    type_idx types.index
+    pos      ast.index
+}
+
+// special internal errors
+
+error compiler_error {
+    rsn string
+    pos ast.index
+}
+
+error not_semsis_error {
+    err error
+}
+
+// get_error_pos extracts the position (ast.index) from any semsis error
+// raises not_semsis_error if the error is not a recognised semsis error type
+pub fn get_error_pos(e error)! ast.index {
+    return match e = e {
+        case library_name_mismatch: e.pos
+        case library_not_found: e.pos
+        case duplicate_import: e.pos
+        case type_not_found: e.pos
+        case identifier_not_found: e.pos
+        case not_projectable: e.pos
+        case parameter_missing_type: e.pos
+        case identifier_redeclared: e.pos
+        case assignment_count_mismatch: e.pos
+        case not_reassignable: e.pos
+        case cannot_assign_to_type: e.pos
+        case invalid_integer: e.pos
+        case invalid_binary: e.pos
+        case invalid_hexadecimal: e.pos
+        case invalid_char: e.pos
+        case illegal_operator_use: e.pos
+        case invalid_prefix_operator: e.pos
+        case invalid_infix_operator: e.pos
+        case invalid_postfix_operator: e.pos
+        case invalid_try_use: e.pos
+        case catch_on_non_fallible: e.pos
+        case type_mismatch: e.pos
+        case condition_not_bool: e.pos
+        case too_many_arguments: e.pos
+        case too_few_arguments: e.pos
+        case type_in_expression: e.pos
+        case struct_not_found: e.pos
+        case type_expected: e.pos
+        case not_a_struct: e.pos
+        case struct_unknown_field: e.pos
+        case struct_duplicate_field: e.pos
+        case struct_missing_field: e.pos
+        case empty_array_literal: e.pos
+        case array_element_type_mismatch: e.pos
+        case return_count_mismatch: e.pos
+        case missing_return: e.pos
+        case calling_non_function: e.pos
+        case non_value_in_expression: e.pos
+        case multi_value_in_expression: e.pos
+        case none_used_with_non_optional: e.pos
+        case illegal_force_unwrap: e.pos
+        case force_unwrap_in_non_fallible: e.pos
+        case optional_coalesce_rhs_optional: e.pos
+        case none_used_in_coalesce: e.pos
+        case if_expr_missing_else: e.pos
+        case if_expr_no_value: e.pos
+        case not_an_expression: e.pos
+        case break_outside_loop: e.pos
+        case next_outside_loop: e.pos
+        case keyword_not_last_instruction: e.pos
+        case type_not_in_union: e.pos
+        case ambiguous_union_construction: e.pos
+        case illegal_union_to_union: e.pos
+        case illegal_union_extraction: e.pos
+        case enum_unknown_variant: e.pos
+        case invalid_type_def_underlying: e.pos
+        case cannot_cast_to_type_def: e.pos
+        case match_non_exhaustive: e.pos
+        case match_duplicate_case: e.pos
+        case match_invalid_scrutinee: e.pos
+        case match_case_type_mismatch: e.pos
+        case match_case_type_not_in_union: e.pos
+        case raise_in_non_fallible: e.pos
+        case fallible_call_without_try: e.pos
+        case defer_not_call: e.pos
+        case type_parameter_count_mismatch: e.pos
+        case not_a_generic_function: e.pos
+        case make_invalid_type_argument: e.pos
+        case make_invalid_size_argument: e.pos
+        case linear_element_reference: e.pos
+        case linear_cast_to_many: e.pos
+        case linear_consumed_already: e.pos
+        case linear_readonly_stored: e.pos
+        case readonly_non_linear: e.pos
+        case compiler_error: e.pos
+        case _: raise not_semsis_error{err: e}
+    }
+}

@@ -1,0 +1,174 @@
+lib namespace
+
+use "dash/map"
+use "dash/intern"
+use "dash/ir"
+use "dash/types"
+
+// index into pool.entries
+pub type index u32
+
+pub let NULL_IDX = index(4_294_967_295)
+
+pub struct pool {
+    entries []entry
+}
+
+pub union entry {
+    scope
+    value
+    linear_value
+}
+
+pub struct scope {
+    // relative library path starting from
+    // project root e.g. "dash/semsis/namespace"
+    // should only be set for root scope i.e.
+    // owner == types.NULL_IDX
+    path string // TODO: change to intern.index then hash [path_idx, name_idx]
+    // Semantic type that owns this scope (struct, enum, union, function, etc.)
+    // NULL_IDX for global/root scope
+    owner      types.index
+    // can be NULL_IDX for root
+    parent_idx index
+
+    pub_decl   *map.map[intern.index, index]
+    priv_decl  *map.map[intern.index, index]
+}
+
+pub struct value {
+    is_reassignable bool
+    name            intern.index
+    type_idx        types.index  
+    index           ir.index // TODO: rename to inst_idx
+}
+
+pub struct linear_value {
+    is_reassignable bool
+    is_consumed     bool
+    name            intern.index
+    type_idx        types.index
+    index           ir.index
+}
+
+pub fn get_type_idx(v entry) types.index {
+    return match v = v {
+        case scope: v.owner
+        case value: v.type_idx
+        case linear_value: v.type_idx
+    }
+}
+
+pub fn new() *pool {
+    return &pool{entries: []}
+}
+
+// owner is the semantic type that owns this scope (struct, enum, union, function, etc.)
+// Use types.NULL_IDX for global/root scope
+pub fn new_scope(p *pool, path string, owner types.index, parent_idx index)! *pool, index {
+    let s = scope{
+        path:       path,
+        owner:      owner,
+        parent_idx: parent_idx,
+        pub_decl:   map.new[intern.index, index](),
+        priv_decl:  map.new[intern.index, index](),
+    }
+    return try add_entry(p, entry(s))
+}
+
+pub fn add_entry(p *pool, e entry)! *pool, index {
+    let idx = index(u32(len(p.entries)))
+    let entries = try append(p.entries, e)
+    return &pool{entries: entries}, idx
+}
+
+pub fn get_entry(p *pool, idx index)! entry {
+    return try get(p.entries, idx)
+}
+
+pub fn update_entry(p *pool, idx index, e entry)! *pool {
+    let entries = try put(p.entries, idx, e)
+    return &pool{entries: entries}
+}
+
+pub fn get_scope(p *pool, idx index)! scope {
+    let e = try get_entry(p, idx)
+    return match e = e {
+        case scope: e
+        case _: raise error("expected scope entry")
+    }
+}
+
+pub fn lookup(p *pool, scope_idx index, key intern.index)! ?index {
+    var current_idx = scope_idx
+
+    for current_idx != NULL_IDX {
+        let result = try lookup_local(p, current_idx, key)
+        if result != null {
+            return result
+        }
+
+        let s = try get_scope(p, current_idx)
+        current_idx = s.parent_idx
+    }
+
+    return null
+}
+
+pub fn put_public(p *pool, scope_idx index, key intern.index, e entry)! *pool {
+    let p, let entry_idx = try add_entry(p, e)
+    let s = try get_scope(p, scope_idx)
+    let updated_map = try map.insert(s.pub_decl, key, entry_idx)
+    let updated_scope = scope{..s, pub_decl: updated_map}
+    return try update_entry(p, scope_idx, entry(updated_scope))
+}
+
+pub fn put_private(p *pool, scope_idx index, key intern.index, e entry)! *pool {
+    let p, let entry_idx = try add_entry(p, e)
+    let s = try get_scope(p, scope_idx)
+    let updated_map = try map.insert(s.priv_decl, key, entry_idx)
+    let updated_scope = scope{..s, priv_decl: updated_map}
+    return try update_entry(p, scope_idx, entry(updated_scope))
+}
+
+// link_public links an existing entry (by index) as a public declaration in a scope
+// Used when referencing entries that already exist in the pool (e.g., imported scopes)
+pub fn link_public(p *pool, scope_idx index, key intern.index, entry_idx index)! *pool {
+    let s = try get_scope(p, scope_idx)
+    let updated_map = try map.insert(s.pub_decl, key, entry_idx)
+    let updated_scope = scope{..s, pub_decl: updated_map}
+    return try update_entry(p, scope_idx, entry(updated_scope))
+}
+
+// link_private links an existing entry (by index) as a private declaration in a scope
+// Used when referencing entries that already exist in the pool
+pub fn link_private(p *pool, scope_idx index, key intern.index, entry_idx index)! *pool {
+    let s = try get_scope(p, scope_idx)
+    let updated_map = try map.insert(s.priv_decl, key, entry_idx)
+    let updated_scope = scope{..s, priv_decl: updated_map}
+    return try update_entry(p, scope_idx, entry(updated_scope))
+}
+
+pub fn lookup_public(p *pool, scope_idx index, key intern.index)! ?index {
+    let s = try get_scope(p, scope_idx)
+    return try map.get_val(s.pub_decl, key)
+}
+
+// is_library_scope returns true if the scope is a library root scope
+// Library root scopes have no owning type (owner == NULL_IDX)
+pub fn is_library_scope(p *pool, scope_idx index)! bool {
+    let s = try get_scope(p, scope_idx)
+    return s.owner == types.NULL_IDX
+}
+
+pub fn lookup_local(p *pool, scope_idx index, key intern.index)! ?index {
+    let s = try get_scope(p, scope_idx)
+
+    let priv = try map.get_val(s.priv_decl, key)
+    if priv != null {
+        return priv
+    }
+
+    let publ = try map.get_val(s.pub_decl, key)
+    return publ
+}

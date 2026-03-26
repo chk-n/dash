@@ -83,8 +83,8 @@ pub enum tag {
     CHAR_TYPE
     STRING_TYPE
     BOOL_TYPE
-    MUT_TYPE
-    ANY_TYPE
+    MEMORY_TYPE
+    MANY_TYPE
     
     // keywords
     PUB
@@ -168,8 +168,8 @@ let keywords = [
     {"char", tag.CHAR_TYPE},
     {"string", tag.STRING_TYPE},
     {"bool", tag.BOOL_TYPE},
-    {"mut", tag.MUT_TYPE},
-    {"any", tag.ANY_TYPE},
+    {"memory", tag.MEMORY_TYPE},
+    {"many", tag.MANY_TYPE},
     {"error", tag.ERROR},
     {"true", tag.TRUE},
     {"false", tag.FALSE},

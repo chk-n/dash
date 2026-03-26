@@ -116,6 +116,9 @@ fn test_parse_prefix()! {
     try assert_parse_exp("?o", "?o")
     try assert_parse_exp("&v", "&v")
     try assert_parse_exp("*p", "*p")
+    try assert_parse_exp("^x", "^x")
+    try assert_canonical_lib("lib a fn f() {let x = ^y}")
+    try assert_canonical_lib("lib a fn f() {f(^x)}")
     try assert_parse_exp("(((((((((1)))))))))", "1")
 
     try assert_error_exp("(", [expected_expression{i: 1}])
@@ -220,6 +223,7 @@ fn test_operator_precedence()! {
     try assert_parse_exp("1 * a((1+2), 2)", "(1 * a((1 + 2),2))")
 
     try assert_parse_exp("*obj.field", "*(obj.field)")
+    try assert_parse_exp("^obj.field", "^(obj.field)")
     try assert_parse_exp("?opt.value", "?(opt.value)")
     try assert_parse_exp("~bits", "~bits")
 
@@ -289,7 +293,7 @@ fn test_parse_type_statement()! {
     
     try assert_canonical_lib("lib a type x bool")
     
-    try assert_canonical_lib("lib a type x any")
+    try assert_canonical_lib("lib a type x many")
 
     try assert_canonical_lib("lib a type x string")
     try assert_canonical_lib("lib a type x []byte")
@@ -303,6 +307,10 @@ fn test_parse_type_statement()! {
     try assert_canonical_lib("lib a type x []?[]?[]?[]?[]?i64")
     try assert_canonical_lib("lib a type x ?y")
     try assert_parse("lib a type x ?x.y", "lib a type x ?(x.y)")
+
+    try assert_canonical_lib("lib a type x ^memory[[]u8]")
+    try assert_canonical_lib("lib a type x ^i64")
+    try assert_parse("lib a type x ^x.y", "lib a type x ^(x.y)")
 
     try assert_canonical_lib("lib a type x {}abc")
     try assert_parse("lib a type x {}y.z", "lib a type x {}(y.z)")
@@ -339,10 +347,11 @@ fn test_struct_statement()! {
     try assert_canonical_lib("lib a pub struct x {a i64}")
     try assert_parse("lib a struct x {a *a.b}", "lib a struct x {a *(a.b)}")
     try assert_canonical_lib("lib a struct x {a *i64 b *string}")
-    
-    try assert_canonical_lib("lib a struct x[T any] {a T}")
-    try assert_canonical_lib("lib a struct x[T,U any] {a T}")
-    try assert_canonical_lib("lib a struct x[T any,U any,E any] {a T}")
+    try assert_canonical_lib("lib a struct x {a ^memory[[]u8]}")
+
+    try assert_canonical_lib("lib a struct x[T many] {a T}")
+    try assert_canonical_lib("lib a struct x[T,U many] {a T}")
+    try assert_canonical_lib("lib a struct x[T many,U many,E many] {a T}")
 
     // note, this error is caught in semsis
     try assert_canonical_lib("lib a struct x[T] {a T}")
@@ -429,7 +438,8 @@ fn test_parse_function_statement()! {
     try assert_canonical_lib("lib a fn abc(a,b,c,d,e,f,g,h i64)")
     try assert_canonical_lib("lib a fn abc(a,b f32,c string,d,e,f,g,h byte)")
     try assert_canonical_lib("lib a fn abc(a string,b i64)")
-    try assert_canonical_lib("lib a fn abc(a mut<[]abc>)")
+    try assert_canonical_lib("lib a fn abc(a memory[[]abc])")
+    try assert_canonical_lib("lib a fn abc(a ^memory[[]u8])")
     try assert_canonical_lib("lib a fn abc(f fn(i32)(i32,i32),x i32)")
     try assert_canonical_lib("lib a fn abc(g fn(i32)i32,y i32)")
 
@@ -444,10 +454,10 @@ fn test_parse_function_statement()! {
 
     try assert_canonical_lib("lib a pub fn abc()")
     
-    try assert_canonical_lib("lib a pub fn abc[T any]() {}")
-    try assert_canonical_lib("lib a pub fn abc[T,E,U any]() {}")
-    try assert_canonical_lib("lib a pub fn abc[T,E any,U any]() {}")
-    try assert_canonical_lib("lib a pub fn abc[T any]()! {}")
+    try assert_canonical_lib("lib a pub fn abc[T many]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T,E,U many]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T,E many,U many]() {}")
+    try assert_canonical_lib("lib a pub fn abc[T many]()! {}")
 
     try assert_error("lib a fn abc[() {}", [expected_identifier{i: 5}])
     try assert_error("lib a fn abc[T() {}", [expected_comma{i: 6}])
@@ -465,10 +475,10 @@ fn test_parse_function_statement()! {
     try assert_error("lib a @abc(", [expected_expression{i: 5}])
     try assert_error("lib a @abc(a", [expected_parenthesis{i: 6}])
     try assert_error("lib a @xyz fn abc(", [expected_parenthesis{i: 7}])
-    // try assert_error("lib a fn abc(a mut<mut<[]u8>>)", [])
-    try assert_error("lib a fn abc(a mut)", [expected_angle_bracket{i: 7}])
-    try assert_error("lib a fn abc(a mut<)", [expected_type{i: 8}])
-    try assert_error("lib a fn abc(a mut<[]u8)", [expected_angle_bracket{i: 11}])
+    // try assert_error("lib a fn abc(a memory[memory[[]u8]])", [])
+    try assert_error("lib a fn abc(a memory)", [expected_bracket{i: 7}])
+    try assert_error("lib a fn abc(a memory[)", [expected_type{i: 8}])
+    try assert_error("lib a fn abc(a memory[[]u8)", [expected_bracket{i: 11}])
 }
 
 @test

@@ -6,7 +6,7 @@ use "dash/convert"
 pub let NULL_IDX = index(4_294_967_295)
 pub let NULL_INST = inst{tag: tag.noop, x: NULL_IDX, y: NULL_IDX}
 
-// IR consists of loosly coupled blocks containing sequential instructions
+// IR consists of loosely coupled blocks containing sequential instructions
 // which are ordered from left to right. the ir has the following invariants:
 // 1. instruction x can not reference instruction y if index(x) <= index(y)
 // 2. instruction x can only reference instruction y if x is in a block 'bx'
@@ -82,7 +82,7 @@ pub enum tag {
     // x is index to extras containing two fields
     // - constant in intern.pool
     // - alignment
-    // y is a type in indern.pool
+    // y is a type in intern.pool
     const_array
 
     // external reference to a global variable or function from another
@@ -92,7 +92,7 @@ pub enum tag {
     // y is interned type
     extern_ref
 
-    // For binary arithemtic operations both
+    // For binary arithmetic operations both
     // x and y point to instructions array
     // where both are of the same type.
     // The returned value is of the same type
@@ -134,14 +134,6 @@ pub enum tag {
     // x points to extras start
     // y points to extras end
     alloca_array
-    // // gev short for get_element_value returns the
-    // // value stored at the index of an aggregate
-    // // data structure
-    // // x is type of field
-    // // y is index to extra containing two elements;
-    // // first element is instruction e.g. pointer of
-    // // struct and second is the index
-    // gev
 
     // gep short for get_element_pointer returns a pointer
     // to a value in an aggregate data structure
@@ -175,6 +167,14 @@ pub enum tag {
     // y is intern.index pointing to return type (struct for multi-return)
     call
 
+    // switch: Multi-way branch based on integer value
+    // x = scrutinee value (ir.index, must be u8/u16/u32/u64)
+    // y = index into extras array with format:
+    //     [default_fqn, default_arg_count, default_args...,
+    //      case_count,
+    //      case1_val, case1_fqn, case1_arg_count, case1_args...,
+    //      case2_val, case2_fqn, case2_arg_count, case2_args...,
+    //      ...]
     switch
 
     // x points to instructions array
@@ -185,15 +185,16 @@ pub enum tag {
     // x and y point to sublist in extras
     ret_n
 
-
     memset
     memcpy
 
+    // cast casts integer types to other integer types
+    // NOTE: currently used for int to float but I'm not sure it's required
     // x is a reference to an instruction
     // y is intern.index pointing to a type
     cast
     // bitcast reinterprets bits without changing them
-    // used for pointer type conversions (e.g., *[i32] to *[]u8)
+    // used for type-punning: pointer<>slot, scalar<>slot, pointer<>pointer
     // x is a reference to an instruction
     // y is intern.index pointing to target type
     bitcast
@@ -209,15 +210,6 @@ pub fn new() *ir {
         errs:  [],
     }
 }
-
-// pub fn compact(l *ir)! *ir {
-//     // TODO: iterate over ins and count how many non NULL_INS
-//     // TODO: allocate new array of NULL_INS
-//     // TODO: copy over instructions with values from extra array
-//     //
-//     // now ins and extra compacted
-//     return l
-// }
 
 pub fn get_type(l *ir, idx index)! intern.index {
     let inst = try get(l.ins, idx)
@@ -323,7 +315,6 @@ pub fn to_string(l *ir, ip *intern.pool, idx index, buf string)! string {
             // TODO: compiler error
             next
         }
-
 
         // format instructions until next init/func/block
         for i < len(l.ins) {
@@ -598,7 +589,6 @@ pub fn format_inst(l *ir, ip *intern.pool, idx index, buf string)! string {
         buf = try append(buf, ',')
         buf = try format_type(ip, intern.index(inst.y), buf)
         buf = try append(buf, ')')
-
     case tag.ret_1:
         // ret_1(%val)
         buf = try append(buf, "ret_1(")
@@ -698,6 +688,69 @@ pub fn format_inst(l *ir, ip *intern.pool, idx index, buf string)! string {
         buf = try append(buf, try convert.to_string(inst.x))
         buf = try append(buf, ')')
 
+    case tag.switch:
+        // switch(%scrutinee, default: block, 0: block0, 1: block1, ...)
+        buf = try append(buf, "switch(")
+        buf = try append(buf, '%')
+        buf = try append(buf, try convert.to_string(inst.x))
+
+        // y points to extras: [default_fqn, default_arg_count, default_args..., case_count, ...]
+        var extra_pos = inst.y
+        let default_fqn = intern.index(try get(l.extra, extra_pos))
+        extra_pos = extra_pos + 1
+        let default_arg_count = try get(l.extra, extra_pos)
+        extra_pos = extra_pos + 1
+
+        buf = try append(buf, ",default:")
+        buf = try append(buf, try intern.get_string(ip, default_fqn))
+        if default_arg_count > 0 {
+            buf = try append(buf, '(')
+            for i = u32(0); i < default_arg_count; i++ {
+                if i > 0 {
+                    buf = try append(buf, ',')
+                }
+                let arg_idx = try get(l.extra, extra_pos)
+                buf = try append(buf, '%')
+                buf = try append(buf, try convert.to_string(arg_idx))
+                extra_pos = extra_pos + 1
+            }
+            buf = try append(buf, ')')
+        }
+
+        let case_count = try get(l.extra, extra_pos)
+        extra_pos = extra_pos + 1
+
+        for i = u32(0); i < case_count; i++ {
+            let case_val = try get(l.extra, extra_pos)
+            extra_pos = extra_pos + 1
+            let case_fqn = intern.index(try get(l.extra, extra_pos))
+            extra_pos = extra_pos + 1
+            let case_arg_count = try get(l.extra, extra_pos)
+            extra_pos = extra_pos + 1
+
+            buf = try append(buf, ',')
+            buf = try append(buf, try convert.to_string(case_val))
+            buf = try append(buf, ':')
+            buf = try append(buf, try intern.get_string(ip, case_fqn))
+            if case_arg_count > 0 {
+                buf = try append(buf, '(')
+                for j = u32(0); j < case_arg_count; j++ {
+                    if j > 0 {
+                        buf = try append(buf, ',')
+                    }
+                    let arg_idx = try get(l.extra, extra_pos)
+                    buf = try append(buf, '%')
+                    buf = try append(buf, try convert.to_string(arg_idx))
+                    extra_pos = extra_pos + 1
+                }
+                buf = try append(buf, ')')
+            }
+        }
+        buf = try append(buf, ')')
+
+    case tag.unreachable:
+        buf = try append(buf, "unreachable")
+
     case _:
 
     }
@@ -705,7 +758,6 @@ pub fn format_inst(l *ir, ip *intern.pool, idx index, buf string)! string {
     return buf
 }
 
-// format_type formats a type from the intern pool
 pub fn format_type(ip *intern.pool, idx intern.index, buf string)! string {
     if idx == intern.NULL_IDX {
         return try append(buf, "null")
@@ -794,16 +846,16 @@ pub fn format_type(ip *intern.pool, idx intern.index, buf string)! string {
         buf = try append(buf, s)
         buf = try append(buf, '"')
     case intern.tag.return_type:
-            buf = try append(buf, '[')
-            let cnt = try intern.get_return_type_count(ip, idx)
-            for i = u32(0); i < cnt; i = i + 1 {
-                if i > 0 {
-                    buf = try append(buf, ',')
-                }
-                let return_type = try intern.get_return_type_at(ip, idx, i)
-                buf = try format_type(ip, return_type, buf)
+        buf = try append(buf, '[')
+        let cnt = try intern.get_return_type_count(ip, idx)
+        for i = u32(0); i < cnt; i = i + 1 {
+            if i > 0 {
+                buf = try append(buf, ',')
             }
-            buf = try append(buf, ']')
+            let return_type = try intern.get_return_type_at(ip, idx, i)
+            buf = try format_type(ip, return_type, buf)
+        }
+        buf = try append(buf, ']')
     case _:
         buf = try append(buf, "unknown_type(")
         buf = try append(buf, try convert.to_string(u32(item.tag)))
@@ -813,7 +865,6 @@ pub fn format_type(ip *intern.pool, idx intern.index, buf string)! string {
     return buf
 }
 
-// format_const formats a constant value from the intern pool
 fn format_const(ip *intern.pool, idx intern.index, buf string)! string {
     let item = try intern.lookup(ip, idx)
     var buf = buf

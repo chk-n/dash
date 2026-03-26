@@ -3,6 +3,7 @@
 lib ast
 
 use "dash/lexer"
+use "dash/convert"
 
 pub let NULL_IDX = index(4_294_967_295)
 pub let NULL_DATA = data{x: NULL_IDX, y: NULL_IDX}
@@ -51,7 +52,7 @@ pub struct node {
 pub struct data {
     // can also refer to lhs
     x index
-    // can als orefer to rhs
+    // can also refer to rhs
     y index
 }
 
@@ -150,7 +151,7 @@ pub enum tag {
     try_expr
     catch_expr
 
-    any_type
+    many_type
     u8_type
     u16_type
     u32_type
@@ -170,9 +171,12 @@ pub enum tag {
     array_type
     column_type
     optional_type
-    mutable_type
+    memory_type
+    readonly_type
     pointer_type
     fn_type
+
+    readonly_expr
 
     // only for usage within 'ast' lib
     pub
@@ -190,7 +194,7 @@ pub fn literal_to_tag(t lexer.tag)! tag {
         case lexer.tag.FALSE: tag.false_lit
         case lexer.tag.NONE: tag.none_lit
         case lexer.tag.CHAR: tag.char
-        case lexer.tag.ANY_TYPE: tag.any_type
+        case lexer.tag.MANY_TYPE: tag.many_type
         case lexer.tag.U8_TYPE: tag.u8_type
         case lexer.tag.U16_TYPE: tag.u16_type
         case lexer.tag.U32_TYPE: tag.u32_type
@@ -219,6 +223,7 @@ pub fn prefix_to_tag(t lexer.tag)! tag {
         case lexer.tag.QMARK: tag.optional_unwrap
         case lexer.tag.AND: tag.address_of
         case lexer.tag.MUL: tag.value_of
+        case lexer.tag.XOR: tag.readonly_expr
         case _: raise unexpected_tag
     }
 }
@@ -266,6 +271,123 @@ pub fn keyword_to_tag(t lexer.tag)! tag {
     }
 }
 
+// library_stmts returns the node containing
+// the indexes for all statements within library
+pub fn library_stmts(a *ast)! node {
+    // TODO: try assert() idx == tag.library
+    var idx = len(a.nodes)-1
+
+    let node = try get(a.nodes, idx)
+    let data = node.data
+    return try get(a.nodes, data.y)
+}
+
+// get_string_literal extracts the string value from a string literal node,
+// stripping surrounding quotes.
+pub fn get_string_literal(a *ast, n node)! string {
+    try assert(n.tag == tag.string, "expected string literal node")
+    let tkn = try get(a.tkns, n.token)
+    let lit = try get_variable_token(a.src, tkn.start)
+    return string(try slice(lit, 1, len(lit)-1))
+}
+
+
+pub fn get_literal(a *ast, idx index)! string {
+    let node = try get(a.nodes, idx)
+    let tkn = try get(a.tkns, node.token)
+    let str = try get_variable_token(a.src, tkn.start)
+    return string(str)
+}
+
+// works for: library, type_def, struct_def, enum_def, union_def, fn_def, fn_err_def
+pub fn identifier(a *ast, n node)! string {
+    match n.tag {
+    case tag.library, tag.type_def, tag.struct_def,
+         tag.error_def, tag.enum_def, tag.union_def:
+        // data.x contains the identifier node
+        let ident_node = try get(a.nodes, n.data.x)
+        let tkn = try get(a.tkns, ident_node.token)
+        return string(try get_variable_token(a.src, tkn.start))
+
+    case tag.struct_gen_def:
+        // first extra is the identifier
+        let ident_idx = try get(a.extras, n.data.x)
+        let ident_node = try get(a.nodes, ident_idx)
+        let tkn = try get(a.tkns, ident_node.token)
+        return string(try get_variable_token(a.src, tkn.start))
+
+    case tag.fn_def, tag.fn_err_def,
+         tag.fn_gen_def, tag.fn_gen_err_def:
+        // first extra is the identifier
+        let ident_idx = try get(a.extras, n.data.x)
+        let ident_node = try get(a.nodes, ident_idx)
+        let tkn = try get(a.tkns, ident_node.token)
+        return string(try get_variable_token(a.src, tkn.start))
+
+    case tag.ident:
+        let tkn = try get(a.tkns, n.token)
+        return string(try get_variable_token(a.src, tkn.start))
+
+    case tag.dot:
+        let rhs_node = try get(a.nodes, n.data.y)
+        return try identifier(a, rhs_node)
+
+    case _:
+        raise unexpected_tag
+    }
+}
+
+// identifier_index returns the ast.index of the identifier node
+// if the index of an identifier or type is passed e.g. "i64" then
+// the same idx is returned
+pub fn identifier_index(a *ast, idx index)! index {
+    let n = try get(a.nodes, idx)
+    return match n.tag {
+    case tag.type_def, tag.struct_def,
+         tag.error_def, tag.enum_def, tag.union_def,
+         tag.let_decl, tag.var_decl:
+        // data.x contains the identifier node index
+        n.data.x
+    case tag.struct_gen_def, tag.fn_def, tag.fn_err_def,
+         tag.fn_gen_def, tag.fn_gen_err_def:
+        // first extra is the identifier node index
+        try get(a.extras, n.data.x)
+    case tag.ident:
+        idx
+    case tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+         tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type,
+         tag.int_type, tag.f32_type, tag.f64_type, tag.float_type,
+         tag.char_type, tag.string_type, tag.bool_type, tag.many_type:
+        // type nodes are special identifiers, return as-is
+        idx
+    case _:
+        raise unexpected_tag
+    }
+}
+
+// is_public checks if a declaration has the pub keyword
+pub fn is_public(a *ast, n node)! bool {
+    if n.token == 0 || n.token == NULL_TKN {
+        return false
+    }
+
+    let prev_tkn = try get(a.tkns, n.token-1)
+    return prev_tkn.tag == lexer.tag.PUB
+}
+
+// is_primitive_type checks if a tag represents a primitive type
+pub fn is_primitive_type(t tag) bool {
+    return match t {
+        case tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+             tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type,
+             tag.int_type, tag.f32_type, tag.f64_type, tag.float_type,
+             tag.char_type, tag.string_type, tag.bool_type, tag.many_type:
+            true
+        case _:
+            false
+    }
+}
+
 // to_string converts ast to a linear unformatted string
 pub fn to_string(a *ast, idx index, buf []byte)! []byte {
     if idx == NULL_IDX {
@@ -288,8 +410,10 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = append(buf, kw)
         buf = append(buf, ' ')
         buf = try to_string(a, data.x, buf)
-        buf = append(buf, ' ')
-        buf = try to_string(a, data.y, buf)
+        if data.y != NULL_IDX {
+            buf = append(buf, ' ')
+            buf = try to_string(a, data.y, buf)
+        }
 
     case tag.struct_gen_def:
         buf = add_pub(a, idx, buf)
@@ -635,7 +759,8 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
 
     case tag.negate_num, tag.lnot,
         tag.bnot, tag.optional_unwrap,
-        tag.address_of, tag.value_of:
+        tag.address_of, tag.value_of,
+        tag.readonly_expr:
         let src_idx = try get(a.tkns, node.token).start
         let op = try get(a.src, src_idx)
         buf = append(buf, op)        
@@ -711,7 +836,7 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         let block = try get(a.extras, data.x+2)
         buf = try to_string(a, block, buf)
 
-    case tag.any_type, tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+    case tag.many_type, tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
          tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type,
          tag.int_type, tag.f32_type, tag.f64_type, tag.float_type,
          tag.char_type, tag.string_type, tag.bool_type,
@@ -730,19 +855,19 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
         buf = append(buf, '}')
         buf = try to_string(a, data.x, buf)
 
-    case tag.optional_type:
+    case tag.optional_type, tag.readonly_type:
         let src_idx = try get(a.tkns, node.token).start
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
         buf = try to_string(a, data.x, buf)
         
-    case tag.mutable_type:
+    case tag.memory_type:
         let src_idx = try get(a.tkns, node.token).start
         let op = get_fixed_token(a.src, src_idx, node.tag)
         buf = append(buf, op)
-        buf = append(buf, '<')
+        buf = append(buf, '[')
         buf = try to_string(a, data.x, buf)
-        buf = append(buf, '>')
+        buf = append(buf, ']')
 
     case tag.pointer_type:
         buf = append(buf, '*')
@@ -798,27 +923,29 @@ pub fn to_string(a *ast, idx index, buf []byte)! []byte {
 }
 
 fn get_variable_token(src []byte, idx source_index)! []byte {
-    var l = lexer.new(src, u32(idx))
+    var l = lexer.new(src, u32(idx), true)
     l, let tkn = lexer.next_tkn(l)
     return try slice(src, tkn.start, tkn.end+1)
 }
 
 fn get_fixed_token(src []byte, idx source_index, t tag)! []byte {
     let size = match t {
-        case tag.struct_def, tag.struct_gen_def, tag.return_stmt, tag.string_type: 6
+        case tag.struct_def, tag.struct_gen_def, tag.return_stmt, tag.string_type,
+             tag.memory_type: 6
         case tag.union_def, tag.break_stmt,
              tag.catch_expr, tag.raise_stmt,
              tag.defer_stmt, tag.match_stmt,
              tag.float_type, tag.error_type,
              tag.error_def: 5
         case tag.enum_def, tag.type_def, tag.next_stmt,
-             tag.case_stmt, tag.char_type, tag.bool_type: 4
+             tag.case_stmt, tag.char_type, tag.bool_type,
+             tag.many_type: 4
         case tag.pub, tag.let_decl, tag.var_decl,
              tag.library, tag.use_def,
              tag.for_infinite, tag.for_bool,
              tag.for_classic, tag.for_range,
-             tag.try_expr, tag.mutable_type,
-             tag.any_type, tag.u16_type, tag.u32_type, tag.u64_type,
+             tag.try_expr,
+             tag.u16_type, tag.u32_type, tag.u64_type,
              tag.i16_type, tag.i32_type, tag.i64_type,
              tag.int_type, tag.f32_type, tag.f64_type: 3
         case tag.if_stmt, tag.incr, tag.decr,
@@ -854,4 +981,91 @@ fn add_pub(a *ast, idx index, buf []byte)! []byte  {
         buf = append(buf, ' ')
     }
     return buf
+}
+
+// get_type_name extracts the type name from a type AST node
+// stripping away ?, * [], memory[]
+pub fn get_type_name(a *ast, idx index)! string {
+    let node = try get(a.nodes, idx)
+
+    match node.tag {
+    case tag.optional_type, tag.array_type,
+         tag.memory_type, tag.readonly_type, tag.value_of, tag.pointer_type:
+        return try get_type_name(a, node.data.x)
+    case tag.dot:
+        return try get_type_name(a, node.data.y)
+    case tag.ident:
+        let src_idx = try get(a.tkns, node.token).start
+        return try string(get_variable_token(a.src, src_idx))
+    case tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
+         tag.i8_type, tag.i16_type, tag.i32_type, tag.i64_type,
+         tag.int_type, tag.f32_type, tag.f64_type, tag.float_type,
+         tag.char_type, tag.string_type, tag.bool_type, tag.many_type:
+        let src_idx = try get(a.tkns, node.token).start
+        return try string(get_fixed_token(a.src, src_idx, node.tag))
+    case _:
+        raise unexpected_tag
+    }
+}
+
+// print_token_marker creates a string showing the source line containing
+// the token for the node at idx with a ^ marker pointing to the token's position
+// Example output:
+//   42: let x = some_code
+//          ^
+pub fn print_token_marker(a *ast, idx index)! string {
+    let node = try get(a.nodes, idx)
+    let tkn = try get(a.tkns, node.token)
+    let pos = tkn.start
+
+    var line_start = i64(0)
+    for i = i64(pos); i > 0; i-- {
+        let c = try get(a.src, i-1)
+        if c == '\n' {
+            line_start = i
+            break
+        }
+    }
+
+    var line_end = i64(len(a.src))
+    for i = i64(pos); i < len(a.src); i++ {
+        let c = try get(a.src, i)
+        if c == '\n' {
+            line_end = i
+            break
+        }
+    }
+
+    var line_num = u32(0)
+    for i = i64(0); i < i64(pos); i++ {
+        let c = try get(a.src, i)
+        if c == '\n' {
+            line_num++
+        }
+    }
+
+    let col = i64(pos) - line_start
+
+    // TODO: estimate size better
+    var buf = try make([]byte, 0, 16)
+
+    // add line number
+    let line_num_str = convert.to_string(line_num)
+    buf = append(buf, []byte(line_num_str))
+    buf = append(buf, ':')
+    buf = append(buf, ' ')
+
+    // add source line
+    let line_bytes = try slice(a.src, line_start, line_end)
+    buf = append(buf, line_bytes)
+    buf = append(buf, '\n')
+
+    // add marker line (spaces for line number prefix + column offset + ^)
+    let prefix_len = i64(len(line_num_str)) + 2
+    for i = i64(0); i < prefix_len + col; i++ {
+        buf = append(buf, ' ')
+    }
+    buf = append(buf, '^')
+
+    return string(buf)
 }

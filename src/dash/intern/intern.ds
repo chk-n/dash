@@ -1,5 +1,5 @@
-// pool.ds interns types at the IR level. this means (high level) semantic
-// types such as any, string, array, optional, error dont exist.
+// intern.ds interns types at the IR level. this means (high level) semantic
+// types such as many, string, array, optional, error dont exist.
 lib intern
 
 use "dash/map"
@@ -11,7 +11,7 @@ pub error string_contains_null{str string}
 // handles deduplicating types and strings
 pub struct pool {
     items       []item
-    items_map   map.map[u64, index]
+    items_map   *map.map[u64, index]
     strings     []byte
     extra       []index
 }
@@ -188,7 +188,6 @@ pub fn make_struct_type(p *pool, name index)! *pool, index {
 // make_struct_fields stores field type information for a struct type, using custom
 // hashing strategy to make the fields queryable
 pub fn make_struct_fields(p *pool, typ index, types []index)! *pool, index {
-    // Hash based on struct type index for lookup
     let h = try hash_by_type_index(tag.struct_field, typ)
     let existing = try map.get_val(p.items_map, h)
     if existing != null {
@@ -218,7 +217,6 @@ pub fn make_struct_fields(p *pool, typ index, types []index)! *pool, index {
 // make_anon_struct_type creates or returns an anonymous struct type identified by its field types.
 // Unlike named structs, anonymous structs are deduplicated by their field types.
 pub fn make_anon_struct_type(p *pool, field_types []index)! *pool, index {
-    // hash based on field types for deduplication
     var hash_input = try make([]u8, 0, len(field_types) * 4 + 1)
     hash_input = try append(hash_input, u8(tag.anon_struct_type))
     for i = 0; i < len(field_types); i++ {
@@ -253,7 +251,6 @@ pub fn make_anon_struct_type(p *pool, field_types []index)! *pool, index {
 
 // make_return_type creates or retrieves a return_type from the pool.
 pub fn make_return_type(p *pool, types []index)! *pool, index {
-    // hash based on the types for deduplication
     var hash_input = try make([]u8, 0, len(types) * 4 + 1)
     hash_input = try append(hash_input, u8(tag.return_type))
     for i = 0; i < len(types); i++ {
@@ -268,7 +265,6 @@ pub fn make_return_type(p *pool, types []index)! *pool, index {
         return p, ?existing
     }
 
-    // Store in extras: [count, type1, type2, ...]
     let extras_start = index(u32(len(p.extra)))
     var extra = try append(p.extra, index(u32(len(types))))
     for i = 0; i < len(types); i++ {
@@ -556,7 +552,7 @@ pub fn is_integer(p *pool, idx index)! bool {
     if idx == NULL_IDX {
         return false
     }
-    // TODO: optimise by looking at default items e..g index less than X
+    // TODO: optimise by looking at default items e.g. index less than X
     let item = try get(p.items, idx)
     match item.tag {
     case tag.u8_type, tag.u16_type, tag.u32_type, tag.u64_type,
@@ -587,7 +583,7 @@ pub fn is_bool(p *pool, idx index)! bool {
     if idx == NULL_IDX {
         return false
     }
-    // TODO: optimise by looking at default items e..g index less than X
+    // TODO: optimise by looking at default items e.g. index less than X
     let item = try get(p.items, idx)
     return item.tag == tag.bool_type
 }
@@ -676,7 +672,6 @@ pub fn get_anon_struct_fields(p *pool, typ index)! []index {
 }
 
 fn validate_string(s string)! {
-    // let bytes = []u8(s)
     for i = 0; i < len(s); i = i + 1 {
         let b = try get(s, i)
         if b == byte(0) {

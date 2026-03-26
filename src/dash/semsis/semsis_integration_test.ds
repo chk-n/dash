@@ -1,0 +1,1246 @@
+lib semsis
+
+use "dash/ast"
+use "dash/parser"
+use "dash/intern"
+use "dash/ir"
+use "dash/map"
+use "dash/semsis/namespace"
+use "dash/types"
+use "dash/strings"
+
+// NOTE: all tests use a hypothetical library path named "path" so for
+// imports do `use "path/xyz"`
+
+@test
+fn test_cross_library_function_call()! {
+    try assert_gen_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.add(1, 2) }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = extern_ref("path/a/add",path/a/add)
+            %5 = const(1,i64)
+            %6 = const(2,i64)
+            %7 = call(%4,%5,%6,[i64])`
+    )
+}
+
+@test
+fn test_cross_library_global_variable()! {
+    try assert_gen_multi(
+        `lib a
+        pub let PI = 3`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.PI }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = extern_ref("path/a/PI",i64)
+            %5 = load(%4,i64)`
+    )
+}
+
+@test
+fn test_cross_library_member_not_found()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.subtract(1, 2) }`,
+        [identifier_not_found{pos: ast.index(7)}]
+    )
+}
+
+@test
+fn test_cross_library_struct_type_in_declaration()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        struct line { start a.point end a.point }
+        fn test() line {
+            return line{start: a.point{x: 0, y: 0}, end: a.point{x: 1, y: 1}}
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(0,i64)
+            %5 = const(0,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)`
+    )
+}
+
+@test
+fn test_cross_library_struct_literal()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() a.point {
+            return a.point{x: 10, y: 20}
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(10,i64)
+            %5 = const(20,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)`
+    )
+}
+
+@test
+fn test_cross_library_enum_variant_access()! {
+    try assert_gen_multi(
+        `lib a
+        pub enum color { red green blue }`,
+        `lib b
+        use "path/a"
+        fn test() a.color {
+            return a.color.red
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(0,u8)`
+    )
+}
+
+@test
+fn test_cross_library_function_with_imported_types()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn add_points(p1 a.point, p2 a.point) a.point {
+            return a.point{x: p1.x + p2.x, y: p1.y + p2.y}
+        }`,
+        `fn path/b/add_points:
+            %2 = arg(p1,*[i64,i64])
+            %3 = arg(p2,*[i64,i64])`
+    )
+}
+
+@test
+fn test_cross_library_private_function_not_accessible()! {
+    try assert_error_multi(
+        `lib a
+        fn private_add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.private_add(1, 2) }`,
+        [identifier_not_found{pos: ast.index(7)}]
+    )
+}
+
+@test
+fn test_cross_library_private_struct_not_accessible()! {
+    try assert_error_multi(
+        `lib a
+        struct private_point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() { let p = a.private_point{x: 1, y: 2} }`,
+        [identifier_not_found{pos: ast.index(8)}]
+    )
+}
+
+@test
+fn test_cross_library_private_variable_not_accessible()! {
+    try assert_error_multi(
+        `lib a
+        let PRIVATE_VAL = 42`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.PRIVATE_VAL }`,
+        [identifier_not_found{pos: ast.index(7)}]
+    )
+}
+
+@test
+fn test_cross_library_aliased_import()! {
+    try assert_gen_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use lib_a "path/a"
+        fn test() i64 { return lib_a.add(1, 2) }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = extern_ref("path/a/add",path/a/add)
+            %5 = const(1,i64)
+            %6 = const(2,i64)
+            %7 = call(%4,%5,%6,[i64])`
+    )
+}
+
+@test
+fn test_cross_library_aliased_import_type()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use lib_a "path/a"
+        fn test() lib_a.point {
+            return lib_a.point{x: 5, y: 10}
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(5,i64)
+            %5 = const(10,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)`
+    )
+}
+
+@test
+fn test_cross_library_union_type_usage()! {
+    try assert_gen_multi(
+        `lib a
+        pub union val { i64 bool }`,
+        `lib b
+        use "path/a"
+        fn test() a.val {
+            return a.val(42)
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(42,i64)
+            %5 = alloca([u32,slot[u64]],8)
+            %6 = const(0,u32)
+            %7 = const(0,u32)
+            %8 = gep(%5,%7,*u32)
+            store(%8,%6)
+            %10 = const(1,u32)
+            %11 = gep(%5,%10,*slot[u64])
+            %12 = bitcast(%4,slot[u64])
+            store(%11,%12)`
+    )
+}
+
+@test
+fn test_cross_library_error_type_usage()! {
+    try assert_gen_multi(
+        `lib a
+        pub error my_error { code i32 }`,
+        `lib b
+        use "path/a"
+        fn make_error() a.my_error {
+            return a.my_error{code: 42}
+        }`,
+        `fn path/b/make_error:
+            jmp(path/b/make_error/0)
+          path/b/make_error/0:
+            %4 = const(42,i64)
+            %5 = cast(%4,i32)
+            %6 = alloca([i32],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i32)
+            store(%8,%5)`
+    )
+}
+
+@test
+fn test_cross_library_type_def_usage()! {
+    try assert_gen_multi(
+        `lib a
+        pub type id u64`,
+        `lib b
+        use "path/a"
+        fn test() a.id {
+            return a.id(123)
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(123,i64)
+            %5 = cast(%4,u64)`
+    )
+}
+
+@test
+fn test_cross_library_optional_type()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() ?a.point {
+            return a.point{x: 1, y: 2}
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(1,i64)
+            %5 = const(2,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)`
+    )
+}
+
+@test
+fn test_cross_library_struct_field_access()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn get_x(p a.point) i64 {
+            return p.x
+        }`,
+        `fn path/b/get_x:
+            %2 = arg(p,*[i64,i64])
+            jmp(path/b/get_x/0)
+          path/b/get_x/0:
+            %5 = const(0,u32)
+            %6 = gep(%2,%5,*i64)
+            %7 = load(%6,i64)`
+    )
+}
+
+@test
+fn test_cross_library_function_multiple_returns()! {
+    try assert_gen_multi(
+        `lib a
+        pub fn divmod(n, d i64) i64, i64 {
+            return n / d, n % d
+        }`,
+        `lib b
+        use "path/a"
+        fn test() {
+            let q, let r = a.divmod(10, 3)
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = extern_ref("path/a/divmod",path/a/divmod)
+            %5 = const(10,i64)
+            %6 = const(3,i64)
+            %7 = call(%4,%5,%6,[i64,i64])
+            %8 = const(0,u32)
+            %9 = gep(%7,%8,*i64)
+            %10 = load(%9,i64)
+            %11 = const(1,u32)
+            %12 = gep(%7,%11,*i64)
+            %13 = load(%12,i64)`
+    )
+}
+
+@test
+fn test_cross_library_too_many_arguments()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.add(1, 2, 3) }`,
+        [too_many_arguments{pos: ast.index(13), expected: 2, found: 3}]
+    )
+}
+
+@test
+fn test_cross_library_too_few_arguments()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.add(1) }`,
+        [too_few_arguments{expected: 2, found: 1, pos: ast.index(11)}]
+    )
+}
+
+@test
+fn test_cross_library_wrong_argument_type()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        fn test() i64 { return a.add(1, true) }`,
+        [cannot_assign_to_type{got: types.BOOL_IDX, want: types.I64_IDX, pos: ast.index(10)}]
+    )
+}
+
+@test
+fn test_cross_library_struct_unknown_field()! {
+    try assert_error_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() i64 {
+            let p = a.point{x: 1, y: 2}
+            return p.z
+        }`,
+        [struct_unknown_field{typ: types.index(15), field_name: intern.index(52), pos: ast.index(21)}]
+    )
+}
+
+@test
+fn test_cross_library_enum_unknown_variant()! {
+    try assert_error_multi(
+        `lib a
+        pub enum color { red green blue }`,
+        `lib b
+        use "path/a"
+        fn test() a.color { return a.color.yellow }`,
+        [enum_unknown_variant{enum_type: types.index(15), variant: intern.index(45), pos: ast.index(11)}]
+    )
+}
+
+@test
+fn test_cross_library_struct_missing_field_in_literal()! {
+    try assert_error_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() a.point { return a.point{x: 1} }`,
+        [struct_missing_field{typ: types.index(15), field_name: intern.index(33), pos: ast.index(10)}]
+    )
+}
+
+@test
+fn test_cross_library_struct_duplicate_field_in_literal()! {
+    try assert_error_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() a.point { return a.point{x: 1, y: 2, x: 3} }`,
+        [struct_duplicate_field{field_name: intern.index(32), pos: ast.index(15)}]
+    )
+}
+
+@test
+fn test_cross_library_array_of_imported_type()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test() []a.point {
+            return [a.point{x: 1, y: 2}, a.point{x: 3, y: 4}]
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(1,i64)
+            %5 = const(2,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)
+            %13 = const(3,i64)
+            %14 = const(4,i64)
+            %15 = alloca([i64,i64],8)
+            %16 = const(0,u32)
+            %17 = gep(%15,%16,*i64)
+            store(%17,%13)
+            %19 = const(1,u32)
+            %20 = gep(%15,%19,*i64)
+            store(%20,%14)
+            %22 = const(2,u64)
+            %23 = alloca_array([][i64,i64],%22,8)
+            %24 = load(%6,[i64,i64])
+            %25 = const(0,u32)
+            %26 = gep(%23,%25,*[i64,i64])
+            store(%26,%24)
+            %28 = load(%15,[i64,i64])
+            %29 = const(1,u32)
+            %30 = gep(%23,%29,*[i64,i64])
+            store(%30,%28)
+            %32 = alloca([u64,*[][i64,i64]],8)
+            %33 = const(0,u32)
+            %34 = gep(%32,%33,*u64)
+            store(%34,%22)
+            %36 = const(1,u32)
+            %37 = gep(%32,%36,**[][i64,i64])
+            store(%37,%23)
+            %39 = alloca([[u64,*[][i64,i64]]],8)
+            %40 = load(%32,[u64,*[][i64,i64]])
+            %41 = const(0,u32)
+            %42 = gep(%39,%41,*[u64,*[][i64,i64]])
+            store(%42,%40)
+            ret_1(%39)`
+    )
+}
+
+@test
+fn test_cross_library_pointer_to_imported_type()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        fn test(p *a.point) i64 {
+            return p.x
+        }`,
+        `fn path/b/test:
+            %2 = arg(p,*[i64,i64])
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %5 = const(0,u32)
+            %6 = gep(%2,%5,*i64)
+            %7 = load(%6,i64)
+            %8 = alloca([i64],8)
+            %9 = const(0,u32)
+            %10 = gep(%8,%9,*i64)
+            store(%10,%7)
+            ret_1(%8)`
+    )
+}
+
+@test
+fn test_cross_library_nested_struct_field_access()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct inner { value i64 }
+        pub struct outer { nested inner }`,
+        `lib b
+        use "path/a"
+        fn test(o a.outer) i64 {
+            return o.nested.value
+        }`,
+        `fn path/b/test:
+            %2 = arg(o,*[[i64]])
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %5 = const(0,u32)
+            %6 = gep(%2,%5,*[i64])
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            %9 = load(%8,i64)
+            %10 = alloca([i64],8)
+            %11 = const(0,u32)
+            %12 = gep(%10,%11,*i64)
+            store(%12,%9)
+            ret_1(%10)`
+    )
+}
+
+@test
+fn test_cross_library_union_containing_imported_type()! {
+    try assert_gen_multi(
+        `lib a
+        pub struct point { x i64 y i64 }`,
+        `lib b
+        use "path/a"
+        union mixed { a.point bool }
+        fn test() mixed {
+            return mixed(a.point{x: 1, y: 2})
+        }`,
+        `fn path/b/test:
+            jmp(path/b/test/0)
+          path/b/test/0:
+            %4 = const(1,i64)
+            %5 = const(2,i64)
+            %6 = alloca([i64,i64],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i64)
+            store(%8,%4)
+            %10 = const(1,u32)
+            %11 = gep(%6,%10,*i64)
+            store(%11,%5)
+            %13 = alloca([u32,slot[u64]],8)
+            %14 = const(0,u32)
+            %15 = const(0,u32)
+            %16 = gep(%13,%15,*u32)
+            store(%16,%14)
+            %18 = const(1,u32)
+            %19 = gep(%13,%18,*slot[u64])
+            %20 = bitcast(%6,slot[u64])
+            store(%19,%20)
+            %22 = alloca([[u32,slot[u64]]],8)
+            %23 = load(%13,[u32,slot[u64]])
+            %24 = const(0,u32)
+            %25 = gep(%22,%24,*[u32,slot[u64]])
+            store(%25,%23)
+            ret_1(%22)`
+    )
+}
+
+@test
+fn test_cross_library_not_imported()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        fn test() i64 { return a.add(1, 2) }`,
+        [identifier_not_found{pos: ast.index(4)}]
+    )
+}
+
+@test
+fn test_cross_library_duplicate_import()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        use "path/a"
+        fn test() i64 { return a.add(1, 2) }`,
+        [duplicate_import{pos: ast.index(4)}]
+    )
+}
+
+@test
+fn test_cross_library_name_shadows_local_func()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use "path/a"
+        let a = 1`,
+        [identifier_redeclared{pos: ast.index(4)}]
+    )
+}
+
+@test
+fn test_cross_library_alias_shadows_local_func()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add() { return }`,
+        `lib b
+        use test "path/a"
+        fn test() { test.add() }`,
+        [identifier_redeclared{pos: ast.index(10)}]
+    )
+}
+
+@test
+fn test_cross_library_alias_shadows_local_variable()! {
+    try assert_error_multi(
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`,
+        `lib b
+        use test "path/a"
+        let test = 1`,
+        [identifier_redeclared{pos: ast.index(5)}]
+    )
+}
+
+@test
+fn test_cross_library_nested_imports()! {
+    // Library C imports B, B imports A; C can call B's functions that use A's types
+    // libs array: [leaf, ..., root] - first is leaf (verified), last is root (compiled first)
+    try assert_gen_multi_libs(
+        [`lib c
+        use "path/b"
+        fn test() {
+            let p = b.make_point(1, 2)
+        }`,
+        `lib b
+        use "path/a"
+        pub fn make_point(x, y i64) a.point {
+            return a.point{x: x, y: y}
+        }`,
+        `lib a
+        pub struct point { x i64 y i64 }`],
+        `fn path/c/test:
+            jmp(path/c/test/0)
+          path/c/test/0:
+            %4 = extern_ref("path/b/make_point",path/b/make_point)
+            %5 = const(1,i64)
+            %6 = const(2,i64)
+            %7 = call(%4,%5,%6,[[i64,i64]])
+            %8 = const(0,u32)
+            %9 = gep(%7,%8,*[i64,i64])
+            %10 = load(%9,[i64,i64])`
+    )
+}
+
+@test
+fn test_cross_library_three_libraries()! {
+    // Library C uses both A and B; tests multi-library namespace isolation
+    // libs array: [leaf, ..., root] - first is leaf (verified), last is root (compiled first)
+    try assert_gen_multi_libs(
+        [`lib c
+        use "path/a"
+        use "path/b"
+        fn test() i64 {
+            return a.add(1, b.multiply(2, 3))
+        }`,
+        `lib b
+        pub fn multiply(x, y i64) i64 { return x * y }`,
+        `lib a
+        pub fn add(x, y i64) i64 { return x + y }`],
+        `fn path/c/test:
+            jmp(path/c/test/0)
+          path/c/test/0:
+            %4 = extern_ref("path/a/add",path/a/add)
+            %5 = const(1,i64)
+            %6 = extern_ref("path/b/multiply",path/b/multiply)
+            %7 = const(2,i64)
+            %8 = const(3,i64)
+            %9 = call(%6,%7,%8,[i64])
+            %10 = const(0,u32)
+            %11 = gep(%9,%10,*i64)
+            %12 = load(%11,i64)
+            %13 = call(%4,%5,%12,[i64])
+            %14 = alloca([i64],8)
+            %15 = const(0,u32)
+            %16 = gep(%14,%15,*i64)
+            store(%16,%13)
+            ret_1(%14)`
+    )
+}
+
+@test
+fn test_cross_library_diamond_dependency()! {
+    // A defines type, B and C both use A, D uses both B and C
+    // Tests type identity across import paths
+    // libs array: [leaf, ..., root] - first is leaf (verified), last is root (compiled first)
+    try assert_gen_multi_libs(
+        [`lib d
+        use "path/a"
+        use "path/b"
+        use "path/c"
+        fn test() a.point {
+            let p1 = b.make_point_b(1, 2)
+            let p2 = c.make_point_c(3, 4)
+            return a.point{x: p1.x + p2.x, y: p1.y + p2.y}
+        }`,
+        `lib c
+        use "path/a"
+        pub fn make_point_c(x, y i64) a.point {
+            return a.point{x: x, y: y}
+        }`,
+        `lib b
+        use "path/a"
+        pub fn make_point_b(x, y i64) a.point {
+            return a.point{x: x, y: y}
+        }`,
+        `lib a
+        pub struct point { x i64 y i64 }`],
+        `fn path/d/test:
+            jmp(path/d/test/0)
+          path/d/test/0:
+            %4 = extern_ref("path/b/make_point_b",path/b/make_point_b)
+            %5 = const(1,i64)
+            %6 = const(2,i64)
+            %7 = call(%4,%5,%6,[[i64,i64]])
+            %8 = const(0,u32)
+            %9 = gep(%7,%8,*[i64,i64])
+            %10 = load(%9,[i64,i64])
+            %11 = extern_ref("path/c/make_point_c",path/c/make_point_c)
+            %12 = const(3,i64)
+            %13 = const(4,i64)
+            %14 = call(%11,%12,%13,[[i64,i64]])
+            %15 = const(0,u32)
+            %16 = gep(%14,%15,*[i64,i64])
+            %17 = load(%16,[i64,i64])
+            %18 = alloca([i64,i64],8)
+            store(%18,%10)
+            %20 = const(0,u32)
+            %21 = gep(%18,%20,*i64)
+            %22 = load(%21,i64)
+            %23 = alloca([i64,i64],8)
+            store(%23,%17)
+            %25 = const(0,u32)
+            %26 = gep(%23,%25,*i64)
+            %27 = load(%26,i64)
+            %28 = add(%22,%27)
+            %29 = alloca([i64,i64],8)
+            store(%29,%10)
+            %31 = const(1,u32)
+            %32 = gep(%29,%31,*i64)
+            %33 = load(%32,i64)
+            %34 = alloca([i64,i64],8)
+            store(%34,%17)
+            %36 = const(1,u32)
+            %37 = gep(%34,%36,*i64)
+            %38 = load(%37,i64)
+            %39 = add(%33,%38)
+            %40 = alloca([i64,i64],8)
+            %41 = const(0,u32)
+            %42 = gep(%40,%41,*i64)
+            store(%42,%28)
+            %44 = const(1,u32)
+            %45 = gep(%40,%44,*i64)
+            store(%45,%39)
+            %47 = alloca([[i64,i64]],8)
+            %48 = load(%40,[i64,i64])
+            %49 = const(0,u32)
+            %50 = gep(%47,%49,*[i64,i64])
+            store(%50,%48)
+            ret_1(%47)`
+    )
+}
+
+@test
+fn test_cross_library_generic_function()! {
+    try assert_gen_multi(`lib a
+        pub fn identity[T many](x T) T { return x }`,
+        `lib b
+        use "path/a"
+        fn main() i32 { return a.identity[i32](42) }`,
+        `fn path/b/main:
+            jmp(path/b/main/0)
+          path/b/main/0:
+            %4 = extern_ref("path/a/identity$i32",path/a/identity$i32)
+            %5 = const(42,i64)
+            %6 = cast(%5,i32)
+            %7 = call(%4,%6,[i32])
+            %8 = alloca([i32],8)
+            %9 = const(0,u32)
+            %10 = gep(%8,%9,*i32)
+            store(%10,%7)
+            ret_1(%8)
+        fn path/a/identity$i32:
+            %14 = arg(x,i32)
+            jmp(path/a/identity$i32/0)
+          path/a/identity$i32/0:
+            %17 = alloca([i32],8)
+            %18 = const(0,u32)
+            %19 = gep(%17,%18,*i32)
+            store(%19,%14)
+            ret_1(%17)`
+    )
+}
+
+// assert_gen_multi verifies IR generation for multi-library scenarios
+// lib_a_src: source code for library "a"
+// lib_b_src: source code for library "b" that imports "a"
+// want: expected IR instructions to find in lib_b's output
+fn assert_gen_multi(lib_a_src, lib_b_src, want string)! {
+    var ctx = try new_context()
+
+    let lib_a_ast = try parser.parse([]byte(lib_a_src), parser.mode.lib)
+    try assert(len(lib_a_ast.errs) == 0, "expected no parser errors for lib_a")
+    var sem_a = try new("path/a", lib_a_ast, ctx)
+    var m = map.new[intern.index, namespace.index]()
+    let l_a, ctx, let a_scope = try analyse(sem_a, m)
+    try assert(len(l_a.errs) == 0, "expected no errors in lib_a")
+
+    ctx.ip, let a_path = try intern.intern_string(ctx.ip, "path/a")
+    m = try map.insert(m, a_path, a_scope)
+
+    let lib_b_ast = try parser.parse([]byte(lib_b_src), parser.mode.lib)
+    try assert(len(lib_b_ast.errs) == 0, "expected no parser errors for lib_b")
+    var sem_b = try new("path/b", lib_b_ast, ctx)
+
+    let l_b, ctx, let _ = try analyse(sem_b, m)
+    if len(l_b.errs) != 0 {
+        println("errors in lib_b:")
+        for i = 0; i < len(l_b.errs); i++ {
+            let err = try get(l_b.errs, i)
+            println(err)
+        }
+    }
+    try assert(len(l_b.errs) == 0, "expected no errors in lib_b")
+
+    let got = try ir.to_string(l_b, ctx.ip, len(l_b.ins)-1, "")
+    let got_parts = try strings.split(got, "\n")
+    let want_parts = try strings.split(want, "\n")
+
+    var success = true
+    var matched = false
+    let wp = try get(want_parts, 0)
+    for i = 0; i < len(got_parts); i++ {
+        let gp = try get(got_parts, i)
+        if strings.contains(gp, wp) {
+            matched = true
+            for j = 0; j < len(want_parts); j++ {
+                let idx = i + j
+                if idx >= len(got_parts) {
+                    success = false
+                    break
+                }
+                var gp = try get(got_parts, idx)
+                var wp = try get(want_parts, j)
+                gp = strings.trim(gp)
+                wp = strings.trim(wp)
+                if !strings.contains(gp, wp) {
+                    success = false
+                }
+            }
+            break
+        }
+    }
+    if !matched || !success {
+        println("=== GOT ===")
+        println(got)
+        println("=== WANT ===")
+        println(want)
+    }
+    try assert(matched && success, "expected to find matching instructions")
+}
+
+fn assert_error_multi(lib_a_src, lib_b_src string, expected_errors []error)! {
+    var ctx = try new_context()
+
+    let lib_a_ast = try parser.parse([]byte(lib_a_src), parser.mode.lib)
+    try assert(len(lib_a_ast.errs) == 0, "expected no parser errors for lib_a")
+    var sem_a = try new("path/a", lib_a_ast, ctx)
+    var m = map.new[intern.index, namespace.index]()
+    let l_a, ctx, let a_scope = try analyse(sem_a, m)
+
+    ctx.ip, let a_path = try intern.intern_string(ctx.ip, "path/a")
+    m = try map.insert(m, a_path, a_scope)
+
+    let lib_b_ast = try parser.parse([]byte(lib_b_src), parser.mode.lib)
+    try assert(len(lib_b_ast.errs) == 0, "expected no parser errors for lib_b")
+    var sem_b = try new("path/b", lib_b_ast, ctx)
+
+    let l_b, let _, let _ = try analyse(sem_b, m)
+
+    if len(l_b.errs) != len(expected_errors) {
+        println("error count mismatch")
+        for i = 0; i < len(l_b.errs); i++ {
+            let err = try get(l_b.errs, i)
+            println(err)
+        }
+    }
+    try assert(len(l_b.errs) == len(expected_errors), "error count mismatch")
+
+    for i = 0; i < len(expected_errors); i++ {
+        let got_err = try get(l_b.errs, i)
+        let want_err = try get(expected_errors, i)
+        if got_err != want_err {
+            println("got:")
+            println(got_err)
+            println("want:")
+            println(want_err)
+            let pos = try get_error_pos(got_err)
+            println(ast.print_token_marker(lib_b_ast, pos))
+        }
+        try assert(got_err == want_err, "expected errors to match")
+    }
+}
+
+fn assert_gen_multi_libs(libs []string, want string)! {
+    var ctx = try new_context()
+    var m = map.new[intern.index, namespace.index]()
+
+    for i = len(libs) - 1; i > 0; i-- {
+        let src = try get(libs, i)
+        let lib_ast = try parser.parse([]byte(src), parser.mode.lib)
+        try assert(len(lib_ast.errs) == 0, "expected no parser errors")
+
+        let lib_node = try get(lib_ast.nodes, len(lib_ast.nodes)-1)
+        let lib_name = try ast.identifier(lib_ast, lib_node)
+        let lib_path = try strings.concat("path/", lib_name)
+
+        var sem = try new(lib_path, lib_ast, ctx)
+        let l, ctx, let scope = try analyse(sem, m)
+
+        if len(l.errs) != 0 {
+            println("errors in lib:")
+            println(lib_name)
+            for j = 0; j < len(l.errs); j++ {
+                let err = try get(l.errs, j)
+                println(err)
+            }
+        }
+        try assert(len(l.errs) == 0, "expected no errors")
+
+        ctx.ip, let path_idx = try intern.intern_string(ctx.ip, lib_path)
+        m = try map.insert(m, path_idx, scope)
+    }
+
+    let leaf_src = try get(libs, 0)
+    let leaf_ast = try parser.parse([]byte(leaf_src), parser.mode.lib)
+    try assert(len(leaf_ast.errs) == 0, "expected no parser errors for leaf")
+
+    let leaf_node = try get(leaf_ast.nodes, len(leaf_ast.nodes)-1)
+    let leaf_name = try ast.identifier(leaf_ast, leaf_node)
+    let leaf_path = try strings.concat("path/", leaf_name)
+
+    var sem = try new(leaf_path, leaf_ast, ctx)
+    let leaf_ir, ctx, let _ = try analyse(sem, m)
+
+    if len(leaf_ir.errs) != 0 {
+        println("errors in leaf lib:")
+        println(leaf_name)
+        for j = 0; j < len(leaf_ir.errs); j++ {
+            let err = try get(leaf_ir.errs, j)
+            println(err)
+        }
+    }
+    try assert(len(leaf_ir.errs) == 0, "expected no errors in leaf")
+
+    let got = try ir.to_string(leaf_ir, ctx.ip, len(leaf_ir.ins)-1, "")
+    try assert_ir_contains(got, want)
+}
+
+// assert_ir_contains checks that the IR output contains the expected instructions
+fn assert_ir_contains(got, want string)! {
+    let got_parts = try strings.split(got, "\n")
+    let want_parts = try strings.split(want, "\n")
+
+    var success = true
+    var matched = false
+    let wp = try get(want_parts, 0)
+    for i = 0; i < len(got_parts); i++ {
+        let gp = try get(got_parts, i)
+        if strings.contains(gp, wp) {
+            matched = true
+            for j = 0; j < len(want_parts); j++ {
+                let idx = i + j
+                if idx >= len(got_parts) {
+                    success = false
+                    break
+                }
+                var gp = try get(got_parts, idx)
+                var wp = try get(want_parts, j)
+                gp = strings.trim(gp)
+                wp = strings.trim(wp)
+                if !strings.contains(gp, wp) {
+                    success = false
+                }
+            }
+            break
+        }
+    }
+    if !matched || !success {
+        println("=== GOT ===")
+        println(got)
+        println("=== WANT ===")
+        println(want)
+    }
+    try assert(matched && success, "expected to find matching instructions")
+}
+
+@test
+fn test_cross_library_generic_struct()! {
+    try assert_gen_multi(`lib a
+        pub struct box[T many] { val T }`,
+        `lib b
+        use "path/a"
+        fn main() i32 {
+            let b = a.box[i32]{val: 42}
+            return b.val
+        }`,
+        `fn path/b/main:
+            jmp(path/b/main/0)
+          path/b/main/0:
+            %4 = const(42,i64)
+            %5 = cast(%4,i32)
+            %6 = alloca([i32],8)
+            %7 = const(0,u32)
+            %8 = gep(%6,%7,*i32)
+            store(%8,%5)
+            %10 = const(0,u32)
+            %11 = gep(%6,%10,*i32)
+            %12 = load(%11,i32)
+            %13 = alloca([i32],8)
+            %14 = const(0,u32)
+            %15 = gep(%13,%14,*i32)
+            store(%15,%12)
+            ret_1(%13)`
+    )
+}
+
+@test
+fn test_cross_library_generic_two_type_params_call()! {
+    try assert_gen_multi(`lib a
+        pub fn pair[T, E many](x T, y E) T { return x }`,
+        `lib b
+        use "path/a"
+        fn main() i32 { return a.pair[i32, string](42, "hello") }`,
+        `fn path/b/main:
+            jmp(path/b/main/0)
+          path/b/main/0:
+            %4 = extern_ref("path/a/pair$i32$string",path/a/pair$i32$string)
+            %5 = const(42,i64)
+            %6 = cast(%5,i32)
+            %7 = const(5,u64)
+            %8 = const_array("hello",1,*[]u8)
+            %9 = alloca([u64,*[]u8],8)
+            %10 = const(0,u32)
+            %11 = gep(%9,%10,*u64)
+            store(%11,%7)
+            %13 = const(1,u32)
+            %14 = gep(%9,%13,**[]u8)
+            store(%14,%8)
+            %16 = call(%4,%6,%9,[i32])
+            %17 = alloca([i32],8)
+            %18 = const(0,u32)
+            %19 = gep(%17,%18,*i32)
+            store(%19,%16)
+            ret_1(%17)`
+    )
+}
+
+@test
+fn test_cross_library_generic_two_type_params_mono()! {
+    try assert_gen_multi(`lib a
+        pub fn pair[T, E many](x T, y E) T { return x }`,
+        `lib b
+        use "path/a"
+        fn main() i32 { return a.pair[i32, string](42, "hello") }`,
+        `fn path/a/pair$i32$string:
+            %23 = arg(x,i32)
+            %24 = arg(y,*[u64,*[]u8])
+            jmp(path/a/pair$i32$string/0)
+          path/a/pair$i32$string/0:
+            %27 = alloca([i32],8)
+            %28 = const(0,u32)
+            %29 = gep(%27,%28,*i32)
+            store(%29,%23)
+            ret_1(%27)`
+    )
+}
+
+@test
+fn test_cross_library_generic_fallible_function()! {
+    try assert_gen_multi(`lib a
+        pub fn try_identity[T many](x T)! T { return x }`,
+        `lib b
+        use "path/a"
+        fn main()! i32 { return try a.try_identity[i32](42) }`,
+        `fn path/b/main:
+            jmp(path/b/main/0)
+          path/b/main/0:
+            %4 = extern_ref("path/a/try_identity$i32",path/a/try_identity$i32)
+            %5 = const(42,i64)
+            %6 = cast(%5,i32)
+            %7 = call(%4,%6,[i32,[u64,slot[u64]]])
+            %8 = const(1,u32)
+            %9 = gep(%7,%8,*[u64,slot[u64]])
+            %10 = const(0,u32)
+            %11 = gep(%9,%10,*u64)
+            %12 = load(%11,u64)
+            %13 = const(0,u64)
+            %14 = eq(%12,%13)
+            br(%14,path/b/main/1,path/b/main/2)
+          path/b/main/2:
+            %17 = const(1,u32)
+            %18 = gep(%9,%17,*slot[u64])
+            %19 = load(%18,slot[u64])
+            %20 = alloca([u64,slot[u64]],8)
+            %21 = const(0,u32)
+            %22 = gep(%20,%21,*u64)
+            store(%22,%12)
+            %24 = const(1,u32)
+            %25 = gep(%20,%24,*slot[u64])
+            store(%25,%19)
+            %27 = poison(i32)
+            %28 = alloca([i32,[u64,slot[u64]]],8)
+            %29 = const(0,u32)
+            %30 = gep(%28,%29,*i32)
+            store(%30,%27)
+            %32 = load(%20,[u64,slot[u64]])
+            %33 = const(1,u32)
+            %34 = gep(%28,%33,*[u64,slot[u64]])
+            store(%34,%32)
+            ret_1(%28)
+          path/b/main/1:
+            %38 = const(0,u32)
+            %39 = gep(%7,%38,*i32)
+            %40 = load(%39,i32)
+            %41 = const(0,u64)
+            %42 = poison(slot[u64])
+            %43 = alloca([u64,slot[u64]],8)
+            %44 = const(0,u32)
+            %45 = gep(%43,%44,*u64)
+            store(%45,%41)
+            %47 = const(1,u32)
+            %48 = gep(%43,%47,*slot[u64])
+            store(%48,%42)
+            %50 = alloca([i32,[u64,slot[u64]]],8)
+            %51 = const(0,u32)
+            %52 = gep(%50,%51,*i32)
+            store(%52,%40)
+            %54 = load(%43,[u64,slot[u64]])
+            %55 = const(1,u32)
+            %56 = gep(%50,%55,*[u64,slot[u64]])
+            store(%56,%54)
+            ret_1(%50)
+        fn path/a/try_identity$i32:
+            %60 = arg(x,i32)
+            jmp(path/a/try_identity$i32/0)
+          path/a/try_identity$i32/0:
+            %63 = const(0,u64)
+            %64 = poison(slot[u64])
+            %65 = alloca([u64,slot[u64]],8)
+            %66 = const(0,u32)
+            %67 = gep(%65,%66,*u64)
+            store(%67,%63)
+            %69 = const(1,u32)
+            %70 = gep(%65,%69,*slot[u64])
+            store(%70,%64)
+            %72 = alloca([i32,[u64,slot[u64]]],8)
+            %73 = const(0,u32)
+            %74 = gep(%72,%73,*i32)
+            store(%74,%60)
+            %76 = load(%65,[u64,slot[u64]])
+            %77 = const(1,u32)
+            %78 = gep(%72,%77,*[u64,slot[u64]])
+            store(%78,%76)
+            ret_1(%72)`
+    )
+}
+
+@test
+fn test_cross_library_generic_struct_two_type_params()! {
+    try assert_gen_multi(`lib a
+        pub struct pair[T, E many] { first T second E }`,
+        `lib b
+        use "path/a"
+        fn main() i32 {
+            let p = a.pair[i32, bool]{first: 42, second: true}
+            return p.first
+        }`,
+        `fn path/b/main:
+            jmp(path/b/main/0)
+          path/b/main/0:
+            %4 = const(42,i64)
+            %5 = cast(%4,i32)
+            %6 = const(true,bool)
+            %7 = alloca([i32,bool],8)
+            %8 = const(0,u32)
+            %9 = gep(%7,%8,*i32)
+            store(%9,%5)
+            %11 = const(1,u32)
+            %12 = gep(%7,%11,*bool)
+            store(%12,%6)
+            %14 = const(0,u32)
+            %15 = gep(%7,%14,*i32)
+            %16 = load(%15,i32)
+            %17 = alloca([i32],8)
+            %18 = const(0,u32)
+            %19 = gep(%17,%18,*i32)
+            store(%19,%16)
+            ret_1(%17)`
+    )
+}

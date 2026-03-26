@@ -1,0 +1,98 @@
+lib intrinsics
+
+// abort terminates the process immediately.
+//
+// Compiler intrinsic. Codegen will emit a system call to terminate:
+//   - Linux x86-64/aarch64: syscall(exit_group, 1)
+//
+// Must never return. After codegen, calls to abort will be followed
+// by an unreachable instruction to inform the optimiser.
+pub fn abort()
+
+// trap causes an immediate hardware fault.
+//
+// Compiler intrinsic. Codegen will emit a hardware trap instruction:
+//   - x86-64: ud2
+//   - aarch64: brk #1
+//
+// Used as a last resort when even abort cannot be trusted
+// (e.g., panic during panic during panic).
+pub fn trap()
+
+// tls_load reads a u64 value from a thread-local storage slot.
+//
+// Compiler intrinsic. Codegen will emit a TLS access sequence:
+//   - x86-64: mov rax, fs:[slot_offset]
+//   - aarch64: mrs x0, tpidr_el0; ldr x0, [x0, #slot_offset]
+//
+// Each slot is 8 bytes wide. The runtime uses a single slot
+// (SLOT_COROUTINE_CTX = 0) holding a pointer to the current
+// coroutine's context struct.
+pub fn tls_load(slot u32) u64
+
+// tls_store writes a u64 value to a thread-local storage slot.
+//
+// Compiler intrinsic. Codegen will emit a TLS store sequence:
+//   - x86-64: mov fs:[slot_offset], rax
+//   - aarch64: mrs x0, tpidr_el0; str x1, [x0, #slot_offset]
+//
+// See tls_load for slot semantics.
+pub fn tls_store(slot u32, val u64)
+
+// frame_pointer returns the current frame pointer value.
+//
+// Compiler intrinsic. Codegen will emit a read of the frame pointer:
+//   - x86-64: mov rax, rbp
+//   - aarch64: mov x0, x29
+//
+// Used by the runtime for stack trace walking.
+pub fn frame_pointer() u64
+
+// symtab_start returns the start address of the embedded symbol table.
+//
+// Compiler intrinsic. Codegen will emit a reference to a linker-generated
+// symbol marking the beginning of the .symtab section.
+pub fn symtab_start() u64
+
+// symtab_end returns the end address of the embedded symbol table.
+//
+// Compiler intrinsic. Codegen will emit a reference to a linker-generated
+// symbol marking the end of the .symtab section.
+pub fn symtab_end() u64
+
+// stderr_write writes a string to standard error.
+//
+// Compiler intrinsic. Codegen will emit a write syscall to fd 2:
+//   - Linux x86-64/aarch64: syscall(write, 2, buf, len)
+pub fn stderr_write(msg string)
+
+// code_segment_start returns the start address of the code segment.
+//
+// Compiler intrinsic. Codegen will emit a reference to a linker-generated
+// symbol marking the beginning of the .text section.
+pub fn code_segment_start() u64
+
+// code_segment_end returns the end address of the code segment.
+//
+// Compiler intrinsic. Codegen will emit a reference to a linker-generated
+// symbol marking the end of the .text section.
+pub fn code_segment_end() u64
+
+// syscall3 performs a Linux syscall with 3 arguments.
+//
+// Compiler intrinsic. Codegen will emit:
+//   - x86-64: mov rax,nr; mov rdi,a1; mov rsi,a2; mov rdx,a3; syscall
+//   - aarch64: mov x8,nr; mov x0,a1; mov x1,a2; mov x2,a3; svc #0
+//
+// Returns the syscall result in rax (x86-64) or x0 (aarch64).
+pub fn syscall3(nr u64, a1 u64, a2 u64, a3 u64) u64
+
+// syscall6 performs a Linux syscall with 6 arguments.
+//
+// Compiler intrinsic. Codegen will emit:
+//   - x86-64: mov rax,nr; mov rdi,a1; mov rsi,a2; mov rdx,a3;
+//             mov r10,a4; mov r8,a5; mov r9,a6; syscall
+//   - aarch64: mov x8,nr; mov x0..x5,a1..a6; svc #0
+//
+// Returns the syscall result in rax (x86-64) or x0 (aarch64).
+pub fn syscall6(nr u64, a1 u64, a2 u64, a3 u64, a4 u64, a5 u64, a6 u64) u64

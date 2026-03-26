@@ -1,0 +1,278 @@
+lib runtime
+
+use "dash/internal/intrinsics"
+use "dash/unsafe"
+
+pub enum panic_stage {
+    none
+    panicked
+    double_panicked
+    terminal
+}
+
+// V2, we could try bitmask-based defer tracking 
+//
+// Instead of maintaining a runtime linked list, each function
+// frame contains a bitmask tracking defers and pre-allocated
+// argument slots. The happy path just sets a bit and stores args
+// without volatile stores to defer_head and no chain manipulation.
+//
+// The panic path would use PC to find the defer table mapping each
+// function frame to its defer bits location and argument slots,
+// then walk the stack to execute active defers.
+//
+// This would allow us to remove the overhead of each defer node (stack allocated)
+// but requires adding additional checks when unwinding stack frames.
+// (we already get file:pos information for stack traces)
+pub struct defer_node {
+    prev       ?*defer_node
+    cleanup_fn u64
+    // TODO: the length field not needed here as cleanup function knows
+    // how many arguments it needs to pass to the deferred function
+    arguments  []u64 
+    canary     u64
+}
+
+pub struct coroutine_context {
+    panic_stage panic_stage
+    stack_base  u64
+    stack_limit u64
+    // defer_head must point to the set of active defers at
+    // every point where a panic could occur. This means:
+    //
+    // 1. defer_register must complete before any subsequent
+    //    instruction that could panic, so run_defers() sees the
+    //    new node
+    //
+    // 2. defer_pop must complete before calling the cleanup function,
+    //    so if cleanup panics, run_defers() does not re-execute
+    //    the already-popped defer
+    //
+    // marking this field as volatile prevents the optimiser from
+    // reordering these store instructions as the data flow is not
+    // visible to the compiler (as we read/write from/to coroutine
+    // context stored in TLS).
+    defer_head  ?*defer_node
+    // canary // used for defer
+    // id
+    // state
+    // callee register spill area
+    // stack pointer
+    // program counter
+}
+
+pub let F_PANIC_STAGE = u32(0)
+pub let F_STACK_BASE  = u32(1)
+pub let F_STACK_LIMIT = u32(2)
+pub let F_DEFER_HEAD  = u32(3)
+
+// TODO: make it random per thread
+pub let DEFER_CANARY = u64(0x00DEFE00DEFE00)
+
+
+
+pub let SLOT_COROUTINE_CTX = u32(0)
+
+fn get_context() *coroutine_context {
+    let addr = intrinsics.tls_load(SLOT_COROUTINE_CTX)
+    // TODO: ensure addr not null pointer
+    return unsafe.cast_ptr[coroutine_context](addr)
+}
+
+fn set_context(c *coroutine_context) {
+    // BUG: type system does not allow this cast, we need a unsafe function to get u64 from pointer
+    intrinsics.tls_store(SLOT_COROUTINE_CTX, u64(c))
+}
+
+fn to_panic_stage(v u64) panic_stage {
+    if v == 0 {
+        return panic_stage.none
+    } else if v == 1 {
+        return panic_stage.panicked
+    } else if v == 2 {
+        return panic_stage.double_panicked
+    }
+    return panic_stage.terminal
+}
+
+// TODO: name and file should point to string literal entry (offset) to avoid duplicates
+struct sym_entry {
+    pc_start u64
+    pc_end   u64
+    name     string
+    file     string
+    line     u32
+}
+
+let SYM_ENTRY_SIZE = u64(8+8+16+16+4)
+let _ = try assert(
+    size(sym_entry{pc_start:0,pc_end:0,name:"",file:"",line:0}) == i64(SYM_ENTRY_SIZE),
+    "expected sym_entry to be 52 bytes long"
+)
+
+fn resolve_symbol(pc u64) ?sym_entry {
+    let start = intrinsics.symtab_start()
+    let end_addr = intrinsics.symtab_end()
+    let count = (end_addr - start) / SYM_ENTRY_SIZE
+
+    var lo = u64(0)
+    var hi = count
+
+    for lo < hi {
+        let mid = lo + (hi - lo) / 2
+        let addr = start + mid * SYM_ENTRY_SIZE
+        let pc_start = unsafe.read_u64(addr)
+        let pc_end = unsafe.read_u64(addr + 8)
+
+        if pc < pc_start {
+            hi = mid
+        } else if pc >= pc_end {
+            lo = mid + 1
+        } else {
+            return sym_entry{
+                pc_start: pc_start,
+                pc_end:   pc_end,
+                name:     unsafe.read_ptr_as_string(addr + 16),
+                file:     unsafe.read_ptr_as_string(addr + 32),
+                line:     unsafe.read_u32(addr + 48),
+            }
+        }
+    }
+    return null
+}
+
+fn print_frame(count u32, return_addr u64) {
+    let sym = resolve_symbol(return_addr)
+    if sym != null {
+        let entry = ?sym
+        intrinsics.stderr_write(entry.name)
+        intrinsics.stderr_write(" ")
+        intrinsics.stderr_write(entry.file)
+        intrinsics.stderr_write("\n")
+    } else {
+        intrinsics.stderr_write("<unknown>\n")
+    }
+}
+
+pub fn print_stack_trace() {
+    var fp = intrinsics.frame_pointer()
+    let c = get_context()
+    var count = u32(0)
+
+    intrinsics.stderr_write("stack trace:\n")
+
+    // assuming stack grows downwards
+    for fp != 0 && fp <= c.stack_base && fp >= c.stack_limit {
+        let return_addr = unsafe.read_u64(fp + 8)
+        print_frame(count, return_addr)
+        count = count + 1
+        fp = unsafe.read_u64(fp)
+    }
+}
+
+pub fn defer_register(cleanup_fn u64, args []u64) {
+    let ctx = get_context()
+    var node = defer_node{
+        prev: ctx.defer_head,
+        cleanup_fn: cleanup_fn,
+        arguments: args,
+        canary: DEFER_CANARY,
+    }
+    unsafe.write_field(ctx, F_DEFER_HEAD, &node)
+}
+
+pub fn defer_pop() *defer_node {
+    let ctx = get_context()
+    if ctx.defer_head == null {
+        // this is a compiler bug as we inserted too many
+        // defer_pop() calls or forgot to register defers
+        panic("compiler bug. please report")
+    }
+    let old = ?ctx.defer_head
+    let prev = old.prev
+    unsafe.write_field(ctx, F_DEFER_HEAD, prev)
+
+    return old
+}
+
+fn run_defers() {
+    let ctx = get_context()
+    let code_lo = intrinsics.code_segment_start()
+    let code_hi = intrinsics.code_segment_end()
+
+    var head = ctx.defer_head
+    for head != null {
+        let node = ?head
+        if node.canary != DEFER_CANARY {
+            intrinsics.stderr_write("fatal: defer chain corrupted\n")
+            intrinsics.abort()
+        }
+
+        let fn_ptr = node.cleanup_fn
+        if fn_ptr < code_lo || fn_ptr >= code_hi {
+            intrinsics.stderr_write("fatal: defer fn pointer invalid\n")
+            intrinsics.abort()
+        }
+
+        let cleanup = unsafe.cast_ptr[fn(*defer_node)](fn_ptr)
+        cleanup(node)
+
+        head = node.prev
+    }
+}
+
+pub fn panic(msg string) {
+    var c = get_context()
+    let stage = c.panic_stage
+    match stage {
+    case panic_stage.none:
+        unsafe.write_field(c, F_PANIC_STAGE, panic_stage.panicked)
+
+        print_stack_trace()
+
+        intrinsics.stderr_write(msg)
+        intrinsics.stderr_write("\n")
+
+        run_defers()
+
+        // TODO: later call yield()
+        intrinsics.abort()
+
+    case panic_stage.panicked:
+        unsafe.write_field(c, F_PANIC_STAGE, panic_stage.double_panicked)
+
+        intrinsics.stderr_write("panic during panic handling. aborting.\n")
+        intrinsics.abort()
+
+    case panic_stage.double_panicked:
+        unsafe.write_field(c, F_PANIC_STAGE, panic_stage.terminal)
+        intrinsics.abort()
+
+    case panic_stage.terminal:
+        intrinsics.trap()
+    }
+}
+
+// TODO: remove once semsis call sites are updated to use alloc_class
+pub fn malloc(elem_size u64, count u64)! *u8
+
+pub fn mcopy(dst *u8, src *u8, byte_count u64)
+
+pub fn string_compare(a, b string)! bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i = 0; i < len(a); i++ {
+        if try get(a, i) != try get(b, i) {
+            return false
+        }
+    }
+    return true
+}
+
+pub fn string_concat(a, b string)! string {
+    var buf = try make([]byte, 0, len(a)+len(b))
+    buf = append(buf, []byte(a))
+    buf = append(buf, []byte(b))
+    return string(buf)
+}

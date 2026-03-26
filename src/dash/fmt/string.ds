@@ -36,8 +36,8 @@ pub error unknown_fmt_specifier
 // TODO: add support for interface e.g. io.writer so this function
 // doesnt allocate
 // TODO: add support for other specifiers than {}
-// TODO: update to use ..any variadic notation once supported
-pub fn stringf(format string, args []any)! string {
+// TODO: update to use ..many variadic notation once supported
+pub fn stringf(format string, args []many)! string {
     var idx = 0
     var arg_idx = 0
     var buf = try make([]byte, 0, len(format))
@@ -56,9 +56,9 @@ pub fn stringf(format string, args []any)! string {
                 let arg = get(args, arg_idx) catch e {
                     raise missing_fmt_argument
                 }
-                // BUG: semsis should disallow casting "any" to another type
+                // BUG: semsis should disallow casting "many" to another type
                 // without either forcing the expression to be tried or matching
-                // against the type to unwrap "any"
+                // against the type to unwrap "many"
                 buf = try append(buf, []byte(arg))
                 arg_idx = arg_idx + 1
                 idx = idx + 1

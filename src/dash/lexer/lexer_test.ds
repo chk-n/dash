@@ -63,8 +63,8 @@ fn test_next_token()! {
         {"string", tag.STRING_TYPE},
         {"bool", tag.BOOL_TYPE},
         {"error", tag.ERROR},
-        {"mut", tag.MUT_TYPE},
-        {"any", tag.ANY_TYPE},
+        {"memory", tag.MEMORY_TYPE},
+        {"many", tag.MANY_TYPE},
         // keywords
         {"pub", tag.PUB},
         {"lib", tag.LIB},

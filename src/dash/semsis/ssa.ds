@@ -1,0 +1,363 @@
+lib semsis
+
+// Forward-scan SSA construction for the Dash compiler.
+//
+// Unlike the standard Braun et al. algorithm ("Simple and Efficient Construction
+// of Static Single Assignment Form", CC 2013) which builds SSA incrementally by
+// inserting block parameters on demand and sealing blocks once all predecessors
+// are known, this module uses a forward-scanning approach that predicts block
+// arguments before emitting blocks.
+//
+// The key insight is that Dash's IR is append-only and immutable once emitted,
+// there is no way to retroactively add block parameters to an already-emitted
+// block (as Braun requires via seal_block). Instead, before entering any control
+// flow join point, we scan the AST subtree ahead of time to discover which
+// variables *may* be reassigned, then pre-compute the block_args needed at each
+// merge/loop-header/exit block.
+//
+// Trade-offs vs Braun:
+//   + No mutation of emitted IR (no seal_block, no retroactive edge patching)
+//   + Simpler implementation; no incomplete phis, no recursion state machine
+//   + Good fit for Dash's immutable, arena-based IR
+//   - Conservative: may introduce trivial block_args where both predecessors
+//     pass the same value (Braun would eliminate these during seal_block)
+//   - Requires a full AST walk before emitting each control flow construct
+//
+// The algorithm works in three steps for each control flow construct:
+//   1. collect_assignments: walk the AST subtree to find all variables that may
+//      be reassigned (the "forward scan")
+//   2. compute_join_info: filter the scan results against the current scope to
+//      determine which variables need block_args, and lower their types to IR
+//   3. Emit blocks with the pre-computed block_args, threading values through
+//      jmp/br instructions explicitly
+//
+// Variable state is tracked as a simple environment (vars) mapping variable
+// names to their current IR index and semantic type. At control flow splits,
+// the environment is snapshotted; at joins, values are threaded through
+// block_args and the environment is updated to reference the new block
+// parameter indices.
+
+use "dash/ast"
+use "dash/intern"
+use "dash/ir"
+use "dash/types"
+
+struct var_entry {
+    var_id   intern.index
+    ir_idx   ir.index
+    type_idx types.index
+}
+
+struct ssa_builder {
+    vars []var_entry
+}
+
+struct scan_result {
+    assigned  []intern.index
+    has_break bool
+    has_next  bool
+}
+
+// var_ids and ir_types are parallel arrays in the same order.
+struct join_info {
+    var_ids  []intern.index
+    ir_types []intern.index
+}
+
+fn new_ssa_builder() *ssa_builder {
+    return &ssa_builder{
+        vars: [],
+    }
+}
+
+// SSA equivalent of "def_var" in Braun's algorithm.
+fn write_variable(s *semsis, name intern.index, value ir.index, typ types.index)! *semsis {
+    var s = s
+    if s.ssa == null {
+        return s
+    }
+    let ssa = ?s.ssa
+
+    var new_vars = try make([]var_entry, 0, len(ssa.vars) + 1)
+    var found = false
+    for i = 0; i < len(ssa.vars); i++ {
+        let entry = try get(ssa.vars, i)
+        if entry.var_id == name {
+            new_vars = try append(new_vars, var_entry{var_id: name, ir_idx: value, type_idx: typ})
+            found = true
+        } else {
+            new_vars = try append(new_vars, entry)
+        }
+    }
+    if !found {
+        new_vars = try append(new_vars, var_entry{var_id: name, ir_idx: value, type_idx: typ})
+    }
+
+    s = &semsis{..s, ssa: &ssa_builder{vars: new_vars}}
+    return s
+}
+
+fn read_variable(s *semsis, var_name intern.index)! *semsis, ir.index {
+    if s.ssa == null {
+        return s, ir.NULL_IDX
+    }
+    let ssa = ?s.ssa
+
+    for i = len(ssa.vars) - 1; i >= 0; i-- {
+        let entry = try get(ssa.vars, i)
+        if entry.var_id == var_name {
+            return s, entry.ir_idx
+        }
+    }
+
+    return s, ir.NULL_IDX
+}
+
+fn snapshot_var_env(s *semsis)! []var_entry {
+    if s.ssa == null {
+        return []
+    }
+    return (?s.ssa).vars
+}
+
+fn restore_var_env(s *semsis, env []var_entry)! *semsis {
+    if s.ssa == null {
+        return s
+    }
+    return &semsis{..s, ssa: &ssa_builder{vars: env}}
+}
+
+fn collect_args_for_vars(s *semsis, var_ids []intern.index)! []ir.index {
+    if s.ssa == null {
+        return []
+    }
+    let ssa = ?s.ssa
+
+    var args = try make([]ir.index, 0, len(var_ids))
+    for i = 0; i < len(var_ids); i++ {
+        let vid = try get(var_ids, i)
+        var val = ir.NULL_IDX
+        for j = len(ssa.vars) - 1; j >= 0; j-- {
+            let entry = try get(ssa.vars, j)
+            if entry.var_id == vid {
+                val = entry.ir_idx
+                break
+            }
+        }
+        args = try append(args, val)
+    }
+    return args
+}
+
+fn apply_block_args_to_env(s *semsis, var_ids []intern.index, ir_indices []ir.index)! *semsis {
+    var s = s
+    if s.ssa == null {
+        return s
+    }
+
+    for i = 0; i < len(var_ids); i++ {
+        let vid = try get(var_ids, i)
+        let ir_idx = try get(ir_indices, i)
+
+        let ssa = ?s.ssa
+        var typ = types.NULL_IDX
+        for j = 0; j < len(ssa.vars); j++ {
+            let entry = try get(ssa.vars, j)
+            if entry.var_id == vid {
+                typ = entry.type_idx
+                break
+            }
+        }
+
+        s = try write_variable(s, vid, ir_idx, typ)
+    }
+    return s
+}
+
+fn collect_assignments(s *semsis, ast_idx ast.index)! *semsis, scan_result {
+    var s = s
+    let node = try get(s.ast.nodes, ast_idx)
+
+    match node.tag {
+    case ast.tag.assignment:
+        let lhs_idx = node.data.x
+        let lhs_node = try get(s.ast.nodes, lhs_idx)
+
+        if lhs_node.tag == ast.tag.decl_list {
+            var assigned = try make([]intern.index, 0, 4)
+            for i = lhs_node.data.x; i < lhs_node.data.y; i++ {
+                let decl_idx = try get(s.ast.extras, i)
+                let decl_node = try get(s.ast.nodes, decl_idx)
+                if decl_node.tag == ast.tag.ident {
+                    let name = try ast.identifier(s.ast, decl_node)
+                    s.ip, let name_idx = try intern.intern_string(s.ip, name)
+                    assigned = try add_unique(assigned, name_idx)
+                }
+            }
+            return s, scan_result{assigned: assigned, has_break: false, has_next: false}
+        }
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+
+    case ast.tag.incr, ast.tag.decr:
+        let target_idx = node.data.x
+        let target_node = try get(s.ast.nodes, target_idx)
+        if target_node.tag == ast.tag.ident {
+            let name = try ast.identifier(s.ast, target_node)
+            s.ip, let name_idx = try intern.intern_string(s.ip, name)
+            return s, scan_result{assigned: [name_idx], has_break: false, has_next: false}
+        }
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+
+    case ast.tag.block_stmt, ast.tag.case_block_stmt:
+        var result = scan_result{assigned: [], has_break: false, has_next: false}
+        for i = node.data.x; i < node.data.y; i++ {
+            let stmt_idx = try get(s.ast.extras, i)
+            s, let sub = try collect_assignments(s, stmt_idx)
+            result = try merge_scan_results(result, sub)
+        }
+        return s, result
+
+    case ast.tag.if_stmt:
+        var result = scan_result{assigned: [], has_break: false, has_next: false}
+        for i = node.data.x; i < node.data.y; i++ {
+            let child_idx = try get(s.ast.extras, i)
+            s, let sub = try collect_assignments(s, child_idx)
+            result = try merge_scan_results(result, sub)
+        }
+        return s, result
+
+    case ast.tag.for_infinite:
+        let body_idx = node.data.x
+        s, let sub = try collect_assignments(s, body_idx)
+        return s, scan_result{assigned: sub.assigned, has_break: false, has_next: false}
+
+    case ast.tag.for_bool:
+        let body_idx = node.data.y
+        s, let sub = try collect_assignments(s, body_idx)
+        return s, scan_result{assigned: sub.assigned, has_break: false, has_next: false}
+
+    case ast.tag.for_classic:
+        let cond_node_idx = node.data.x
+        let body_idx = node.data.y
+        s, let body_sub = try collect_assignments(s, body_idx)
+
+        let cond_node = try get(s.ast.nodes, cond_node_idx)
+        let incr_idx = try get(s.ast.extras, cond_node.data.x + 2)
+        if incr_idx != ast.NULL_IDX {
+            s, let incr_sub = try collect_assignments(s, incr_idx)
+            let merged = try merge_scan_results(body_sub, incr_sub)
+            return s, scan_result{assigned: merged.assigned, has_break: false, has_next: false}
+        }
+        return s, scan_result{assigned: body_sub.assigned, has_break: false, has_next: false}
+
+    case ast.tag.match_stmt:
+        let match_block_idx = node.data.y
+        s, let sub = try collect_assignments(s, match_block_idx)
+        return s, sub
+
+    case ast.tag.match_block:
+        var result = scan_result{assigned: [], has_break: false, has_next: false}
+        for i = node.data.x; i < node.data.y; i++ {
+            let case_idx = try get(s.ast.extras, i)
+            s, let sub = try collect_assignments(s, case_idx)
+            result = try merge_scan_results(result, sub)
+        }
+        return s, result
+
+    case ast.tag.case_stmt:
+        if node.data.y != ast.NULL_IDX {
+            return try collect_assignments(s, node.data.y)
+        }
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+
+    case ast.tag.break_stmt:
+        return s, scan_result{assigned: [], has_break: true, has_next: false}
+
+    case ast.tag.next_stmt:
+        return s, scan_result{assigned: [], has_break: false, has_next: true}
+
+    case ast.tag.try_expr:
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+
+    case ast.tag.raise_stmt:
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+
+    case ast.tag.catch_expr:
+        var result = scan_result{assigned: [], has_break: false, has_next: false}
+        let call_idx = try get(s.ast.extras, node.data.x)
+        s, let call_sub = try collect_assignments(s, call_idx)
+        result = try merge_scan_results(result, call_sub)
+        let block_idx = try get(s.ast.extras, node.data.x + 2)
+        if block_idx != ast.NULL_IDX {
+            s, let block_sub = try collect_assignments(s, block_idx)
+            result = try merge_scan_results(result, block_sub)
+        }
+        return s, result
+
+    case _:
+        return s, scan_result{assigned: [], has_break: false, has_next: false}
+    }
+}
+
+fn merge_scan_results(a, b scan_result)! scan_result {
+    var merged = try make([]intern.index, 0, len(a.assigned) + len(b.assigned))
+    for i = 0; i < len(a.assigned); i++ {
+        let v = try get(a.assigned, i)
+        merged = try add_unique(merged, v)
+    }
+    for i = 0; i < len(b.assigned); i++ {
+        let v = try get(b.assigned, i)
+        merged = try add_unique(merged, v)
+    }
+    return scan_result{
+        assigned:  merged,
+        has_break: a.has_break || b.has_break,
+        has_next:  a.has_next || b.has_next,
+    }
+}
+
+fn compute_join_info(s *semsis, assigned []intern.index)! *semsis, join_info {
+    var s = s
+    if s.ssa == null {
+        return s, join_info{var_ids: [], ir_types: []}
+    }
+    let ssa = ?s.ssa
+
+    var var_ids = try make([]intern.index, 0, len(assigned))
+    var ir_types = try make([]intern.index, 0, len(assigned))
+
+    for i = 0; i < len(assigned); i++ {
+        let vid = try get(assigned, i)
+
+        var sem_type = types.NULL_IDX
+        for j = 0; j < len(ssa.vars); j++ {
+            let entry = try get(ssa.vars, j)
+            if entry.var_id == vid {
+                sem_type = entry.type_idx
+                break
+            }
+        }
+        if sem_type == types.NULL_IDX {
+            next
+        }
+
+        s, let ir_type = try lower_semantic_to_ir(s, sem_type)
+        if ir_type == intern.NULL_IDX {
+            next
+        }
+
+        var_ids = try append(var_ids, vid)
+        ir_types = try append(ir_types, ir_type)
+    }
+
+    return s, join_info{var_ids: var_ids, ir_types: ir_types}
+}
+
+fn add_unique(arr []intern.index, val intern.index)! []intern.index {
+    for i = 0; i < len(arr); i++ {
+        if try get(arr, i) == val {
+            return arr
+        }
+    }
+    return try append(arr, val)
+}

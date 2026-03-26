@@ -6,7 +6,7 @@ pub error unsupported_type{type string}
 
 // Converts an unsigned integer to big-endian byte representation.
 // TODO: set proper generic constraint
-pub fn to_u8_array[T any](x T)! []u8 {
+pub fn to_u8_array[T many](x T)! []u8 {
     match x {
     case u8:
         return [x]
@@ -214,7 +214,7 @@ pub fn parse_u64(s string, base u8)! u64 {
 
 // Converts an integer to its decimal string representation.
 // TODO: set proper generic constraint
-pub fn to_string[T any](x T)! string {
+pub fn to_string[T many](x T)! string {
     return match x {
         case i8: to_string_i8(x)
         case i16: to_string_i16(x)
