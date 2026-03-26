@@ -315,8 +315,8 @@ func TestOptionalType(t *testing.T) {
 		},
 		{
 			name:  "return non-optional as optional in generic function",
-			input: "fn test[T any](x T) ?T { return x }",
-			want:  "lib main fn test[T any](x T) ?T { return x } pub fn main() { }",
+			input: "fn test[T many](x T) ?T { return x }",
+			want:  "lib main fn test[T many](x T) ?T { return x } pub fn main() { }",
 		},
 		{
 			name:  "return non-optional as optional",
@@ -842,8 +842,8 @@ func TestTypeDefinition(t *testing.T) {
 		},
 		{
 			name:  "aggregate type - used in memory",
-			input: "type custom []byte fn test(mem mut[custom]) { }",
-			want:  "lib main type custom []byte fn test(mem mut[custom]) { } pub fn main() { }",
+			input: "type custom []byte fn test(mem memory[custom]) { }",
+			want:  "lib main type custom []byte fn test(mem memory[custom]) { } pub fn main() { }",
 		},
 		{
 			name:  "aggregate type - struct",
@@ -1247,17 +1247,17 @@ func TestMutable(t *testing.T) {
 		{
 			name:  "assign value to element from make",
 			input: "var arr = try make([]i64,10) arr = try put(arr, 0, 1)",
-			want:  "lib main pub fn main() { var arr mut[[]i64] = try make([]i64,10) arr mut[[]i64] = try put(arr,0,1) }",
+			want:  "lib main pub fn main() { var arr memory[[]i64] = try make([]i64,10) arr memory[[]i64] = try put(arr,0,1) }",
 		},
 		{
 			name:  "assign value for mutable guarded type",
-			input: "type abc []i64 | len(abc) == 10 fn test(arr mut[abc]) { let arr = try put(arr, 0, 1) }",
-			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr mut[dirty<abc>]) { let arr mut[dirty<abc>] = try put(arr,0,1) } pub fn main() { }",
+			input: "type abc []i64 | len(abc) == 10 fn test(arr memory[abc]) { let arr = try put(arr, 0, 1) }",
+			want:  "lib main type abc []i64 | (len(abc) == 10) fn test(arr memory[dirty<abc>]) { let arr memory[dirty<abc>] = try put(arr,0,1) } pub fn main() { }",
 		},
 		{
 			name:  "assign slice to mutable from make",
 			input: "union abc { i64 } var arr = try make([]abc,0,10) arr = try append(arr, [1,2,3])",
-			want:  "lib main union abc {i64} pub fn main() { var arr mut[[]abc] = try make([]abc,0,10) arr mut[[]abc] = try append(arr,[1,2,3]) }",
+			want:  "lib main union abc {i64} pub fn main() { var arr memory[[]abc] = try make([]abc,0,10) arr memory[[]abc] = try append(arr,[1,2,3]) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1267,8 +1267,8 @@ func TestMemorySemantics(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "passing memory to fn makes it unusable",
-			input: "let a = try make([]u8, 1) test(&a) let b = a fn test(m *mut[[]u8]) {}",
-			want:  "lib main fn test(m *mut[[]u8]) { } pub fn main() { let a mut[[]u8] = try make([]u8,1) test(&a) let b []u8 = a }",
+			input: "let a = try make([]u8, 1) test(&a) let b = a fn test(m *memory[[]u8]) {}",
+			want:  "lib main fn test(m *memory[[]u8]) { } pub fn main() { let a memory[[]u8] = try make([]u8,1) test(&a) let b []u8 = a }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1476,14 +1476,14 @@ func TestFunction(t *testing.T) {
 			want: `lib main struct abc {x f64} type xyz fn(string,bool)i64,abc fn test1(s string,b bool) i64, abc { return 0, abc{x f64: 1.1} } fn test2() ?xyz { return test1 } pub fn main() { let func xyz = ?test2() let a i64, let b abc = func("h",false) }`,
 		},
 		{
-			name:  "pass literal to any",
-			input: "fn test(x any) {} test(1)",
-			want:  "lib main fn test(x any) { } pub fn main() { test(1) }",
+			name:  "pass literal to many",
+			input: "fn test(x many) {} test(1)",
+			want:  "lib main fn test(x many) { } pub fn main() { test(1) }",
 		},
 		{
-			name:  "pass identifier to any",
-			input: "fn test(x any) {} let x = 1.0 test(x)",
-			want:  "lib main fn test(x any) { } pub fn main() { let x f64 = 1.0 test(x) }",
+			name:  "pass identifier to many",
+			input: "fn test(x many) {} let x = 1.0 test(x)",
+			want:  "lib main fn test(x many) { } pub fn main() { let x f64 = 1.0 test(x) }",
 		},
 	}
 	runAnalysisTests(t, tests)
@@ -1541,12 +1541,12 @@ func TestBuiltInFunction(t *testing.T) {
 		{
 			name:  "make",
 			input: "let arr = try make([]i64, 10)",
-			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10) }",
+			want:  "lib main pub fn main() { let arr memory[[]i64] = try make([]i64,10) }",
 		},
 		{
 			name:  "make with initial value",
 			input: "let arr = try make([]i64, 10, 0)",
-			want:  "lib main pub fn main() { let arr mut[[]i64] = try make([]i64,10,0) }",
+			want:  "lib main pub fn main() { let arr memory[[]i64] = try make([]i64,10,0) }",
 		},
 		{
 			name:  "validate",
@@ -1556,12 +1556,12 @@ func TestBuiltInFunction(t *testing.T) {
 		{
 			name:  "length of memory",
 			input: "let arr = try make([]byte, 256) len(arr)",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) len(arr) }",
+			want:  "lib main pub fn main() { let arr memory[[]byte] = try make([]byte,256) len(arr) }",
 		},
 		{
 			name:  "capacity of memory",
 			input: "let arr = try make([]byte, 256) cap(arr)",
-			want:  "lib main pub fn main() { let arr mut[[]byte] = try make([]byte,256) cap(arr) }",
+			want:  "lib main pub fn main() { let arr memory[[]byte] = try make([]byte,256) cap(arr) }",
 		},
 		{
 			name:  "assert",
@@ -1706,12 +1706,12 @@ func TestAppendFunction(t *testing.T) {
 		{
 			name:  "append byte to []byte",
 			input: `let buf = try make([]byte, 1) let result = try append(buf, byte(65))`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,byte(65)) }",
+			want:  "lib main pub fn main() { let buf memory[[]byte] = try make([]byte,1) let result memory[[]byte] = try append(buf,byte(65)) }",
 		},
 		{
 			name:  "append []byte to []byte",
 			input: `let buf = try make([]byte, 1) let more = []byte([1,2,3]) let result = try append(buf, more)`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let more []byte = []byte([1,2,3]) let result mut[[]byte] = try append(buf,more) }",
+			want:  "lib main pub fn main() { let buf memory[[]byte] = try make([]byte,1) let more []byte = []byte([1,2,3]) let result memory[[]byte] = try append(buf,more) }",
 		},
 		{
 			name:   "append int to []string",
@@ -1726,7 +1726,7 @@ func TestAppendFunction(t *testing.T) {
 		{
 			name:  "append char to []byte",
 			input: `let buf = try make([]byte, 1) let result = try append(buf, 'A')`,
-			want:  "lib main pub fn main() { let buf mut[[]byte] = try make([]byte,1) let result mut[[]byte] = try append(buf,'A') }",
+			want:  "lib main pub fn main() { let buf memory[[]byte] = try make([]byte,1) let result memory[[]byte] = try append(buf,'A') }",
 		},
 		{
 			name:  "append u8 to string",
@@ -1780,14 +1780,14 @@ func TestAppendFunction(t *testing.T) {
 func TestGenericFunctions(t *testing.T) {
 	tests := []testCase{
 		{
-			name:  "single generic parameter with any constraint",
-			input: "fn test[T any](x T) T { return x }",
-			want:  "lib main fn test[T any](x T) T { return x } pub fn main() { }",
+			name:  "single generic parameter with many constraint",
+			input: "fn test[T many](x T) T { return x }",
+			want:  "lib main fn test[T many](x T) T { return x } pub fn main() { }",
 		},
 		{
 			name:  "multiple generic parameters with same constraint",
-			input: "fn test[T, E any](x T, y E) {}",
-			want:  "lib main fn test[T any, E any](x T,y E) { } pub fn main() { }",
+			input: "fn test[T, E many](x T, y E) {}",
+			want:  "lib main fn test[T many, E many](x T,y E) { } pub fn main() { }",
 		},
 		{
 			name:   "undefined constraint type",
@@ -1799,49 +1799,49 @@ func TestGenericFunctions(t *testing.T) {
 		// // when analysing function body
 		{
 			name:   "using undefined generic type in parameter",
-			input:  "fn test[T any](x E) {}",
+			input:  "fn test[T many](x E) {}",
 			errors: []string{"type 'E' not found", "type 'E' not found"},
 		},
 		{
 			name:   "using undefined generic type in return type",
-			input:  "fn test[T any]() E { return 0 }",
+			input:  "fn test[T many]() E { return 0 }",
 			errors: []string{"type mistmatch, expected type 'unknown[E]' but got 'i64'"},
 		},
 		{
 			name:  "generic function with return type same as parameter",
-			input: "fn identity[T any](x T) T { return x }",
-			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { }",
+			input: "fn identity[T many](x T) T { return x }",
+			want:  "lib main fn identity[T many](x T) T { return x } pub fn main() { }",
 		},
 		{
 			name:  "generic function call with type parameter infers return type",
-			input: "fn identity[T any](x T) T { return x } let r = identity[i32](42)",
-			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i32 = identity[i32](42) }",
+			input: "fn identity[T many](x T) T { return x } let r = identity[i32](42)",
+			want:  "lib main fn identity[T many](x T) T { return x } pub fn main() { let r i32 = identity[i32](42) }",
 		},
 		{
 			name:  "generic function with struct return type",
-			input: "struct box[T any] { val T } fn make_box[T any](x T) box[T] { return box[T]{val: x} } let b = make_box[i32](10)",
-			want:  "lib main struct box[T any] {val T} fn make_box[T any](x T) box[T] { return box[T]{val T: x} } pub fn main() { let b box[i32] = make_box[i32](10) }",
+			input: "struct box[T many] { val T } fn make_box[T many](x T) box[T] { return box[T]{val: x} } let b = make_box[i32](10)",
+			want:  "lib main struct box[T many] {val T} fn make_box[T many](x T) box[T] { return box[T]{val T: x} } pub fn main() { let b box[i32] = make_box[i32](10) }",
 		},
 		{
 			name:  "generic function call infer type for instantiation",
-			input: "fn identity[T any](x T) T { return x } let r = identity(42)",
-			want:  "lib main fn identity[T any](x T) T { return x } pub fn main() { let r i64 = identity(42) }",
+			input: "fn identity[T many](x T) T { return x } let r = identity(42)",
+			want:  "lib main fn identity[T many](x T) T { return x } pub fn main() { let r i64 = identity(42) }",
 		},
 		{
 			name:  "generic recursive function call",
-			input: "fn identity[T any](x T) T { let r = identity[T](x) }",
-			want:  "lib main fn identity[T any](x T) T { let r T = identity[T](x) } pub fn main() { }",
+			input: "fn identity[T many](x T) T { let r = identity[T](x) }",
+			want:  "lib main fn identity[T many](x T) T { let r T = identity[T](x) } pub fn main() { }",
 		},
 		{
 			name:   "generic function call infer type for instantiation",
-			input:  "fn identity[T, E any](x T) E { return x } let r = identity(42)",
+			input:  "fn identity[T, E many](x T) E { return x } let r = identity(42)",
 			errors: []string{"cannot infer type parameter 'E'"},
 		},
 		// // NOTE: 'constraint' not supported yet
 		// // {
 		// // 		name:  "multiple generic parameters with different constraints",
-		// // 		input: "constraint MyConstr { u32 } fn test[T any, E MyConstr](x T, y E) {}",
-		// // 		want:  "lib main constraint MyConstr { u32 } fn test[T any, E MyConstr](x T,y E) { } pub fn main() { }",
+		// // 		input: "constraint MyConstr { u32 } fn test[T many, E MyConstr](x T, y E) {}",
+		// // 		want:  "lib main constraint MyConstr { u32 } fn test[T many, E MyConstr](x T,y E) { } pub fn main() { }",
 		// // 	},
 	}
 	runAnalysisTests(t, tests)
@@ -1851,20 +1851,20 @@ func TestGenericMatch(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "concrete match result type",
-			input: "fn test[T any](x T) T { let r = match x { case i32: 0 case _: 1 } } ",
-			want:  "lib main fn test[T any](x T) T { let r i64 = match x { case i32: 0 case _: 1 } } pub fn main() { }",
+			input: "fn test[T many](x T) T { let r = match x { case i32: 0 case _: 1 } } ",
+			want:  "lib main fn test[T many](x T) T { let r i64 = match x { case i32: 0 case _: 1 } } pub fn main() { }",
 		},
 		{
 			name:  "generic match result type",
-			input: "fn test[T any](x T) T { let r = match x { case i32: x case _: x } } ",
-			want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+			input: "fn test[T many](x T) T { let r = match x { case i32: x case _: x } } ",
+			want:  "lib main fn test[T many](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
 		},
 		// BUG: variable 'r' is inferred as i64 but it should remain T
 		// due to the fact that x can be a result
 		// {
 		// 	name:  "generic match result type",
-		// 	input: "fn test[T any](x T) T { let r = match x { case i32: x case _: 0 } } ",
-		// 	want:  "lib main fn test[T any](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
+		// 	input: "fn test[T many](x T) T { let r = match x { case i32: x case _: 0 } } ",
+		// 	want:  "lib main fn test[T many](x T) T { let r T = match x { case i32: x case _: x } } pub fn main() { }",
 		// },
 	}
 	runAnalysisTests(t, tests)
@@ -1874,18 +1874,18 @@ func TestGenericStructs(t *testing.T) {
 	tests := []testCase{
 		{
 			name:  "single type parameter",
-			input: "struct foo[T any] {value T}",
-			want:  "lib main struct foo[T any] {value T} pub fn main() { }",
+			input: "struct foo[T many] {value T}",
+			want:  "lib main struct foo[T many] {value T} pub fn main() { }",
 		},
 		{
 			name:  "multiple type parameters",
-			input: "struct pair[T, U any] {first T, second U}",
-			want:  "lib main struct pair[T any, U any] {first T, second U} pub fn main() { }",
+			input: "struct pair[T, U many] {first T, second U}",
+			want:  "lib main struct pair[T many, U many] {first T, second U} pub fn main() { }",
 		},
 		{
 			name:  "different constraints",
-			input: "struct result[T any, E error] {value T, err E}",
-			want:  "lib main struct result[T any, E error] {value T, err E} pub fn main() { }",
+			input: "struct result[T many, E error] {value T, err E}",
+			want:  "lib main struct result[T many, E error] {value T, err E} pub fn main() { }",
 		},
 		{
 			name:   "undefined constraint",
@@ -1894,67 +1894,67 @@ func TestGenericStructs(t *testing.T) {
 		},
 		{
 			name:  "instantiation with literal",
-			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1}",
-			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} }",
+			input: "struct abc[T many] { a T } let x = abc[i32]{a: 1}",
+			want:  "lib main struct abc[T many] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} }",
 		},
 		{
 			name:  "instantiation with variable",
-			input: "struct abc[T any] { a T } let y = 2 let x = abc[i64]{a: y}",
-			want:  "lib main struct abc[T any] {a T} pub fn main() { let y i64 = 2 let x abc[i64] = abc[i64]{a i64: y} }",
+			input: "struct abc[T many] { a T } let y = 2 let x = abc[i64]{a: y}",
+			want:  "lib main struct abc[T many] {a T} pub fn main() { let y i64 = 2 let x abc[i64] = abc[i64]{a i64: y} }",
 		},
 		{
 			name:  "field access from generic struct evaluates to correct type",
-			input: "struct abc[T any] { a T } let x = abc[i32]{a: 1} let y = x.a",
-			want:  "lib main struct abc[T any] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} let y i32 = x.a }",
+			input: "struct abc[T many] { a T } let x = abc[i32]{a: 1} let y = x.a",
+			want:  "lib main struct abc[T many] {a T} pub fn main() { let x abc[i32] = abc[i32]{a i32: 1} let y i32 = x.a }",
 		},
 		// {
 		// 	name:  "instantiation without type parameters",
-		// 	input: "struct abc[T any] { a T } let x = abc{a: 1}",
-		// 	want:  "struct abc[T any] { a T } let x abc[i64] = abc{a i64: 1}",
+		// 	input: "struct abc[T many] { a T } let x = abc{a: 1}",
+		// 	want:  "struct abc[T many] { a T } let x abc[i64] = abc{a i64: 1}",
 		// },
 		{
 			name:  "array of generic type",
-			input: "struct container[T any] { items []T } let c = container[i32]{items: [1, 2, 3]}",
-			want:  "lib main struct container[T any] {items []T} pub fn main() { let c container[i32] = container[i32]{items []i32: [1,2,3]} }",
+			input: "struct container[T many] { items []T } let c = container[i32]{items: [1, 2, 3]}",
+			want:  "lib main struct container[T many] {items []T} pub fn main() { let c container[i32] = container[i32]{items []i32: [1,2,3]} }",
 		},
 		{
 			name:  "pointer to generic type",
-			input: "struct box[T any] { value *T } let x = 5 let b = box[i64]{value: &x}",
-			want:  "lib main struct box[T any] {value *T} pub fn main() { let x i64 = 5 let b box[i64] = box[i64]{value *i64: &x} }",
+			input: "struct box[T many] { value *T } let x = 5 let b = box[i64]{value: &x}",
+			want:  "lib main struct box[T many] {value *T} pub fn main() { let x i64 = 5 let b box[i64] = box[i64]{value *i64: &x} }",
 		},
 		{
 			name:  "optional generic type",
-			input: "struct maybe[T any] { value ?T } let m = maybe[i32]{value: null}",
-			want:  "lib main struct maybe[T any] {value ?T} pub fn main() { let m maybe[i32] = maybe[i32]{value ?i32: null} }",
+			input: "struct maybe[T many] { value ?T } let m = maybe[i32]{value: null}",
+			want:  "lib main struct maybe[T many] {value ?T} pub fn main() { let m maybe[i32] = maybe[i32]{value ?i32: null} }",
 		},
 		{
 			name:  "nested field access on generic struct",
-			input: "struct inner[T any] { val T } struct outer[U any] { data inner[U] } let o = outer[i32]{data: inner[i32]{val: 42}} let v = o.data.val",
-			want:  "lib main struct inner[T any] {val T} struct outer[U any] {data inner[U]} pub fn main() { let o outer[i32] = outer[i32]{data inner[i32]: inner[i32]{val i32: 42}} let v i32 = o.data.val }",
+			input: "struct inner[T many] { val T } struct outer[U many] { data inner[U] } let o = outer[i32]{data: inner[i32]{val: 42}} let v = o.data.val",
+			want:  "lib main struct inner[T many] {val T} struct outer[U many] {data inner[U]} pub fn main() { let o outer[i32] = outer[i32]{data inner[i32]: inner[i32]{val i32: 42}} let v i32 = o.data.val }",
 		},
 		{
 			name:  "pass generic struct to function",
-			input: "struct box[T any] { val T } fn get_val(b box[i32]) i32 { return b.val } let b = box[i32]{val: 10} let x = get_val(b)",
-			want:  "lib main struct box[T any] {val T} fn get_val(b box[i32]) i32 { return b.val } pub fn main() { let b box[i32] = box[i32]{val i32: 10} let x i32 = get_val(b) }",
+			input: "struct box[T many] { val T } fn get_val(b box[i32]) i32 { return b.val } let b = box[i32]{val: 10} let x = get_val(b)",
+			want:  "lib main struct box[T many] {val T} fn get_val(b box[i32]) i32 { return b.val } pub fn main() { let b box[i32] = box[i32]{val i32: 10} let x i32 = get_val(b) }",
 		},
 		{
 			name:  "array of parameterized structs",
-			input: "struct point[T any] { x T, y T } let points = [point[i32]{x: 1, y: 2}, point[i32]{x: 3, y: 4}]",
-			want:  "lib main struct point[T any] {x T, y T} pub fn main() { let points []point[i32] = [point[i32]{x i32: 1, y i32: 2},point[i32]{x i32: 3, y i32: 4}] }",
+			input: "struct point[T many] { x T, y T } let points = [point[i32]{x: 1, y: 2}, point[i32]{x: 3, y: 4}]",
+			want:  "lib main struct point[T many] {x T, y T} pub fn main() { let points []point[i32] = [point[i32]{x i32: 1, y i32: 2},point[i32]{x i32: 3, y i32: 4}] }",
 		},
 		{
 			name:  "multiple occurrences of same type parameter",
-			input: "struct triple[T any] { a T, b T, c T } let t = triple[i32]{a: 1, b: 2, c: 3} let sum = t.a + t.b + t.c",
-			want:  "lib main struct triple[T any] {a T, b T, c T} pub fn main() { let t triple[i32] = triple[i32]{a i32: 1, b i32: 2, c i32: 3} let sum i32 = ((t.a + t.b) + t.c) }",
+			input: "struct triple[T many] { a T, b T, c T } let t = triple[i32]{a: 1, b: 2, c: 3} let sum = t.a + t.b + t.c",
+			want:  "lib main struct triple[T many] {a T, b T, c T} pub fn main() { let t triple[i32] = triple[i32]{a i32: 1, b i32: 2, c i32: 3} let sum i32 = ((t.a + t.b) + t.c) }",
 		},
 		{
 			name:   "parameterized struct with wrong field type raises error",
-			input:  `struct abc[T any] { a T } let x = abc[i32]{a: "hello"}`,
+			input:  `struct abc[T many] { a T } let x = abc[i32]{a: "hello"}`,
 			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
 		},
 		{
 			name:   "parameterized struct with mismatched types in fields",
-			input:  "struct pair[T any] { a T, b T } let p = pair[i32]{a: 1, b: \"hello\"}",
+			input:  "struct pair[T many] { a T, b T } let p = pair[i32]{a: 1, b: \"hello\"}",
 			errors: []string{"type mistmatch, expected type 'i32' but got 'string'"},
 		},
 		// BUG: this is not caught yet but requires fixing another issue
@@ -1962,7 +1962,7 @@ func TestGenericStructs(t *testing.T) {
 		// while it should be []ast.token (when running dash compiler tests)
 		// {
 		// name:   "instantiation with variable of wrong type",
-		// input:  "struct abc[T any] { a T } let y = 2 let x = abc[i32]{a: y}",
+		// input:  "struct abc[T many] { a T } let y = 2 let x = abc[i32]{a: y}",
 		// errors: []string{"type mistmatch, expected type 'i32' but got 'i64'"},
 		// },
 		// TODO: add error case where generic struct not instantiated with a type

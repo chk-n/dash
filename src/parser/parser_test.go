@@ -86,13 +86,13 @@ func TestType(t *testing.T) {
 		},
 		{
 			name:  "memory",
-			input: "mut[string]",
-			want:  "mut[string]",
+			input: "memory[string]",
+			want:  "memory[string]",
 		},
 		{
 			name:  "memory nested",
-			input: "mut[[]i64]",
-			want:  "mut[[]i64]",
+			input: "memory[[]i64]",
+			want:  "memory[[]i64]",
 		},
 		{
 			name:  "char",
@@ -105,14 +105,14 @@ func TestType(t *testing.T) {
 			want:  "error",
 		},
 		{
-			name:  "any",
-			input: "any",
-			want:  "any",
+			name:  "many",
+			input: "many",
+			want:  "many",
 		},
 		{
-			name:  "any array",
-			input: "[]any",
-			want:  "[]any",
+			name:  "many array",
+			input: "[]many",
+			want:  "[]many",
 		},
 		{
 			name:  "parameterized type single",
@@ -828,7 +828,7 @@ func TestFunctionLiteral(t *testing.T) {
 		},
 		// {
 		// 	name:  "ensure no infinite recursion",
-		// 	input: "fn some_func(m, mut<i64>)",
+		// 	input: "fn some_func(m, memory[i64])",
 		// 	error: "",
 		// },
 	}
@@ -1388,23 +1388,23 @@ func TestGenericStructDefinition(t *testing.T) {
 	}{
 		{
 			name:  "single generic parameter",
-			input: "struct foo[T any] {a T, b i64}",
-			want:  "struct foo[T any] {a unknown[T], b i64}",
+			input: "struct foo[T many] {a T, b i64}",
+			want:  "struct foo[T many] {a unknown[T], b i64}",
 		},
 		{
 			name:  "multiple generic parameters with same constraint",
-			input: "struct bar[K, V any] {x K, y V}",
-			want:  "struct bar[K any, V any] {x unknown[K], y unknown[V]}",
+			input: "struct bar[K, V many] {x K, y V}",
+			want:  "struct bar[K many, V many] {x unknown[K], y unknown[V]}",
 		},
 		{
 			name:  "multiple generic parameters with different constraints",
-			input: "struct baz[T any, E error] {a T, b E}",
-			want:  "struct baz[T any, E error] {a unknown[T], b unknown[E]}",
+			input: "struct baz[T many, E error] {a T, b E}",
+			want:  "struct baz[T many, E error] {a unknown[T], b unknown[E]}",
 		},
 		{
 			name:  "generic struct with no fields",
-			input: "struct empty[T any] {}",
-			want:  "struct empty[T any] {}",
+			input: "struct empty[T many] {}",
+			want:  "struct empty[T many] {}",
 		},
 	}
 	for _, tc := range tests {
@@ -1849,18 +1849,18 @@ func TestGenericFunctionDefinition(t *testing.T) {
 	}{
 		{
 			name:  "single generic type with constraint",
-			input: "fn func[T any](x T) T {}",
-			want:  "fn func[T any](x unknown[T]) unknown[T] { }",
+			input: "fn func[T many](x T) T {}",
+			want:  "fn func[T many](x unknown[T]) unknown[T] { }",
 		},
 		{
 			name:  "multiple generic types with same constraint",
-			input: "fn func[T, E any](x T, y E) {}",
-			want:  "fn func[T any, E any](x unknown[T],y unknown[E]) { }",
+			input: "fn func[T, E many](x T, y E) {}",
+			want:  "fn func[T many, E many](x unknown[T],y unknown[E]) { }",
 		},
 		{
 			name:  "multiple generic types with different constraints",
-			input: "fn func[T any, E abc](x T, y E) {}",
-			want:  "fn func[T any, E unknown[abc]](x unknown[T],y unknown[E]) { }",
+			input: "fn func[T many, E abc](x T, y E) {}",
+			want:  "fn func[T many, E unknown[abc]](x unknown[T],y unknown[E]) { }",
 		},
 		// {
 		// 	name:  "missing generic constraint",

@@ -165,7 +165,7 @@ func TestNextToken(t *testing.T) {
 		{
 			name: "type keywords",
 			input: `
-				any
+				many
 				int
 				i8
 				i16
@@ -182,10 +182,10 @@ func TestNextToken(t *testing.T) {
 				bool
 				byte
 				char
-				mut
+				memory
 			`,
 			tokens: []wantToken{
-				{"any", token.ANYTYPE},
+				{"many", token.MANYTYPE},
 				{"int", token.INTTYPE},
 				{"i8", token.I8TYPE},
 				{"i16", token.I16TYPE},
@@ -202,7 +202,7 @@ func TestNextToken(t *testing.T) {
 				{"bool", token.BOOLTYPE},
 				{"byte", token.BYTETYPE},
 				{"char", token.CHARTYPE},
-				{"mut", token.MUTABLETYPE},
+				{"memory", token.MEMORYTYPE},
 			},
 		},
 		{

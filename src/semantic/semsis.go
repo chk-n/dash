@@ -286,28 +286,47 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 		} else {
 			rts, ok := s.fnSt.Get(fnName)
 			if !ok {
-				s.addError(n, errFunctionNotFound(fnName))
-				return
-			}
-
-			// Handle generic function instantiation
-			var argTypes []types.Type
-			var retTypes []types.Type
-			if len(rts.GenericParameters) > 0 {
-				argTypes, retTypes = s.instantiateGenericFunction(n, rts)
-				if argTypes == nil || retTypes == nil {
-					// Instantiation failed, don't continue analyzing this call
+				varInfo, varOk := s.varSt.Get(fnName)
+				if varOk {
+					if ptrType, isPtr := varInfo.Type.(*types.Pointer); isPtr {
+						if fnType, isFn := ptrType.T.(*types.Function); isFn {
+							s.analyseCallArguments(n, fnType.Arg)
+							n.ReturnTypes = fnType.Ret
+							n.IsAnonymousFn = true
+						} else {
+							s.addError(n, errFunctionNotFound(fnName))
+							return
+						}
+					} else if fnType, isFn := varInfo.Type.(*types.Function); isFn {
+						s.analyseCallArguments(n, fnType.Arg)
+						n.ReturnTypes = fnType.Ret
+						n.IsAnonymousFn = true
+					} else {
+						s.addError(n, errFunctionNotFound(fnName))
+						return
+					}
+				} else {
+					s.addError(n, errFunctionNotFound(fnName))
 					return
 				}
-				s.analyseCallArguments(n, argTypes)
 			} else {
-				argTypes = rts.Type.Arg
-				retTypes = rts.Type.Ret
-				s.analyseCallArguments(n, argTypes)
-			}
+				var argTypes []types.Type
+				var retTypes []types.Type
+				if len(rts.GenericParameters) > 0 {
+					argTypes, retTypes = s.instantiateGenericFunction(n, rts)
+					if argTypes == nil || retTypes == nil {
+						return
+					}
+					s.analyseCallArguments(n, argTypes)
+				} else {
+					argTypes = rts.Type.Arg
+					retTypes = rts.Type.Ret
+					s.analyseCallArguments(n, argTypes)
+				}
 
-			n.ReturnTypes = retTypes
-			n.IsAnonymousFn = rts.IsAnonymousFn
+				n.ReturnTypes = retTypes
+				n.IsAnonymousFn = rts.IsAnonymousFn
+			}
 		}
 		if len(n.ReturnTypes) == 0 {
 			n.T = &types.Multi{}
@@ -322,14 +341,14 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 
 		// built in functions such as 'len' do not consume memory
 		if !isBuiltinFunction(n.Token.Literal) {
-			// mark mut<> as consumed
+			// mark memory as consumed
 			// if identifier of type memory make sure to consume
 			// memory type and store underlying type in symbol
 			// table so that it cant be used later on in the
 			// same scope
 			for _, arg := range n.Arguments {
 				if ident := s.getIdentFromPrefix(arg); ident != nil {
-					mt := types.GetUnderlyingMutable(arg.Type())
+					mt := types.GetUnderlyingMemory(arg.Type())
 					if mt == nil {
 						continue
 					}
@@ -866,20 +885,87 @@ func (s *Semantics) analyse(n ast.Node, name string) {
 				// instantiate generic type parameters from actual arguments.
 				// this is needed for imported generic functions e.g. map.get_val[T, E any]
 
-				// wrap with ImportNamed
-				instantiatedArgs := make([]types.Type, len(typ.Arg))
-				for i, argT := range typ.Arg {
-					instantiatedArgs[i] = wrapTypeWithImportedNamed(left.Lib, argT)
-				}
+				var instantiatedArgs []types.Type
+				var instantiatedRets []types.Type
 
-				instantiatedRets := make([]types.Type, len(typ.Ret))
-				for i, retT := range typ.Ret {
-					instantiatedRets[i] = wrapTypeWithImportedNamed(left.Lib, retT)
-				}
+				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok && len(fn.TypeParameters) > 0 {
+					typeMap := make(map[string]types.Type)
+					genericNames := s.extractGenericNames(typ)
 
-				// validate function call arguments for imported functions
-				if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+					for i, genericName := range genericNames {
+						if i < len(fn.TypeParameters) {
+							resolvedType := s.inferUnknownNamedType(fn.TypeParameters[i])
+							if resolvedType == nil {
+								resolvedType = fn.TypeParameters[i]
+							}
+							typeMap[genericName] = resolvedType
+						}
+					}
+
+					instantiatedArgs = make([]types.Type, len(typ.Arg))
+					for i, argT := range typ.Arg {
+						instantiatedArgs[i] = s.substituteTypeParameters(argT, typeMap)
+					}
+
+					instantiatedRets = make([]types.Type, len(typ.Ret))
+					for i, retT := range typ.Ret {
+						instantiatedRets[i] = s.substituteTypeParameters(retT, typeMap)
+					}
+
 					s.analyseCallArguments(fn, instantiatedArgs)
+				} else {
+					genericNames := s.extractGenericNames(typ)
+
+					if len(genericNames) > 0 {
+						if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+							typeMap := make(map[string]types.Type)
+
+							for i, argT := range typ.Arg {
+								if i < len(fn.Arguments) {
+									actualArgType := fn.Arguments[i].Type()
+									if actualArgType != nil {
+										s.matchTypes(argT, actualArgType, typeMap)
+									}
+								}
+							}
+
+							instantiatedArgs = make([]types.Type, len(typ.Arg))
+							for i, argT := range typ.Arg {
+								instantiatedArgs[i] = s.substituteTypeParameters(argT, typeMap)
+							}
+
+							instantiatedRets = make([]types.Type, len(typ.Ret))
+							for i, retT := range typ.Ret {
+								instantiatedRets[i] = s.substituteTypeParameters(retT, typeMap)
+							}
+
+							s.analyseCallArguments(fn, instantiatedArgs)
+						} else {
+							instantiatedArgs = make([]types.Type, len(typ.Arg))
+							for i, argT := range typ.Arg {
+								instantiatedArgs[i] = wrapTypeWithImportedNamed(left.Lib, argT)
+							}
+
+							instantiatedRets = make([]types.Type, len(typ.Ret))
+							for i, retT := range typ.Ret {
+								instantiatedRets[i] = wrapTypeWithImportedNamed(left.Lib, retT)
+							}
+						}
+					} else {
+						instantiatedArgs = make([]types.Type, len(typ.Arg))
+						for i, argT := range typ.Arg {
+							instantiatedArgs[i] = wrapTypeWithImportedNamed(left.Lib, argT)
+						}
+
+						instantiatedRets = make([]types.Type, len(typ.Ret))
+						for i, retT := range typ.Ret {
+							instantiatedRets[i] = wrapTypeWithImportedNamed(left.Lib, retT)
+						}
+
+						if fn, ok := n.Right.(*ast.FunctionCallExpression); ok {
+							s.analyseCallArguments(fn, instantiatedArgs)
+						}
+					}
 				}
 
 				n.SetType(&types.Multi{Ts: instantiatedRets})
@@ -1421,7 +1507,9 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 		case *types.Multi:
 			isFnCall = true
 			if len(t.Ts) == 0 {
-				s.addError(val, errCannotAssignVoidFunction())
+				if n.VarNameAt(i) != "_" {
+					s.addError(val, errCannotAssignVoidFunction())
+				}
 				break
 			}
 
@@ -1453,8 +1541,8 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 						}
 					} else {
 						ident := n.VarNameAt(i + j)
-						_, isMutable := n.TypeAt(i + j).(*types.Mutable)
-						isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j) || isMutable
+						_, isMemory := n.TypeAt(i + j).(*types.Memory)
+						isReassignable := s.isReassignable(ident) || n.IsVarAt(i+j) || isMemory
 						s.setDeclerationInSymTab(ident, rt, isReassignable)
 					}
 				}
@@ -1506,10 +1594,10 @@ func (s *Semantics) analyseAssignmentStatement(n *ast.AssignmentStatement) {
 }
 
 func (s *Semantics) setDeclerationInSymTab(n string, t types.Type, isReassignable bool) {
-	_, isMutable := t.(*types.Mutable)
+	_, isMemory := t.(*types.Memory)
 	vi := &VarInfo{
 		Type:         t,
-		Reassignable: isReassignable || isMutable,
+		Reassignable: isReassignable || isMemory,
 	}
 	s.varSt.Set(n, vi)
 }
@@ -1525,7 +1613,7 @@ func (s *Semantics) coalesceTypeForBuiltIn(t types.Type, fnName string) types.Ty
 			return s.coalesceTypeForBuiltIn(t.T, fnName)
 		}
 		return t
-	case *types.Mutable:
+	case *types.Memory:
 		return s.coalesceTypeForBuiltIn(t.T, fnName)
 	case *types.ImportedNamed:
 		return s.coalesceTypeForBuiltIn(t.Typ, fnName)
@@ -2028,6 +2116,11 @@ func validateOperator(t types.Type, tkn token.Type) bool {
 		return validateOperator(t.Underlying, tkn)
 	case *types.ImportedNamed:
 		return validateOperator(t.Typ, tkn)
+	case *types.Multi:
+		if len(t.Ts) == 1 {
+			return validateOperator(t.Ts[0], tkn)
+		}
+		return false
 	case *types.Generic:
 		switch tkn {
 		case token.EQ, token.NEQ:
@@ -2108,8 +2201,9 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 			}
 		}
 		if importedT, ok := arg.Type.(*types.ImportedNamed); ok {
-			typ := s.importedSt[importedT.Lib][importedT.Typ.Ident()]
-			importedT.Typ = typ
+			if un, ok := importedT.Typ.(*types.UnknownNamed); ok {
+				importedT.Typ = s.importedSt[importedT.Lib][un.Name]
+			}
 		} else {
 			typ := s.inferUnknownNamedType(arg.Type)
 			if typ == nil {
@@ -2124,8 +2218,8 @@ func (s *Semantics) analyseFunctionExpression(n *ast.FunctionExpression, name st
 				s.fnSt.Set(arg.Name.TokenLiteral(), &FnInfo{Type: ft})
 			}
 		}
-		_, isMutable := arg.Type.(*types.Mutable)
-		s.varSt.Set(arg.Name.TokenLiteral(), &VarInfo{Type: arg.Type, Reassignable: isMutable})
+		_, isMemory := arg.Type.(*types.Memory)
+		s.varSt.Set(arg.Name.TokenLiteral(), &VarInfo{Type: arg.Type, Reassignable: isMemory})
 		argTypes[i] = arg.Type
 	}
 
@@ -2197,11 +2291,11 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 			}
 			return true
 		}
-	case *types.Any:
+	case *types.Many:
 		return true
 	case *types.Generic:
 		for _, c := range tt.Constraints {
-			if _, ok := c.(*types.Any); ok {
+			if _, ok := c.(*types.Many); ok {
 				return true
 			}
 		}
@@ -2387,8 +2481,8 @@ func (s *Semantics) analyseExpressionType(expr ast.Expression, exprType, targetT
 	// if any are a literal we coalesce the type otherwise we perform strict type check
 	case *ast.ArrayLiteral:
 		arrayType := types.GetUnderlyingTypeIfLiteral(targetType)
-		if mutType, ok := arrayType.(*types.Mutable); ok {
-			arrayType = mutType.T
+		if memType, ok := arrayType.(*types.Memory); ok {
+			arrayType = memType.T
 		}
 		// Handle pointer to array case (e.g., *[]T)
 		if ptrType, ok := arrayType.(*types.Pointer); ok {
@@ -2571,7 +2665,7 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		}
 		t.T = typ
 		return t
-	case *types.Mutable:
+	case *types.Memory:
 		typ := s.inferUnknownNamedType(t.T)
 		if typ == nil {
 			return nil
@@ -2673,10 +2767,13 @@ func (s *Semantics) inferUnknownNamedType(typ types.Type) types.Type {
 		return baseType
 	case *types.ImportedNamed:
 		if t.Typ == nil {
-			// another error has occured
 			return nil
 		}
-		typ, ok := s.importedSt[t.Lib][t.Typ.Ident()]
+		un, isUnresolved := t.Typ.(*types.UnknownNamed)
+		if !isUnresolved {
+			return t
+		}
+		typ, ok := s.importedSt[t.Lib][un.Name]
 		if !ok {
 			return nil
 		}
@@ -3092,7 +3189,7 @@ func (s *Semantics) matchTypes(paramType types.Type, argType types.Type, typeMap
 		// when matching imported types, we match underlying type
 		s.matchTypes(pt.Typ, argType, typeMap)
 	case *types.Int, *types.Byte, *types.Float, *types.Char, *types.Bool,
-		*types.String, *types.Any:
+		*types.String, *types.Many:
 		// no matching needed for these types
 	default:
 		// for unknown types, we skip silently. this allows partial matching
@@ -3135,12 +3232,28 @@ func (s *Semantics) collectGenericNames(t types.Type, seen map[string]bool, name
 		s.collectGenericNames(typ.Underlying, seen, names)
 	case *types.Alias:
 		s.collectGenericNames(typ.Underlying, seen, names)
+	case *types.ImportedNamed:
+		s.collectGenericNames(typ.Typ, seen, names)
+	case *types.Memory:
+		s.collectGenericNames(typ.T, seen, names)
+	case *types.Dirty:
+		s.collectGenericNames(typ.T, seen, names)
+	case *types.Multi:
+		for _, inner := range typ.Ts {
+			s.collectGenericNames(inner, seen, names)
+		}
+	case *types.AbstractStruct:
+		for _, field := range typ.Ts {
+			s.collectGenericNames(field.T, seen, names)
+		}
 	case *types.Union:
-		panic("implement me")
+		for _, inner := range typ.Ts {
+			s.collectGenericNames(inner, seen, names)
+		}
 	case *types.UnknownNamed, *types.Int,
 		*types.Float, *types.Char, *types.Bool,
-		*types.Enum, *types.String, *types.Any,
-		*types.Error:
+		*types.Byte, *types.Enum, *types.String,
+		*types.Many, *types.Error, *types.Null:
 		// do nothing
 
 	default:
@@ -3256,8 +3369,8 @@ func wrapTypeWithImportedNamed(lib string, t types.Type) types.Type {
 		return &types.Array{T: wrapTypeWithImportedNamed(lib, typ.T), Size: typ.Size}
 	case *types.Optional:
 		return &types.Optional{T: wrapTypeWithImportedNamed(lib, typ.T)}
-	case *types.Mutable:
-		return &types.Mutable{T: wrapTypeWithImportedNamed(lib, typ.T)}
+	case *types.Memory:
+		return &types.Memory{T: wrapTypeWithImportedNamed(lib, typ.T)}
 	}
 
 	if types.IsBuiltinType(t) {

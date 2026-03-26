@@ -43,7 +43,7 @@ func TestEvalLibrary(t *testing.T) {
 				pub error b
 				--
 				use "one"
-				
+
 				fn test(err error) i64 {
 					return match err {
 					case one.a: 1
@@ -52,6 +52,26 @@ func TestEvalLibrary(t *testing.T) {
 				}
 				test(one.a)
 			`,
+			want: &Return{Values: []any{int64(1)}},
+		},
+		{
+			name: "negated try in if condition with imported function",
+			input: `
+				lib one
+				pub fn is_false() !bool {
+					return false
+				}
+				--
+				use "one"
+
+				fn test() i64 {
+					let b = true
+					if !try one.is_false() && b {
+						return 1
+					}
+					return 0
+				}
+				test()`,
 			want: &Return{Values: []any{int64(1)}},
 		},
 	}

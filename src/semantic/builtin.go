@@ -73,7 +73,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 				&types.Struct{Ts: []types.StructField{{Name: "len", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
 				&types.String{},
-				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
@@ -84,7 +84,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.Struct{Ts: []types.StructField{{Name: "cap", T: &types.ConstI64}}},
 				&types.Array{T: &types.Generic{Name: "T"}},
-				&types.Mutable{T: &types.Array{T: &types.Generic{Name: "T"}}},
+				&types.Memory{T: &types.Array{T: &types.Generic{Name: "T"}}},
 			}},
 		}
 
@@ -100,7 +100,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		} else {
 			args = []types.Type{argsTypes[0], &types.ConstI64, argsTypes[2]}
 		}
-		rets = []types.Type{&types.Mutable{T: argsTypes[0]}}
+		rets = []types.Type{&types.Memory{T: argsTypes[0]}}
 		errorProne = true
 	case "validate":
 		args = []types.Type{&types.Dirty{T: &types.Generic{Name: "T"}}}
@@ -109,7 +109,7 @@ func getBuiltinSignature(lit string, argsTypes []types.Type) *ast.FunctionExpres
 		args = []types.Type{
 			&types.Generic{Name: "T", Constraints: []types.Type{
 				&types.ConstString,
-				&types.ConstAny,
+				&types.ConstMany,
 			}},
 		}
 	case "assert":

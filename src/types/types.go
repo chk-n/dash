@@ -59,7 +59,7 @@ var (
 	ConstString = String{}
 	ConstNull   = Null{}
 	ConstError  = Error{Name: "error"}
-	ConstAny    = Any{}
+	ConstMany   = Many{}
 )
 
 // ------------ //
@@ -314,6 +314,7 @@ func (t *Struct) String() string {
 	return out.String()
 }
 func (t *Struct) Equal(other Type) bool {
+	other = unwrapImported(other)
 	o, ok := other.(*Struct)
 	if !ok {
 		return false
@@ -623,41 +624,38 @@ func (t *Optional) Equal(other Type) bool {
 	return t.T.Equal(other)
 }
 
-type Mutable struct {
+type Memory struct {
 	T Type
 }
 
-func (t *Mutable) Type() Type { return t.T }
-func (t *Mutable) Ident() string {
+func (t *Memory) Type() Type { return t.T }
+func (t *Memory) Ident() string {
 	return t.String()
 }
-func (t *Mutable) String() string {
-	return "mut[" + t.T.String() + "]"
+func (t *Memory) String() string {
+	return "memory[" + t.T.String() + "]"
 }
-func (t *Mutable) Equal(other Type) bool {
-	otherMem, ok := other.(*Mutable)
+func (t *Memory) Equal(other Type) bool {
+	otherMem, ok := other.(*Memory)
 	if !ok {
-		// mutable type comparison falls through
-		// to underlying type if comparison cant
-		// be made
 		return t.T.Equal(other)
 	}
 
 	return t.T.Equal(otherMem.Type())
 }
 
-type Any struct{}
+type Many struct{}
 
-func (t *Any) Ident() string {
+func (t *Many) Ident() string {
 	return t.String()
 }
-func (t *Any) String() string {
-	return "any"
+func (t *Many) String() string {
+	return "many"
 }
-func (t *Any) Equal(other Type) bool {
+func (t *Many) Equal(other Type) bool {
 	return true
 }
-func (t *Any) Type() Type {
+func (t *Many) Type() Type {
 	return t
 }
 
@@ -737,7 +735,17 @@ func (t *ImportedNamed) String() string {
 	}
 	return t.Lib + "." + t.Typ.String()
 }
+func unwrapImported(t Type) Type {
+	if imp, ok := t.(*ImportedNamed); ok && imp.Typ != nil {
+		return imp.Typ
+	}
+	return t
+}
+
 func (t *ImportedNamed) Equal(other Type) bool {
+	if t.Typ != nil {
+		return t.Typ.Equal(unwrapImported(other))
+	}
 	otherUn, ok := other.(*ImportedNamed)
 	return ok && t.Ident() == otherUn.Ident()
 }
@@ -836,7 +844,7 @@ func (t *Multi) Equal(other Type) bool {
 func IsPrimitiveType(t Type) bool {
 	switch t.(type) {
 	case *Int, *Float, *Bool, *String,
-		*Char, *Byte, *Any:
+		*Char, *Byte, *Many:
 		return true
 	default:
 		return false
@@ -877,7 +885,7 @@ func IsBuiltinType(t Type) bool {
 		return IsBuiltinType(t.T)
 	case *Pointer:
 		return IsBuiltinType(t.T)
-	case *Mutable:
+	case *Memory:
 		return IsBuiltinType(t.T)
 	case *ImportedNamed:
 		return IsBuiltinType(t.Typ)
@@ -891,20 +899,20 @@ func IsBuiltinType(t Type) bool {
 	}
 }
 
-func GetUnderlyingMutable(t Type) *Mutable {
+func GetUnderlyingMemory(t Type) *Memory {
 	switch t := t.(type) {
-	case *Mutable:
+	case *Memory:
 		return t
 	case *Definition:
-		return GetUnderlyingMutable(t.Underlying)
+		return GetUnderlyingMemory(t.Underlying)
 	case *Dirty:
-		return GetUnderlyingMutable(t.T)
+		return GetUnderlyingMemory(t.T)
 	case *Pointer:
-		return GetUnderlyingMutable(t.T)
+		return GetUnderlyingMemory(t.T)
 	case *Optional:
-		return GetUnderlyingMutable(t.T)
+		return GetUnderlyingMemory(t.T)
 	case *Alias:
-		return GetUnderlyingMutable(t.Underlying)
+		return GetUnderlyingMemory(t.Underlying)
 	}
 	return nil
 }
@@ -935,7 +943,7 @@ func GetUnderlyingTypeArray(t Type) *Array {
 		return GetUnderlyingTypeArray(t.T)
 	case *Alias:
 		return GetUnderlyingTypeArray(t.Underlying)
-	case *Mutable:
+	case *Memory:
 		return GetUnderlyingTypeArray(t.T)
 	}
 	return nil
@@ -968,7 +976,7 @@ func GetUnderlyingStructType(t Type) (*Struct, bool) {
 		return GetUnderlyingStructType(t.T)
 	case *Optional:
 		return GetUnderlyingStructType(t.T)
-	case *Mutable:
+	case *Memory:
 		return GetUnderlyingStructType(t.T)
 	case *Pointer:
 		return GetUnderlyingStructType(t.T)
@@ -982,12 +990,12 @@ func GetUnderlyingStructType(t Type) (*Struct, bool) {
 // type. For example if 'from' is type of a literal
 func CanCoalesce(from, to Type) bool {
 	switch from := from.(type) {
-	case *Any:
+	case *Many:
 		return true
 	case *Generic:
 		// TODO: check actual constraints when they're properly implemented
 		for _, c := range from.Constraints {
-			if _, ok := c.(*Any); ok {
+			if _, ok := c.(*Many); ok {
 				return true
 			}
 		}
@@ -1154,7 +1162,7 @@ func CanCoalesce(from, to Type) bool {
 					return true
 				}
 			}
-		case *Mutable:
+		case *Memory:
 			return CanCoalesce(from, to.T)
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
@@ -1251,7 +1259,7 @@ func CanCoalesce(from, to Type) bool {
 		case *ImportedNamed:
 			return CanCoalesce(from, to.Typ)
 		}
-	case *Mutable:
+	case *Memory:
 		return CanCoalesce(from.T, to)
 	case *ImportedNamed:
 		// check both from same library
@@ -1403,14 +1411,14 @@ func TokenToType(tk token.Token) Type {
 		return &ConstChar
 	case token.ASTERISK:
 		return &Pointer{}
-	case token.MUTABLETYPE:
-		return &Mutable{}
+	case token.MEMORYTYPE:
+		return &Memory{}
 	case token.DIRTYTYPE:
 		return &Dirty{}
 	case token.ERROR:
 		return &ConstError
-	case token.ANYTYPE:
-		return &ConstAny
+	case token.MANYTYPE:
+		return &ConstMany
 	}
 	panic("invalid token " + tk.Literal)
 }
@@ -1608,7 +1616,7 @@ func GetUnderlyingIndexable(t Type) Type {
 		return GetUnderlyingIndexable(t.T)
 	case *Optional:
 		return GetUnderlyingIndexable(t.T)
-	case *Mutable:
+	case *Memory:
 		return GetUnderlyingIndexable(t.T)
 	case *Definition:
 		return GetUnderlyingIndexable(t.Underlying)
@@ -1650,7 +1658,7 @@ func IsArray(t Type) (*Array, bool) {
 		return IsArray(t.T)
 	case *Definition:
 		return IsArray(t.Underlying)
-	case *Mutable:
+	case *Memory:
 		return IsArray(t.T)
 	case *Array:
 		return t, true

@@ -23,16 +23,19 @@ type Context struct {
 }
 
 func NewContext(prev *Context) *Context {
-	var libPath string
-	if prev != nil {
-		libPath = prev.libPath
+	if prev == nil {
+		return &Context{
+			imps: internal.NewCache[string, *ast.Library](),
+			vars: internal.NewStackedSymbolTable[any](),
+			typs: internal.NewCache[string, types.Type](),
+		}
 	}
 	return &Context{
-		imps:    internal.NewCache[string, *ast.Library](),
+		imps:    prev.imps,
+		typs:    prev.typs,
 		vars:    internal.NewStackedSymbolTable[any](),
 		prev:    prev,
-		typs:    internal.NewCache[string, types.Type](),
-		libPath: libPath,
+		libPath: prev.libPath,
 	}
 }
 
@@ -93,4 +96,9 @@ func (c *Context) Scope() {
 
 func (c *Context) Unscope() {
 	c.vars.Unscope()
+}
+
+func (c *Context) Release() {
+	// no-op: contexts may be captured by closures that outlive
+	// the defining scope, so pooling is unsafe.
 }

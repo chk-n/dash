@@ -49,8 +49,8 @@ const (
 	// ------------- //
 	// Type keywords //
 	// ------------- //
-	//any
-	ANYTYPE
+	//many
+	MANYTYPE
 	// int
 	INTTYPE
 	// i8
@@ -88,7 +88,7 @@ const (
 	// // []T or [n]T
 	// ARRAYTYPE
 	// memory
-	MUTABLETYPE
+	MEMORYTYPE
 	// dirty
 	DIRTYTYPE
 
@@ -290,7 +290,7 @@ var keywords = map[string]Type{
 	"null":  NULL,
 
 	// Types
-	"any":    ANYTYPE,
+	"many":   MANYTYPE,
 	"int":    INTTYPE,
 	"i8":     I8TYPE,
 	"i16":    I16TYPE,
@@ -307,7 +307,7 @@ var keywords = map[string]Type{
 	"byte":   BYTETYPE,
 	"char":   CHARTYPE,
 	"bool":   BOOLTYPE,
-	"mut":    MUTABLETYPE,
+	"memory": MEMORYTYPE,
 	"dirty":  DIRTYTYPE,
 
 	//

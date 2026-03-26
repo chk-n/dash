@@ -155,7 +155,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.F32TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.F64TYPE, p.parseTypeLiteral)
 	p.registerPrefix(token.ERROR, p.parseTypeLiteral)
-	p.registerPrefix(token.ANYTYPE, p.parseTypeLiteral)
+	p.registerPrefix(token.MANYTYPE, p.parseTypeLiteral)
 	//
 	p.registerPrefix(token.TRY, p.parseTryExpression)
 
@@ -1345,7 +1345,7 @@ func (p *Parser) curTokenIsIdent() bool {
 		token.BYTETYPE, token.CHARTYPE, token.I8TYPE, token.I16TYPE,
 		token.I32TYPE, token.I64TYPE, token.U8TYPE, token.U16TYPE,
 		token.U32TYPE, token.U64TYPE, token.F32TYPE, token.F64TYPE,
-		token.ANYTYPE:
+		token.MANYTYPE:
 		return true
 	case token.LIBRARY, token.PUBLIC,
 		token.NEXT, token.BREAK,
@@ -2176,8 +2176,8 @@ func (p *Parser) parseType() types.Type {
 		}
 	case token.ASTERISK:
 		typ = p.parsePointerType()
-	case token.MUTABLETYPE:
-		typ = p.parseMutableType()
+	case token.MEMORYTYPE:
+		typ = p.parseMemoryType()
 	case token.DIRTYTYPE:
 		typ = p.parseDirtyType()
 	default:
@@ -2313,8 +2313,8 @@ func (p *Parser) parsePointerType() types.Type {
 	return typ
 }
 
-func (p *Parser) parseMutableType() types.Type {
-	typ, _ := types.TokenToType(p.curToken).(*types.Mutable)
+func (p *Parser) parseMemoryType() types.Type {
+	typ, _ := types.TokenToType(p.curToken).(*types.Memory)
 	p.nextToken()
 
 	if !p.curTokenIs(token.LBRACK) {
@@ -2467,12 +2467,12 @@ func (p *Parser) curTokenIsType() bool {
 		p.curToken.Type == token.LBRACK ||
 		(p.curToken.Type == token.FUNCTION && p.peekToken().Type == token.LPAREN) ||
 		p.curToken.Type == token.ASTERISK ||
-		p.curToken.Type == token.MUTABLETYPE ||
+		p.curToken.Type == token.MEMORYTYPE ||
 		p.curToken.Type == token.IDENT ||
 		p.curToken.Type == token.OPTIONAL ||
 		p.curToken.Type == token.DIRTYTYPE ||
 		p.curToken.Type == token.ERROR ||
-		p.curToken.Type == token.ANYTYPE
+		p.curToken.Type == token.MANYTYPE
 }
 
 func (p *Parser) peekNTokenIsType(n int) bool {
@@ -2494,12 +2494,12 @@ func (p *Parser) peekNTokenIsType(n int) bool {
 		peekTkn.Type == token.LBRACK ||
 		(peekTkn.Type == token.FUNCTION && p.peekNTokenIs(2, token.LPAREN)) ||
 		peekTkn.Type == token.ASTERISK ||
-		peekTkn.Type == token.MUTABLETYPE ||
+		peekTkn.Type == token.MEMORYTYPE ||
 		peekTkn.Type == token.IDENT ||
 		peekTkn.Type == token.OPTIONAL ||
 		peekTkn.Type == token.DIRTYTYPE ||
 		peekTkn.Type == token.ERROR ||
-		peekTkn.Type == token.ANYTYPE
+		peekTkn.Type == token.MANYTYPE
 }
 
 func (p *Parser) curTokenIsConditionalStatement() bool {

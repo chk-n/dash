@@ -27,6 +27,18 @@ func (s *StackedSymTab[T]) Unscope() {
 	s.cur--
 }
 
+func (s *StackedSymTab[T]) Reset() {
+	for i := range s.stk {
+		clear(s.stk[i])
+	}
+	if len(s.stk) > 1 {
+		s.stk = s.stk[:1]
+	} else if len(s.stk) == 0 {
+		s.stk = append(s.stk, make(map[string]T))
+	}
+	s.cur = 0
+}
+
 func (s *StackedSymTab[T]) SetIn(scope int64, vr string, v T) {
 	s.stk[scope][vr] = v
 }

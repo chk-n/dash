@@ -2000,7 +2000,7 @@ func TestOptionalTypes(t *testing.T) {
 		{
 			name: "coalesce generic optional with any constraint",
 			prog: `
-			fn test[T any](x T) ?T { return x }
+			fn test[T many](x T) ?T { return x }
 			let got = test[u64](u64(10)) ?? u64(0)
 			got`,
 			want: uint64(10),
@@ -2008,7 +2008,7 @@ func TestOptionalTypes(t *testing.T) {
 		{
 			name: "equality check with generic optional with any constraint",
 			prog: `
-			fn test[T any](x T) ?T { return x }
+			fn test[T many](x T) ?T { return x }
 			let got = test[u64](u64(10)) 
 			got == 10`,
 			want: true,
@@ -2636,26 +2636,26 @@ func TestPointers(t *testing.T) {
 	}
 }
 
-func TestAnyType(t *testing.T) {
+func TestManyType(t *testing.T) {
 	tests := []struct {
 		name string
 		prog string
 		want any
 	}{
 		{
-			name: "pass any to function",
-			prog: "fn test(x any) any { return x } test(1)",
-			want: &Return{Values: []any{&Any{descriptor: 64103268, value: int64(1)}}},
+			name: "pass many to function",
+			prog: "fn test(x many) many { return x } test(1)",
+			want: &Return{Values: []any{&Many{descriptor: 64103268, value: int64(1)}}},
 		},
 		{
-			name: "return any from function",
-			prog: "fn test() any { return 1 } test()",
-			want: &Return{Values: []any{&Any{descriptor: 64103268, value: int64(1)}}},
+			name: "return many from function",
+			prog: "fn test() many { return 1 } test()",
+			want: &Return{Values: []any{&Many{descriptor: 64103268, value: int64(1)}}},
 		},
 		{
-			name: "match any",
+			name: "match many",
 			prog: `
-				fn test(x any) i64 {
+				fn test(x many) i64 {
 					return match x {
 						case string: 2
 						case i64: 1
@@ -2691,13 +2691,13 @@ func TestGenerics(t *testing.T) {
 	}{
 		{
 			name: "generic struct",
-			prog: "struct abc[T any]{ x T } let a = abc[i32]{x: 1} a.x",
+			prog: "struct abc[T many]{ x T } let a = abc[i32]{x: 1} a.x",
 			want: int64(1),
 		},
 		{
 			name: "generic function",
-			prog: `fn test[T any](x T) T { return x } let r = test[string]("hello") r`,
-			want: &Any{descriptor: 398550328, value: "hello"},
+			prog: `fn test[T many](x T) T { return x } let r = test[string]("hello") r`,
+			want: &Many{descriptor: 398550328, value: "hello"},
 		},
 	}
 
@@ -2726,7 +2726,7 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		{
 			name: "match string type in generic function",
 			prog: `
-			fn test[T any](x T) i64 {
+			fn test[T many](x T) i64 {
 				return match x {
 					case string: 1
 					case _: 0
@@ -2738,7 +2738,7 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		{
 			name: "match string type in generic function - no type param",
 			prog: `
-			fn test[T any](x T) i64 {
+			fn test[T many](x T) i64 {
 				return match x {
 					case string: 1
 					case _: 0
@@ -2750,7 +2750,7 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		{
 			name: "match u64 type in generic function",
 			prog: `
-			fn test[T any](x T) i64 {
+			fn test[T many](x T) i64 {
 				return match x {
 					case u64: 1
 					case _: 0
@@ -2762,13 +2762,13 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		{
 			name: "nested generic call with match",
 			prog: `
-			fn inner[T any](x T) i64 {
+			fn inner[T many](x T) i64 {
 				return match x {
 					case string: 1
 					case _: 0
 				}
 			}
-			fn outer[T any](x T) i64 {
+			fn outer[T many](x T) i64 {
 				return inner[T](x)
 			}
 			outer[string]("test")`,
@@ -2777,7 +2777,7 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		// {
 		// 	name: "match on generic array element",
 		// 	prog: `
-		// 	fn test[T any](arr []T)! i64 {
+		// 	fn test[T many](arr []T)! i64 {
 		// 		let e = try get(arr, 0)
 		// 		return match e {
 		// 			case string: 1
@@ -2790,8 +2790,8 @@ func TestGenericMatchTypeCase(t *testing.T) {
 		// {
 		// 	name: "match on generic struct field",
 		// 	prog: `
-		// 	struct Box[T any] { value T }
-		// 	fn test[T any](b Box[T]) i64 {
+		// 	struct Box[T many] { value T }
+		// 	fn test[T many](b Box[T]) i64 {
 		// 		return match b.value {
 		// 			case string: 1
 		// 			case u64: 2
@@ -2979,8 +2979,8 @@ func deepEqual(a, b any) bool {
 			return false
 		}
 		return a.Err == b.Err
-	case *Any:
-		b, ok := b.(*Any)
+	case *Many:
+		b, ok := b.(*Many)
 		if !ok {
 			return false
 		}
