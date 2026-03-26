@@ -44,7 +44,6 @@ fn test_insert_many()! {
         try assert(got == i, "expected value to match")
     }
 
-    // verify all values stored still accessible
     for i = u64(0); i < limit; i++ {
         let got = try get_val[u64,u64](m, i)
         try assert(got == i, "expected value to match")
@@ -65,7 +64,7 @@ fn test_update_no_change()! {
     let m2 = try insert(m1, u64(1), want)
     try assert(m2.len == 1, "length after update should be 1")
     let got2 = try get_val[u64,u64](m2, u64(1)) 
-    try assert(got2 == want, "expected value tp update")
+    try assert(got2 == want, "expected value to update")
 
     try assert(m1 == m2, "expected no change to occur")
 }
@@ -84,7 +83,7 @@ fn test_update_new_value()! {
     let m2 = try insert(m1, u64(1), want2)
     try assert(m2.len == 1, "length after update should be 1")
     let got2 = try get_val[u64,u64](m2, u64(1)) 
-    try assert(got2 == want2, "expected value tp update")
+    try assert(got2 == want2, "expected value to update")
 
     try assert(m1 != m2, "expected change to occur")
 }
@@ -108,7 +107,6 @@ fn test_insert_with_branching()! {
     let vb = try get_val[u64,u64](base, u64(100))
     try assert(vb == null, "base should not have key 100")
 
-    // validate branches untouched
     let va = try get_val[u64,u64](branch_a, u64(100))
     try assert(va == u64(1000), "branch_a should have key 100")
     let va2 = try get_val[u64,u64](branch_a, u64(200))
@@ -123,4 +121,53 @@ fn test_insert_with_branching()! {
     try assert(vc == u64(3000), "branch_c should have key 300")
     let vc2 = try get_val[u64,u64](branch_c, u64(100))
     try assert(vc2 == null, "branch_c should not have key 100")
+}
+
+@test
+fn test_iterate_empty()! {
+    let m = new[u64,u64]()
+    let it = iterate(m)
+    let it2, let k, let v = try next_kv(it)
+    try assert(k == null && v == null, "empty map should return null")
+}
+
+@test
+fn test_iterate_single_element()! {
+    var m = new[u64,u64]()
+    m = try insert(m, u64(42), u64(100))
+
+    let it = iterate(m)
+
+    let it2, let k1, let v1 = try next_kv(it)
+    try assert(k1 == u64(42), "should return key 42")
+    try assert(v1 == u64(100), "should return value 100")
+
+    let it3, let k2, let v2 = try next_kv(it2)
+    try assert(k2 == null && v2 == null, "should return null after exhausting")
+}
+
+@test
+fn test_iterate_large_map()! {
+    var m = new[u64,u64]()
+    let limit = u64(10_000)
+
+    for i = u64(0); i < limit; i++ {
+        m = try insert(m, i, i)
+    }
+
+    var count = u64(0)
+    var it = iterate(m)
+    for {
+        let next_it, let k, let v = try next_kv(it)
+        if k == null {
+            break
+        }
+        try assert(v == try get_val(m, k), "expected values to match")
+
+        count = count + 1
+        it = next_it
+    }
+
+    try assert(count == limit, "should iterate over all elements")
+    try assert(count == m.len, "count should match map length")
 }

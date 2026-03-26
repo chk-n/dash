@@ -5,13 +5,13 @@ use "dash/convert"
 
 let MAX_DEPTH = u32(7)
 
-pub struct map[T, E any] {
+pub struct map[T, E many] {
     len  u64
     seed u64
     root *node[T, E]    
 }
 
-struct node[T,E any] {
+struct node[T,E many] {
     // 0 = hash points to node
     // 1 = hash points to value
     // disregard bits after position len(masks)
@@ -41,14 +41,14 @@ struct node[T,E any] {
     overflow ?*overflow_node[T,E]
 }
 
-struct overflow_node[T, E any] {
+struct overflow_node[T, E many] {
     len    u64
     keys   []T
     values []E
 }
 
 
-pub fn new[T, E any]() *map[T,E] {
+pub fn new[T, E many]() *map[T,E] {
     // TODO: generate new seed
     let seed = 0
     let n = &node[T,E]{
@@ -67,7 +67,7 @@ pub fn new[T, E any]() *map[T,E] {
     
 }
 
-pub fn insert[T, E any](m *map[T,E], k T, v E)! *map[T,E] {
+pub fn insert[T, E many](m *map[T,E], k T, v E)! *map[T,E] {
     let h = try hash(k, m.seed)
     let lvl = u32(0)
     let n, let i = try insert_value(m.root, m.seed, h, k, v, lvl)
@@ -84,15 +84,135 @@ pub fn insert[T, E any](m *map[T,E], k T, v E)! *map[T,E] {
     }
 }
 
-pub fn get_val[T, E any](m *map[T,E], k T)! ?E {
+pub fn get_val[T, E many](m *map[T,E], k T)! ?E {
     let h = try hash(k, m.seed)
     let lvl = u32(0)
     return try get_value[T,E](m.root, k, h, lvl)
 }
 
+pub struct iterator[T, E many] {
+    // keeps track of index of keys and values
+    // array for each node in stack
+    // TODO: convert to fix sized array [MAX_DEPTH]u8
+    kv_idxs []u8
+    // keeps track of index of nodes array
+    // for each node in stack
+    // TODO: convert to fix sized array [MAX_DEPTH]u8
+    n_idxs []u8
+    // depth of map can be at most 7 nodes deep.
+    // the current node is stk[len(stk)-1]
+    // TODO: convert to fix sized array [MAX_DEPTH]u8
+    stk []*node[T,E]
+    // overflow tracking (only relevant at MAX_DEPTH)
+    overflow_idx u64
+}
+
+// creates an iterator to iterate over map depth-first returning
+// keys and values found at current node before going one level deeper
+pub fn iterate[T, E many](m *map[T,E]) iterator[T,E] {
+    return iterator[T,E]{
+        kv_idxs: [0],
+        n_idxs: [0],
+        stk: [m.root],
+        overflow_idx: 0,
+    }
+}
+
+pub fn next_kv[T, E many](it iterator[T,E])! iterator[T,E], T?, E? {
+    if len(it.stk) == 0 {
+        return it, null, null
+    }
+    let depth = u32(len(it.stk) - 1)
+ 
+    let curr = try get(it.stk, depth)
+    let kv_idx = try get(it.kv_idxs, depth)
+    let n_idx = try get(it.n_idxs, depth)
+
+    // descend into child nodes first before
+    // iterating over keys and values
+    if n_idx < u8(len(curr.nodes)) {
+        let child = try get(curr.nodes, n_idx)
+
+        var new_stk = try append(it.stk, child)
+        var new_kv_idxs = try append(it.kv_idxs, 0)
+        var new_n_idxs = try append(it.n_idxs, 0)
+
+        // update parents n_idx for when we return
+        new_n_idxs = try put(new_n_idxs, depth, n_idx + 1)
+
+        let new_it = iterator[T,E]{
+            kv_idxs: new_kv_idxs,
+            n_idxs: new_n_idxs,
+            stk: new_stk,
+            overflow_idx: 0,
+        }
+
+        return try next_kv(new_it)
+    }
+
+    // we either iterate over overflow keys and values or over
+    // node keys and values arrays but not both. Leaf node with
+    // overflow will have empty node.keys and node.values arrays
+    if depth == MAX_DEPTH && curr.overflow != null {
+        // NOTE: this does not get tested currently
+        let overflow = curr.overflow
+
+        if it.overflow_idx < overflow.len {
+            // Continue overflow iteration
+            let key = try get(overflow.keys, it.overflow_idx)
+            let val = try get(overflow.values, it.overflow_idx)
+
+            let new_it = iterator[T,E]{
+                kv_idxs: it.kv_idxs,
+                n_idxs: it.n_idxs,
+                stk: it.stk,
+                overflow_idx: it.overflow_idx + 1,
+            }
+
+            return new_it, key, val
+        }
+    } else if kv_idx < u8(len(curr.keys)) {
+        let key = try get(curr.keys, kv_idx)
+        let val = try get(curr.values, kv_idx)
+
+        var new_kv_idxs = try put(it.kv_idxs, depth, kv_idx + 1)
+
+        let new_it = iterator[T,E]{
+            kv_idxs: new_kv_idxs,
+            n_idxs: it.n_idxs,
+            stk: it.stk,
+            overflow_idx: it.overflow_idx,
+        }
+
+        return new_it, key, val
+    }
+
+    if depth == 0 {
+        return iterator[T,E]{
+            kv_idxs: [],
+            n_idxs: [],
+            stk: [],
+            overflow_idx: 0,
+        }, null, null
+    }
+
+    var new_stk = try slice(it.stk, 0, depth)
+    var new_kv_idxs = try slice(it.kv_idxs, 0, depth)
+    var new_n_idxs = try slice(it.n_idxs, 0, depth)
+
+    let new_it = iterator[T,E]{
+        kv_idxs: new_kv_idxs,
+        n_idxs: new_n_idxs,
+        stk: new_stk,
+        overflow_idx: 0,
+    }
+
+    return try next_kv(new_it)
+}
+
 // insert_value returns the updated node and the count which can be 0 or 1 depending on
 // if the value was updated or inserted
-fn insert_value[T, E any](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E], i64 {
+fn insert_value[T, E many](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E], i64 {
 
     let m = mask(h, lvl)
     let pos = is_mask_match(n.masks, m)
@@ -106,7 +226,6 @@ fn insert_value[T, E any](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E]
         let h0 = try hash(k0, s)
 
         if h == h0 && k == k0 {
-            // case: perfect match 
             return try copy_update_value(n, idx, k, v), 0
         } else {
             // case: hashes match partially so we need to move current
@@ -142,7 +261,7 @@ fn insert_value[T, E any](n *node[T,E], s, h u64, k T, v E, lvl u32)! *node[T,E]
     }
 }
 
-fn copy_insert_value[T, E any](n *node[T,E], mask u8, k T, v E)! *node[T,E] {
+fn copy_insert_value[T, E many](n *node[T,E], mask u8, k T, v E)! *node[T,E] {
     let keys = try append(n.keys, k)
     let vals = try append(n.values, v)
     let masks = try append(n.masks, mask)
@@ -159,7 +278,7 @@ fn copy_insert_value[T, E any](n *node[T,E], mask u8, k T, v E)! *node[T,E] {
     }
 }
 
-fn copy_update_value[T, E any](n *node[T,E], idx u32, k T, v E)! *node[T,E] {
+fn copy_update_value[T, E many](n *node[T,E], idx u32, k T, v E)! *node[T,E] {
 
     // check if values the same to avoid copying
     let existing_value = try get(n.values, idx)
@@ -178,7 +297,7 @@ fn copy_update_value[T, E any](n *node[T,E], idx u32, k T, v E)! *node[T,E] {
     }
 }
 
-fn merge_pair[T, E any](k0, k1 T, v0, v1 E, h0, h1 u64, lvl u32)! *node[T,E] {
+fn merge_pair[T, E many](k0, k1 T, v0, v1 E, h0, h1 u64, lvl u32)! *node[T,E] {
     let m0 = mask(h0, lvl)
     let m1 = mask(h1, lvl)
 
@@ -226,7 +345,7 @@ fn merge_pair[T, E any](k0, k1 T, v0, v1 E, h0, h1 u64, lvl u32)! *node[T,E] {
     }
 }
 
-fn copy_migrate_to_node[T, E any](n *node[T,E], pos, idx u32, new *node[T,E])! *node[T,E]{
+fn copy_migrate_to_node[T, E many](n *node[T,E], pos, idx u32, new *node[T,E])! *node[T,E]{
     try assert(is_bit_set(n.bitmap, pos), "expected bit to be set")
 
     let nidx = node_index(n.bitmap, pos)
@@ -248,10 +367,9 @@ fn copy_migrate_to_node[T, E any](n *node[T,E], pos, idx u32, new *node[T,E])! *
     }
 }
 
-fn copy_insert_to_overflow[T, E any](n *node[T,E], k T, v E)! *node[T,E] {
+fn copy_insert_to_overflow[T, E many](n *node[T,E], k T, v E)! *node[T,E] {
     // try assert(n.overflow != null, "")
     // try assert(len(n.overflow.keys) == len(n.overflow.values), "")
-
     let old = n.overflow
 
     let keys = try append(old.keys, k)
@@ -274,8 +392,8 @@ fn copy_insert_to_overflow[T, E any](n *node[T,E], k T, v E)! *node[T,E] {
 }
 
 // copy_update_node copies all nodes from n and sets element at index idx to new
-fn copy_update_node[T, E any](n, new *node[T,E], pos, idx u32)! *node[T,E] {
-    try assert(!is_bit_set(n.bitmap, pos), "expected bit to be set at pos")
+fn copy_update_node[T, E many](n, new *node[T,E], pos, idx u32)! *node[T,E] {
+    try assert(!is_bit_set(n.bitmap, pos), "expected bit to NOT be set at pos")
 
     let nodes = try put(n.nodes, idx, new)
 
@@ -289,7 +407,7 @@ fn copy_update_node[T, E any](n, new *node[T,E], pos, idx u32)! *node[T,E] {
     }
 }
 
-fn get_value[T, E any](n *node[T,E], k T, h u64, lvl u32)! ?E {
+fn get_value[T, E many](n *node[T,E], k T, h u64, lvl u32)! ?E {
     try assert(lvl <= MAX_DEPTH, "lvl should never be greater than MAX_DEPTH")
 
     let m = mask(h, lvl)
@@ -312,7 +430,7 @@ fn get_value[T, E any](n *node[T,E], k T, h u64, lvl u32)! ?E {
             if n.overflow == null {
                 return null
             }
-            for i = u32(0); i < u32(n.overflow.len); i++ {
+            for i = u64(0); i < n.overflow.len; i++ {
                 let key = try get(n.overflow.keys, i)
                 if key == k {
                     let val = try get(n.overflow.values, i)
@@ -327,10 +445,6 @@ fn get_value[T, E any](n *node[T,E], k T, h u64, lvl u32)! ?E {
 }
 
 
-
-// ------- //
-// Helpers //
-// ------- //
 
 // mask extracts the lvl-th 5-bit group from hash (left to right, 0-indexed)
 // and returns it as a u8. e.g. lvl=0 returns bits 59-63.
@@ -385,7 +499,7 @@ fn node_index(bitmap u32, pos u32) u32 {
     return pos - d_idx
 }
 
-fn hash[T any](k T, seed u64)! u64 {
+fn hash[T many](k T, seed u64)! u64 {
     match k {
     case string:
         return try rapidhash.nano([]u8(k), seed)
