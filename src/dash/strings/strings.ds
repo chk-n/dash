@@ -28,7 +28,6 @@ pub fn contains(str, substr string)! bool {
         return true
     }
 
-    // check each position in str
     for i = 0; i <= len(str) - len(substr); i++ {
         var found = true
         for j = 0; j < len(substr); j++ {
@@ -67,7 +66,7 @@ pub fn split(str, delimiter string)! []string {
 
         if idx == len(str) {
             // we are at the end, add empty string to
-            // handle case where delimeter is at end
+            // handle case where delimiter is at end
             parts = append(parts, "")
             break
         }
@@ -76,12 +75,10 @@ pub fn split(str, delimiter string)! []string {
         let pos = try index_of(rest, delimiter)
 
         if pos == -1 {
-            // no more delimiters, add the rest
             parts = append(parts, rest)
             break
         }
 
-        // add the part before the delimiter
         let part = try slice(rest, 0, pos)
         parts = append(parts, part)
         idx = idx + pos + len(delimiter)
@@ -96,7 +93,6 @@ pub fn trim(str string)! string {
         return str
     }
 
-    // find first non-whitespace
     var start = 0
     for start < len(str) {
         let ch = try get(str, start)
@@ -106,12 +102,10 @@ pub fn trim(str string)! string {
         start = start + 1
     }
 
-    // its all whitespace
     if start == len(str) {
         return ""
     }
 
-    // find last non-whitespace
     var end = len(str) - 1
     for end >= start {
         let ch = try get(str, end)
@@ -129,7 +123,6 @@ fn index_of(str, substr string)! i64 {
         return -1
     }
 
-    // check each position in str
     for i = 0; i <= len(str) - len(substr); i++ {
         var found = true
         for j = 0; j < len(substr); j++ {
