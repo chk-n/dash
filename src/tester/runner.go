@@ -23,14 +23,15 @@ type TestRunner struct {
 	results []TestResult
 	passed  int
 	failed  int
-	// Directory where tests are being run
 	testDir string
+	filter  string
 }
 
-func NewTestRunner(dir string) *TestRunner {
+func NewTestRunner(dir, filter string) *TestRunner {
 	return &TestRunner{
 		results: make([]TestResult, 0),
 		testDir: dir,
+		filter:  filter,
 	}
 }
 
@@ -77,6 +78,10 @@ func (tr *TestRunner) RunAll() error {
 					continue
 				}
 
+				if !tr.matchesFilter(fn.Name.Value) {
+					continue
+				}
+
 				if !printedHeader {
 					fmt.Printf("\n\x1b[1m%s\x1b[0m\n", libName)
 					printedHeader = true
@@ -107,6 +112,16 @@ func shouldTestLibrary(libName, absTestDir, projectRoot, projectName string) boo
 
 	libDir := filepath.Join(projectRoot, parts[1])
 	return libDir == absTestDir || strings.HasPrefix(libDir, absTestDir+string(filepath.Separator))
+}
+
+func (tr *TestRunner) matchesFilter(name string) bool {
+	if tr.filter == "" {
+		return true
+	}
+	if strings.HasSuffix(tr.filter, "*") {
+		return strings.HasPrefix(name, tr.filter[:len(tr.filter)-1])
+	}
+	return name == tr.filter
 }
 
 func isTestFunction(fn *ast.FunctionExpression) bool {

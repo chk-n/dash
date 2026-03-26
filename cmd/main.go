@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
 	"dash-lang.io/src/builder"
 	"dash-lang.io/src/evaluator"
 	"dash-lang.io/src/repl"
@@ -23,8 +22,9 @@ var (
 	buildCmd    = flag.NewFlagSet("build", flag.ExitOnError)
 	buildOutput = buildCmd.String("o", "main", "output file name")
 
-	testCmd       = flag.NewFlagSet("test", flag.ExitOnError)
-	testRecursive = testCmd.Bool("r", false, "recursively run tests in subdirectories")
+	testCmd        = flag.NewFlagSet("test", flag.ExitOnError)
+	testRecursive  = testCmd.Bool("r", false, "recursively run tests in subdirectories")
+	testFilter     = testCmd.String("f", "", "filter test functions by name (supports trailing * wildcard)")
 
 	runCmd = flag.NewFlagSet("run", flag.ExitOnError)
 )
@@ -47,7 +47,7 @@ func main() {
 			dir = testCmd.Arg(0)
 		}
 		if *testRecursive {
-			tr := tester.NewTestRunner(dir)
+			tr := tester.NewTestRunner(dir, *testFilter)
 			if err := tr.RunAll(); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
